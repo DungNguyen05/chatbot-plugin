@@ -66,6 +66,59 @@ func (p *Plugin) SetupTables() error {
 		return fmt.Errorf("can't create llm titles table: %w", err)
 	}
 
+	// Add new tables for task management
+	taskQuery := `
+        CREATE TABLE IF NOT EXISTS LLM_Tasks (
+            ID VARCHAR(36) NOT NULL PRIMARY KEY,
+            Title TEXT NOT NULL,
+            Description TEXT,
+            AssigneeID VARCHAR(26) NOT NULL,
+            CreatorID VARCHAR(26) NOT NULL,
+            ChannelID VARCHAR(26) NOT NULL,
+            Deadline BIGINT NOT NULL,
+            Status VARCHAR(20) NOT NULL DEFAULT 'open',
+            CreatedAt BIGINT NOT NULL,
+            UpdatedAt BIGINT NOT NULL,
+            CONSTRAINT FK_LLM_Tasks_Channels FOREIGN KEY (ChannelID) REFERENCES Channels(Id) ON DELETE CASCADE
+        );
+    `
+
+	if _, err := p.db.Exec(taskQuery); err != nil {
+		return fmt.Errorf("can't create llm tasks table: %w", err)
+	}
+
+	rollCallQuery := `
+        CREATE TABLE IF NOT EXISTS LLM_RollCalls (
+            ID VARCHAR(36) NOT NULL PRIMARY KEY,
+            ChannelID VARCHAR(26) NOT NULL,
+            CreatorID VARCHAR(26) NOT NULL,
+            Title TEXT NOT NULL,
+            Status VARCHAR(20) NOT NULL DEFAULT 'active',
+            CreatedAt BIGINT NOT NULL,
+            EndedAt BIGINT,
+            CONSTRAINT FK_LLM_RollCalls_Channels FOREIGN KEY (ChannelID) REFERENCES Channels(Id) ON DELETE CASCADE
+        );
+    `
+
+	if _, err := p.db.Exec(rollCallQuery); err != nil {
+		return fmt.Errorf("can't create llm roll calls table: %w", err)
+	}
+
+	rollCallResponseQuery := `
+        CREATE TABLE IF NOT EXISTS LLM_RollCallResponses (
+            RollCallID VARCHAR(36) NOT NULL,
+            UserID VARCHAR(26) NOT NULL,
+            Response TEXT,
+            ResponseTime BIGINT NOT NULL,
+            PRIMARY KEY (RollCallID, UserID),
+            CONSTRAINT FK_LLM_RollCallResponses_RollCalls FOREIGN KEY (RollCallID) REFERENCES LLM_RollCalls(Id) ON DELETE CASCADE
+        );
+    `
+
+	if _, err := p.db.Exec(rollCallResponseQuery); err != nil {
+		return fmt.Errorf("can't create llm roll call responses table: %w", err)
+	}
+
 	return nil
 }
 

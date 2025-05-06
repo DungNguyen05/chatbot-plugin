@@ -35,6 +35,15 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 
 	router.GET("/ai_threads", p.handleGetAIThreads)
 	router.GET("/ai_bots", p.handleGetAIBots)
+	// Add inside the ServeHTTP function where it defines routes
+	router.GET("/tasks/:userid", p.handleGetUserTasks)
+	router.POST("/tasks", p.handleCreateTask)
+	router.PUT("/tasks/:taskid", p.handleUpdateTaskStatus)
+	router.GET("/rollcalls/:channelid", p.handleGetActiveRollCall)
+	router.POST("/rollcalls", p.handleStartRollCall)
+	router.POST("/rollcalls/:rollcallid/respond", p.handleRespondToRollCall)
+	router.POST("/rollcalls/:rollcallid/end", p.handleEndRollCall)
+	router.GET("/rollup", p.handleGenerateRollup)
 
 	botRequiredRouter := router.Group("")
 	botRequiredRouter.Use(p.aiBotRequired)

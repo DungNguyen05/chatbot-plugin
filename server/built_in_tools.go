@@ -324,6 +324,229 @@ func (p *Plugin) toolGetJiraIssue(context *llm.Context, argsGetter llm.ToolArgum
 
 // getBuiltInTools returns the built-in tools that are available to all users.
 // isDM is true if the response will be in a DM with the user. More tools are available in DMs because of security properties.
+
+func (p *Plugin) getDefaultToolsStore(bot *Bot, isDM bool) *llm.ToolStore {
+	if bot == nil || bot.cfg.DisableTools {
+		return llm.NewNoTools()
+	}
+	store := llm.NewToolStore(&p.pluginAPI.Log, p.getConfiguration().EnableLLMTrace)
+	store.AddTools(p.getBuiltInTools(isDM, bot))
+	return store
+}
+
+type CreateTaskArgs struct {
+	Title            string `jsonschema_description:"The title of the task"`
+	Description      string `jsonschema_description:"The detailed description of the task"`
+	AssigneeUsername string `jsonschema_description:"The username of the person to assign the task to"`
+	Deadline         string `jsonschema_description:"The deadline for the task in format YYYY-MM-DD or relative terms like 'tomorrow', 'next week', etc."`
+}
+
+type UpdateTaskStatusArgs struct {
+	TaskID string `jsonschema_description:"The ID of the task to update"`
+	Status string `jsonschema_description:"The new status of the task (open, complete)"`
+}
+
+type StartRollCallArgs struct {
+	Title string `jsonschema_description:"The title or purpose of the roll call"`
+}
+
+type RespondToRollCallArgs struct {
+	Response string `jsonschema_description:"The response to the roll call, like 'present', 'here', or other status information"`
+}
+
+type EndRollCallArgs struct {
+	ShowSummary bool `jsonschema_description:"Whether to show a summary of the roll call responses"`
+}
+
+func (p *Plugin) toolResolveCreateTask(context *llm.Context, argsGetter llm.ToolArgumentGetter) (string, error) {
+	var args CreateTaskArgs
+	err := argsGetter(&args)
+	if err != nil {
+		return "Invalid parameters to function", fmt.Errorf("failed to get arguments for tool CreateTask: %w", err)
+	}
+
+	// Parse deadline
+	deadline := time.Now().Add(24 * time.Hour) // Default to 24 hours from now
+	if args.Deadline != "" {
+		parsedDeadline, err := parseHumanReadableDate(args.Deadline)
+		if err == nil {
+			deadline = parsedDeadline
+		}
+	}
+
+	// Get assignee user
+	assignee, err := p.pluginAPI.User.GetByUsername(args.AssigneeUsername)
+	if err != nil {
+		return fmt.Sprintf("User %s not found", args.AssigneeUsername), nil
+	}
+
+	// Get current channel
+	channel := context.Channel
+	if channel == nil {
+		return "Cannot create task: no channel context", nil
+	}
+
+	// Create task
+	task, err := p.CreateTask(
+		args.Title,
+		args.Description,
+		assignee.Id,
+		context.RequestingUser.Id,
+		channel.Id,
+		deadline.UnixMilli(),
+	)
+
+	if err != nil {
+		return "Failed to create task", err
+	}
+
+	// Notify the assignee about the task
+	p.sendTaskNotification(task, assignee)
+
+	deadlineStr := deadline.Format("2006-01-02 15:04:05")
+	return fmt.Sprintf("Task created and assigned to %s (ID: %s)\nTitle: %s\nDescription: %s\nDeadline: %s",
+		assignee.Username, task.ID, task.Title, task.Description, deadlineStr), nil
+}
+
+func (p *Plugin) toolResolveUpdateTaskStatus(context *llm.Context, argsGetter llm.ToolArgumentGetter) (string, error) {
+	var args UpdateTaskStatusArgs
+	err := argsGetter(&args)
+	if err != nil {
+		return "Invalid parameters to function", fmt.Errorf("failed to get arguments for tool UpdateTaskStatus: %w", err)
+	}
+
+	var status TaskStatus
+	switch args.Status {
+	case "complete":
+		status = TaskStatusComplete
+	case "open":
+		status = TaskStatusOpen
+	default:
+		return "Invalid status. Use 'open' or 'complete'.", nil
+	}
+
+	err = p.UpdateTaskStatus(args.TaskID, status)
+	if err != nil {
+		return "Failed to update task status", err
+	}
+
+	return fmt.Sprintf("Task status updated to %s", args.Status), nil
+}
+
+func (p *Plugin) toolResolveStartRollCall(context *llm.Context, argsGetter llm.ToolArgumentGetter) (string, error) {
+	var args StartRollCallArgs
+	err := argsGetter(&args)
+	if err != nil {
+		return "Invalid parameters to function", fmt.Errorf("failed to get arguments for tool StartRollCall: %w", err)
+	}
+
+	// Get current channel
+	channel := context.Channel
+	if channel == nil {
+		return "Cannot start roll call: no channel context", nil
+	}
+
+	// Check if there's already an active roll call
+	existingRollCall, err := p.GetActiveRollCall(channel.Id)
+	if err != nil {
+		return "Failed to check for active roll calls", err
+	}
+
+	if existingRollCall != nil {
+		return "There is already an active roll call in this channel", nil
+	}
+
+	// Create roll call
+	rollCall, err := p.CreateRollCall(channel.Id, context.RequestingUser.Id, args.Title)
+	if err != nil {
+		return "Failed to start roll call", err
+	}
+
+	// Post a message to the channel about the roll call
+	err = p.postRollCallAnnouncement(rollCall, channel)
+	if err != nil {
+		return "Roll call started but failed to post announcement", err
+	}
+
+	return fmt.Sprintf("Roll call started: %s (ID: %s)\nRespond with the 'Respond to Roll Call' command.",
+		rollCall.Title, rollCall.ID), nil
+}
+
+func (p *Plugin) toolResolveRespondToRollCall(context *llm.Context, argsGetter llm.ToolArgumentGetter) (string, error) {
+	var args RespondToRollCallArgs
+	err := argsGetter(&args)
+	if err != nil {
+		return "Invalid parameters to function", fmt.Errorf("failed to get arguments for tool RespondToRollCall: %w", err)
+	}
+
+	// Get current channel
+	channel := context.Channel
+	if channel == nil {
+		return "Cannot respond to roll call: no channel context", nil
+	}
+
+	// Get active roll call
+	rollCall, err := p.GetActiveRollCall(channel.Id)
+	if err != nil {
+		return "Failed to check for active roll calls", err
+	}
+
+	if rollCall == nil {
+		return "There is no active roll call in this channel", nil
+	}
+
+	// Record response
+	err = p.RecordRollCallResponse(rollCall.ID, context.RequestingUser.Id, args.Response)
+	if err != nil {
+		return "Failed to record roll call response", err
+	}
+
+	return "Your roll call response has been recorded", nil
+}
+
+func (p *Plugin) toolResolveEndRollCall(context *llm.Context, argsGetter llm.ToolArgumentGetter) (string, error) {
+	var args EndRollCallArgs
+	err := argsGetter(&args)
+	if err != nil {
+		return "Invalid parameters to function", fmt.Errorf("failed to get arguments for tool EndRollCall: %w", err)
+	}
+
+	// Get current channel
+	channel := context.Channel
+	if channel == nil {
+		return "Cannot end roll call: no channel context", nil
+	}
+
+	// Get active roll call
+	rollCall, err := p.GetActiveRollCall(channel.Id)
+	if err != nil {
+		return "Failed to check for active roll calls", err
+	}
+
+	if rollCall == nil {
+		return "There is no active roll call in this channel", nil
+	}
+
+	// End roll call
+	err = p.EndRollCall(rollCall.ID)
+	if err != nil {
+		return "Failed to end roll call", err
+	}
+
+	if !args.ShowSummary {
+		return "Roll call ended", nil
+	}
+
+	// Get and format summary
+	summary, err := p.formatRollCallSummary(rollCall)
+	if err != nil {
+		return "Roll call ended but failed to generate summary", err
+	}
+
+	return fmt.Sprintf("Roll call ended. Summary:\n\n%s", summary), nil
+}
+
+// Add these new tools to the getBuiltInTools function:
 func (p *Plugin) getBuiltInTools(isDM bool, bot *Bot) []llm.Tool {
 	builtInTools := []llm.Tool{}
 
@@ -357,14 +580,48 @@ func (p *Plugin) getBuiltInTools(isDM bool, bot *Bot) []llm.Tool {
 		})
 	}
 
-	return builtInTools
-}
+	// Task management tools - available in all contexts
+	builtInTools = append(builtInTools, llm.Tool{
+		Name:        "CreateTask",
+		Description: "Create a new task and assign it to a user with a deadline",
+		Schema:      CreateTaskArgs{},
+		Resolver:    p.toolResolveCreateTask,
+	})
 
-func (p *Plugin) getDefaultToolsStore(bot *Bot, isDM bool) *llm.ToolStore {
-	if bot == nil || bot.cfg.DisableTools {
-		return llm.NewNoTools()
-	}
-	store := llm.NewToolStore(&p.pluginAPI.Log, p.getConfiguration().EnableLLMTrace)
-	store.AddTools(p.getBuiltInTools(isDM, bot))
-	return store
+	builtInTools = append(builtInTools, llm.Tool{
+		Name:        "UpdateTaskStatus",
+		Description: "Update the status of a task (open, complete)",
+		Schema:      UpdateTaskStatusArgs{},
+		Resolver:    p.toolResolveUpdateTaskStatus,
+	})
+
+	builtInTools = append(builtInTools, llm.Tool{
+		Name:        "StartRollCall",
+		Description: "Start a roll call in the current channel to track who is present",
+		Schema:      StartRollCallArgs{},
+		Resolver:    p.toolResolveStartRollCall,
+	})
+
+	builtInTools = append(builtInTools, llm.Tool{
+		Name:        "RespondToRollCall",
+		Description: "Respond to an active roll call in the current channel",
+		Schema:      RespondToRollCallArgs{},
+		Resolver:    p.toolResolveRespondToRollCall,
+	})
+
+	builtInTools = append(builtInTools, llm.Tool{
+		Name:        "EndRollCall",
+		Description: "End an active roll call in the current channel",
+		Schema:      EndRollCallArgs{},
+		Resolver:    p.toolResolveEndRollCall,
+	})
+
+	builtInTools = append(builtInTools, llm.Tool{
+		Name:        "GenerateRollup",
+		Description: "Generate a daily or weekly rollup report of tasks and activities",
+		Schema:      RollupArgs{},
+		Resolver:    p.toolResolveGenerateRollup,
+	})
+
+	return builtInTools
 }
