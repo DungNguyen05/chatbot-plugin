@@ -7,11 +7,8 @@ import (
 	"database/sql"
 	"fmt"
 
-	"errors"
-
 	sq "github.com/Masterminds/squirrel"
 	"github.com/jmoiron/sqlx"
-	"github.com/mattermost/mattermost/server/public/model"
 )
 
 type builder interface {
@@ -19,18 +16,15 @@ type builder interface {
 }
 
 func (p *Plugin) SetupDB() error {
-	if p.pluginAPI.Store.DriverName() != model.DatabaseDriverPostgres {
-		return errors.New("this plugin is only supported on postgres")
-	}
-
+	// Get database connection
 	origDB, err := p.pluginAPI.Store.GetMasterDB()
 	if err != nil {
 		return err
 	}
 	p.db = sqlx.NewDb(origDB, p.pluginAPI.Store.DriverName())
 
+	// Use the appropriate placeholder format - MySQL uses question marks
 	builder := sq.StatementBuilder.PlaceholderFormat(sq.Question)
-	builder = builder.PlaceholderFormat(sq.Dollar)
 	p.builder = builder
 
 	return p.SetupTables()
@@ -59,19 +53,17 @@ func (p *Plugin) execBuilder(b builder) (sql.Result, error) {
 }
 
 func (p *Plugin) SetupTables() error {
-	if _, err := p.db.Exec(`
+	// MySQL version of the table
+	query := `
 		CREATE TABLE IF NOT EXISTS LLM_PostMeta (
-			RootPostID TEXT NOT NULL REFERENCES Posts(ID) ON DELETE CASCADE PRIMARY KEY,
-			Title TEXT NOT NULL
+			RootPostID VARCHAR(26) NOT NULL PRIMARY KEY,
+			Title TEXT NOT NULL,
+			CONSTRAINT FK_LLM_PostMeta_Posts FOREIGN KEY (RootPostID) REFERENCES Posts(Id) ON DELETE CASCADE
 		);
-	`); err != nil {
-		return fmt.Errorf("can't create llm titles table: %w", err)
-	}
+	`
 
-	// This fixes data retention issues when a post is deleted for an older version of the postmeta table.
-	// Migrate from the old table using `"INSERT INTO LLM_PostMeta(RootPostID, Title) SELECT RootPostID, Title from LLM_Threads"`
-	if _, err := p.db.Exec(`ALTER TABLE IF EXISTS LLM_Threads DROP CONSTRAINT IF EXISTS llm_threads_rootpostid_fkey;`); err != nil {
-		return fmt.Errorf("failed to migrate constraint: %w", err)
+	if _, err := p.db.Exec(query); err != nil {
+		return fmt.Errorf("can't create llm titles table: %w", err)
 	}
 
 	return nil
@@ -89,7 +81,7 @@ func (p *Plugin) saveTitle(threadID, title string) error {
 	_, err := p.execBuilder(p.builder.Insert("LLM_PostMeta").
 		Columns("RootPostID", "Title").
 		Values(threadID, title).
-		Suffix("ON CONFLICT (RootPostID) DO UPDATE SET Title = ?", title))
+		Suffix("ON DUPLICATE KEY UPDATE Title = ?", title))
 	return err
 }
 

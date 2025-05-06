@@ -55,15 +55,8 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 
 	adminRouter := router.Group("/admin")
 	adminRouter.Use(p.mattermostAdminAuthorizationRequired)
-	adminRouter.POST("/reindex", p.handleReindexPosts)
-	adminRouter.GET("/reindex/status", p.handleGetJobStatus)
-	adminRouter.POST("/reindex/cancel", p.handleCancelJob)
 
-	searchRouter := botRequiredRouter.Group("/search")
-	// Only returns search results
-	searchRouter.POST("", p.handleSearchQuery)
-	// Initiates a search and responds to the user in a DM with the selected bot
-	searchRouter.POST("/run", p.handleRunSearch)
+	// Removed search and reindex routes since we're not supporting those features with MySQL
 
 	router.ServeHTTP(w, r)
 }
@@ -196,8 +189,8 @@ func (p *Plugin) handleGetAIBots(c *gin.Context) {
 		}
 	}
 
-	// Check if search is enabled
-	searchEnabled := p.search != nil && p.getConfiguration().EmbeddingSearchConfig.Type != ""
+	// Search is always disabled with MySQL version
+	searchEnabled := false
 
 	response := AIBotsResponse{
 		Bots:          bots,

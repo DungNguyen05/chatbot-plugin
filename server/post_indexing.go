@@ -6,6 +6,7 @@ package main
 import "github.com/mattermost/mattermost/server/public/model"
 
 // ShouldIndexPost returns whether a post should be indexed based on consistent criteria
+// This is kept for future compatibility but is not used in MySQL version
 func (p *Plugin) ShouldIndexPost(post *model.Post, channel *model.Channel) bool {
 	// Skip posts that don't have content
 	if post.Message == "" {

@@ -4,21 +4,21 @@
 package main
 
 import (
-	"fmt"
 	"reflect"
 
-	"github.com/mattermost/mattermost-plugin-ai/server/embeddings"
 	"github.com/mattermost/mattermost-plugin-ai/server/llm"
 )
 
 type Config struct {
-	Services                 []llm.ServiceConfig              `json:"services"`
-	Bots                     []llm.BotConfig                  `json:"bots"`
-	DefaultBotName           string                           `json:"defaultBotName"`
-	TranscriptGenerator      string                           `json:"transcriptBackend"`
-	EnableLLMTrace           bool                             `json:"enableLLMTrace"`
-	AllowedUpstreamHostnames string                           `json:"allowedUpstreamHostnames"`
-	EmbeddingSearchConfig    embeddings.EmbeddingSearchConfig `json:"embeddingSearchConfig"`
+	Services                 []llm.ServiceConfig `json:"services"`
+	Bots                     []llm.BotConfig     `json:"bots"`
+	DefaultBotName           string              `json:"defaultBotName"`
+	TranscriptGenerator      string              `json:"transcriptBackend"`
+	EnableLLMTrace           bool                `json:"enableLLMTrace"`
+	AllowedUpstreamHostnames string              `json:"allowedUpstreamHostnames"`
+	// Note: We still keep the EmbeddingSearchConfig field to avoid breaking existing
+	// configurations, but it won't be used in MySQL version
+	EmbeddingSearchConfig interface{} `json:"embeddingSearchConfig"`
 }
 
 // configuration captures the plugin's external configuration as exposed in the Mattermost server
@@ -90,7 +90,7 @@ func (p *Plugin) OnConfigurationChange() error {
 
 	// Load the public configuration fields from the Mattermost server configuration.
 	if err := p.API.LoadPluginConfiguration(configuration); err != nil {
-		return fmt.Errorf("failed to load plugin configuration: %w", err)
+		return err
 	}
 
 	p.setConfiguration(configuration)
@@ -102,18 +102,7 @@ func (p *Plugin) OnConfigurationChange() error {
 
 	// Extra config change tasks
 	if err := p.EnsureBots(); err != nil {
-		return fmt.Errorf("failed on config change: %w", err)
-	}
-
-	// Reinitialize search based on new configuration
-	search, err := p.initSearch()
-	if err != nil {
-		// Only log the error but don't fail plugin configuration
-		p.pluginAPI.Log.Error("Failed to initialize search, search features will be disabled", "error", err)
-		// Set search to nil to disable search functionality
-		p.search = nil
-	} else {
-		p.search = search
+		return err
 	}
 
 	return nil

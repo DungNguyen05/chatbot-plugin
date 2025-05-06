@@ -4,7 +4,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,7 +17,6 @@ import (
 
 	"github.com/andygrunwald/go-jira"
 	"github.com/google/go-github/v41/github"
-	"github.com/mattermost/mattermost-plugin-ai/server/embeddings"
 	"github.com/mattermost/mattermost-plugin-ai/server/llm"
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/pluginapi"
@@ -294,32 +292,6 @@ func (p *Plugin) getPublicJiraIssues(instanceURL string, issueKeys []string) ([]
 	return issues, nil
 }
 
-/*func (p *Plugin) getJiraIssueFromPlugin(instanceURL, issueKey, requestingUserID string) (*jira.Issue, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("/jira/api/v2/get-issue-by-key?instance_id=%s&issue_key=%s", instanceURL, issueKey), nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Mattermost-User-ID", requestingUserID)
-
-	resp := p.pluginAPI.Plugin.HTTP(req)
-	if resp == nil {
-		return nil, errors.New("failed to get issue, response was nil")
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		result, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to get issue, status code: %v\n body: %v", resp.Status, string(result))
-	}
-
-	var issue jira.Issue
-	err = json.NewDecoder(resp.Body).Decode(&issue)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	return &issue, nil
-}*/
-
 func (p *Plugin) toolGetJiraIssue(context *llm.Context, argsGetter llm.ToolArgumentGetter) (string, error) {
 	var args GetJiraIssueArgs
 	err := argsGetter(&args)
@@ -348,48 +320,7 @@ func (p *Plugin) toolGetJiraIssue(context *llm.Context, argsGetter llm.ToolArgum
 	return result.String(), nil
 }
 
-const MinSearchTermLength = 3
-const MaxSearchTermLength = 300
-
-type SearchServerArgs struct {
-	Term string `jsonschema_description:"The terms to search for in the server. Must be more than 3 and less than 300 characters."`
-}
-
-func (p *Plugin) toolSearchServer(llmContext *llm.Context, argsGetter llm.ToolArgumentGetter) (string, error) {
-	var args SearchServerArgs
-	err := argsGetter(&args)
-	if err != nil {
-		return "invalid parameters to function", fmt.Errorf("failed to get arguments for tool SearchServer: %w", err)
-	}
-
-	if len(args.Term) < MinSearchTermLength {
-		return "search term too short", errors.New("search term too short")
-	}
-	if len(args.Term) > MaxSearchTermLength {
-		return "search term too long", errors.New("search term too long")
-	}
-
-	// Check if search is initialized
-	if p.search == nil {
-		return "search functionality is not configured", errors.New("search is not configured")
-	}
-
-	ctx := context.Background()
-	searchResults, err := p.search.Search(ctx, args.Term, embeddings.SearchOptions{
-		Limit:  10,
-		UserID: llmContext.RequestingUser.Id,
-	})
-	if err != nil {
-		return "there was an error performing the search", fmt.Errorf("search failed: %w", err)
-	}
-
-	formatted, err := p.formatSearchResults(searchResults)
-	if err != nil {
-		return "there was an error formatting the search results", fmt.Errorf("formatting failed: %w", err)
-	}
-
-	return formatted, nil
-}
+// Removing the SearchServer tool since search functionality is removed in MySQL version
 
 // getBuiltInTools returns the built-in tools that are available to all users.
 // isDM is true if the response will be in a DM with the user. More tools are available in DMs because of security properties.
@@ -397,16 +328,6 @@ func (p *Plugin) getBuiltInTools(isDM bool, bot *Bot) []llm.Tool {
 	builtInTools := []llm.Tool{}
 
 	if isDM {
-		// Only add the search tool if search is configured
-		if p.search != nil {
-			builtInTools = append(builtInTools, llm.Tool{
-				Name:        "SearchServer",
-				Description: "Search the Mattermost chat server the user is on for messages using semantic search. Use this tool whenever the user asks a question and you don't have the context to answer or you think your response would be more accurate with knowage from the Mattermost server",
-				Schema:      SearchServerArgs{},
-				Resolver:    p.toolSearchServer,
-			})
-		}
-
 		builtInTools = append(builtInTools, llm.Tool{
 			Name:        "LookupMattermostUser",
 			Description: "Lookup a Mattermost user by their username. Available information includes: username, full name, email, nickname, position, locale, timezone, last activity, and status.",
