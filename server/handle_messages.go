@@ -6,6 +6,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
@@ -96,6 +97,19 @@ func (p *Plugin) handleMentions(bot *Bot, post *model.Post, postingUser *model.U
 		return err
 	}
 
+	message := strings.ToLower(post.Message)
+	if strings.Contains(message, "roll call") {
+		if err := p.handleRollCall(bot, channel, postingUser, post); err != nil {
+			return fmt.Errorf("unable to handle roll call: %w", err)
+		}
+		// If it was a roll call command, don't continue with regular LLM processing
+		if strings.Contains(message, "start roll call") ||
+			strings.Contains(message, "end roll call") ||
+			strings.Contains(message, "summary roll call") {
+			return nil
+		}
+	}
+
 	stream, err := p.processUserRequestToBot(bot, postingUser, channel, post)
 	if err != nil {
 		return fmt.Errorf("unable to process bot mention: %w", err)
@@ -120,6 +134,21 @@ func (p *Plugin) handleMentions(bot *Bot, post *model.Post, postingUser *model.U
 func (p *Plugin) handleDMs(bot *Bot, channel *model.Channel, postingUser *model.User, post *model.Post) error {
 	if err := p.checkUsageRestrictionsForUser(bot, postingUser.Id); err != nil {
 		return err
+	}
+
+	message := strings.ToLower(post.Message)
+	if strings.Contains(message, "roll call") ||
+		strings.Contains(message, "here") ||
+		strings.Contains(message, "present") {
+		if err := p.handleRollCall(bot, channel, postingUser, post); err != nil {
+			return fmt.Errorf("unable to handle roll call: %w", err)
+		}
+		// If it was a roll call command, don't continue with regular LLM processing
+		if strings.Contains(message, "start roll call") ||
+			strings.Contains(message, "end roll call") ||
+			strings.Contains(message, "summary roll call") {
+			return nil
+		}
 	}
 
 	stream, err := p.processUserRequestToBot(bot, postingUser, channel, post)

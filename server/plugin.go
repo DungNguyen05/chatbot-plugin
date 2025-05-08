@@ -50,6 +50,8 @@ type Plugin struct {
 
 	pluginAPI *pluginapi.Client
 
+	rollCallManager *RollCallManager
+
 	ffmpegPath string
 
 	db      *sqlx.DB
@@ -96,6 +98,8 @@ func (p *Plugin) OnActivate() error {
 		PluginVersion:  manifest.Version,
 	})
 	p.metricsHandler = metrics.NewMetricsHandler(p.GetMetrics())
+
+	p.rollCallManager = NewRollCallManager()
 
 	p.i18n = i18nInit()
 
