@@ -98,14 +98,16 @@ func (p *Plugin) handleMentions(bot *Bot, post *model.Post, postingUser *model.U
 	}
 
 	message := strings.ToLower(post.Message)
-	if strings.Contains(message, "roll call") {
+	if strings.Contains(message, "roll call") ||
+		strings.Contains(message, "present") {
 		if err := p.handleRollCall(bot, channel, postingUser, post); err != nil {
 			return fmt.Errorf("unable to handle roll call: %w", err)
 		}
 		// If it was a roll call command, don't continue with regular LLM processing
 		if strings.Contains(message, "start roll call") ||
 			strings.Contains(message, "end roll call") ||
-			strings.Contains(message, "summary roll call") {
+			strings.Contains(message, "summary roll call") ||
+			strings.Contains(message, "present") {
 			return nil
 		}
 	}
@@ -138,7 +140,6 @@ func (p *Plugin) handleDMs(bot *Bot, channel *model.Channel, postingUser *model.
 
 	message := strings.ToLower(post.Message)
 	if strings.Contains(message, "roll call") ||
-		strings.Contains(message, "here") ||
 		strings.Contains(message, "present") {
 		if err := p.handleRollCall(bot, channel, postingUser, post); err != nil {
 			return fmt.Errorf("unable to handle roll call: %w", err)
@@ -146,7 +147,8 @@ func (p *Plugin) handleDMs(bot *Bot, channel *model.Channel, postingUser *model.
 		// If it was a roll call command, don't continue with regular LLM processing
 		if strings.Contains(message, "start roll call") ||
 			strings.Contains(message, "end roll call") ||
-			strings.Contains(message, "summary roll call") {
+			strings.Contains(message, "summary roll call") ||
+			strings.Contains(message, "present") {
 			return nil
 		}
 	}

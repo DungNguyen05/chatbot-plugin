@@ -15,14 +15,13 @@ import (
 func (p *Plugin) handleRollCall(bot *Bot, channel *model.Channel, user *model.User, post *model.Post) error {
 	message := strings.ToLower(post.Message)
 
-	if strings.Contains(message, "start roll call") || strings.Contains(message, "start rollcall") {
+	if strings.Contains(message, "start roll call") {
 		return p.handleStartRollCall(bot, channel, user, post)
-	} else if strings.Contains(message, "end roll call") || strings.Contains(message, "end rollcall") {
+	} else if strings.Contains(message, "end roll call") {
 		return p.handleEndRollCall(bot, channel, user, post)
-	} else if strings.Contains(message, "roll call summary") || strings.Contains(message, "rollcall summary") {
+	} else if strings.Contains(message, "roll call summary") {
 		return p.handleRollCallSummary(bot, channel, user, post)
-	} else if strings.Contains(message, "here") || strings.Contains(message, "present") ||
-		strings.Contains(message, "attending") || strings.Contains(message, "i am here") {
+	} else if strings.Contains(message, "present") {
 		return p.handleRollCallResponse(bot, channel, user, post)
 	}
 
@@ -44,8 +43,8 @@ func (p *Plugin) handleStartRollCall(bot *Bot, channel *model.Channel, user *mod
 		return p.botCreateNonResponsePost(bot.mmBot.UserId, user.Id, responsePost)
 	}
 
-	// Automatically mark the initiator as present
-	_, _ = p.rollCallManager.RespondToRollCall(channel.Id, user.Id)
+	// // Automatically mark the initiator as present
+	// _, _ = p.rollCallManager.RespondToRollCall(channel.Id, user.Id)
 
 	// Create a post to announce the roll call
 	responsePost := &model.Post{
@@ -94,18 +93,14 @@ func (p *Plugin) handleRollCallResponse(bot *Bot, channel *model.Channel, user *
 	}
 
 	// For DM channels, acknowledge the response
-	if channel.Type == model.ChannelTypeDirect {
-		responsePost := &model.Post{
-			ChannelId: channel.Id,
-			Message:   "✅ Your attendance has been recorded!",
-		}
-		if post.RootId != "" {
-			responsePost.RootId = post.RootId
-		}
-		return p.botCreateNonResponsePost(bot.mmBot.UserId, user.Id, responsePost)
+	responsePost := &model.Post{
+		ChannelId: channel.Id,
+		Message:   "✅ Your attendance has been recorded!",
 	}
-
-	return nil
+	if post.RootId != "" {
+		responsePost.RootId = post.RootId
+	}
+	return p.botCreateNonResponsePost(bot.mmBot.UserId, user.Id, responsePost)
 }
 
 // handleRollCallSummary handles a request for a roll call summary
