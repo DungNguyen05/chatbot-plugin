@@ -52,6 +52,7 @@ type Plugin struct {
 	pluginAPI *pluginapi.Client
 
 	rollCallManager *RollCallManager
+	cronJob         *CronJob // Add cron job to the Plugin struct
 
 	ffmpegPath string
 
@@ -102,6 +103,9 @@ func (p *Plugin) OnActivate() error {
 
 	p.rollCallManager = NewRollCallManager()
 
+	// Initialize cron job with fixed schedule
+	p.cronJob = NewCronJob(p)
+
 	p.i18n = i18nInit()
 
 	p.llmUpstreamHTTPClient = httpservice.MakeHTTPServicePlugin(p.API).MakeClient(true)
@@ -135,8 +139,18 @@ func (p *Plugin) OnActivate() error {
 
 	p.streamingContexts = map[string]PostStreamContext{}
 
-	// Log that search functionality is not available
-	p.pluginAPI.Log.Warn("Vector search functionality is not available when using MySQL database")
+	// Start the cron job
+	p.cronJob.Start()
+
+	return nil
+}
+
+// OnDeactivate handles cleanup when the plugin is deactivated
+func (p *Plugin) OnDeactivate() error {
+	// Stop the cron job
+	if p.cronJob != nil {
+		p.cronJob.Stop()
+	}
 
 	return nil
 }

@@ -93,6 +93,15 @@ func (r *RollCallManager) RespondToRollCall(channelID string, userID string) (*R
 	return rollCall, isNewResponse, nil
 }
 
+// Add this method to get all active roll calls
+func (r *RollCallManager) IsRollCallActive(channelID string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	rollCall, exists := r.activeRollCalls[channelID]
+	return exists && rollCall.Active
+}
+
 // MarkUserERPRecorded marks that a user's attendance has been recorded in ERP
 func (r *RollCallManager) MarkUserERPRecorded(channelID string, userID string) error {
 	r.mu.Lock()
