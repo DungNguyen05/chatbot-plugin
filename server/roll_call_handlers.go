@@ -87,6 +87,7 @@ func (p *Plugin) handleEndRollCall(bot *Bot, channel *model.Channel, user *model
 }
 
 // handleRollCallResponse handles a user's response to a roll call
+// handleRollCallResponse handles a user's response to a roll call
 func (p *Plugin) handleRollCallResponse(bot *Bot, channel *model.Channel, user *model.User, post *model.Post) error {
 	// Record a user's response to a roll call
 	_, isNewResponse, err := p.rollCallManager.RespondToRollCall(channel.Id, user.Id)
@@ -112,9 +113,16 @@ func (p *Plugin) handleRollCallResponse(bot *Bot, channel *model.Channel, user *
 				p.API.LogError("Failed to record employee check-in in ERP", "error", erpErr.Error())
 				erpMessage = "\n\n⚠️ There was an issue recording your attendance in the ERP system. An administrator has been notified."
 
-				// Use server time for the response even if ERP failed
-				serverTime := model.GetMillis()
-				timeFormatted = time.UnixMilli(serverTime).Format("2006-01-02 15:04:05")
+				// Use Vietnam time for the response even if ERP failed
+				vietTimeStr, timeErr := FormatVietnamTime()
+				if timeErr != nil {
+					p.API.LogError("Failed to get Vietnam time", "error", timeErr.Error())
+					// Fallback to server time if Vietnam time fails
+					serverTime := model.GetMillis()
+					timeFormatted = time.UnixMilli(serverTime).Format("2006-01-02 15:04:05")
+				} else {
+					timeFormatted = vietTimeStr
+				}
 			} else {
 				// Mark user as recorded in ERP
 				_ = p.rollCallManager.MarkUserERPRecorded(channel.Id, user.Id)
@@ -124,14 +132,28 @@ func (p *Plugin) handleRollCallResponse(bot *Bot, channel *model.Channel, user *
 				timeFormatted = formattedTime
 			}
 		} else {
-			// Get server time for cases where ERP recording isn't needed
-			serverTime := model.GetMillis()
-			timeFormatted = time.UnixMilli(serverTime).Format("2006-01-02 15:04:05")
+			// Get Vietnam time for cases where ERP recording isn't needed
+			vietTimeStr, timeErr := FormatVietnamTime()
+			if timeErr != nil {
+				p.API.LogError("Failed to get Vietnam time", "error", timeErr.Error())
+				// Fallback to server time if Vietnam time fails
+				serverTime := model.GetMillis()
+				timeFormatted = time.UnixMilli(serverTime).Format("2006-01-02 15:04:05")
+			} else {
+				timeFormatted = vietTimeStr
+			}
 		}
 	} else {
-		// User already responded previously, just use current time
-		serverTime := model.GetMillis()
-		timeFormatted = time.UnixMilli(serverTime).Format("2006-01-02 15:04:05")
+		// User already responded previously, just use current Vietnam time
+		vietTimeStr, timeErr := FormatVietnamTime()
+		if timeErr != nil {
+			p.API.LogError("Failed to get Vietnam time", "error", timeErr.Error())
+			// Fallback to server time if Vietnam time fails
+			serverTime := model.GetMillis()
+			timeFormatted = time.UnixMilli(serverTime).Format("2006-01-02 15:04:05")
+		} else {
+			timeFormatted = vietTimeStr
+		}
 	}
 
 	// For DM channels, acknowledge the response

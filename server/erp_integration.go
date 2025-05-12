@@ -45,11 +45,17 @@ func NewEmployeeCheckin(employeeName string, serverTimeMillis int64) (*EmployeeC
 	// Generate a unique name with timestamp and random characters
 	uniqueName := fmt.Sprintf("new-employee-checkin-%s", generateUniqueID())
 
-	// Convert server timestamp (milliseconds) to time object
-	serverTime := time.UnixMilli(serverTimeMillis)
-
-	// Format time in YYYY-MM-DD HH:MM:SS format for ERP
-	formattedTime := serverTime.Format("2006-01-02 15:04:05")
+	// Try to get Vietnam time first
+	var formattedTime string
+	vietTime, err := GetVietnamTime()
+	if err == nil {
+		// Format Vietnam time in YYYY-MM-DD HH:MM:SS format for ERP
+		formattedTime = vietTime.Format("2006-01-02 15:04:05")
+	} else {
+		// Fallback to server time if Vietnam time fails
+		serverTime := time.UnixMilli(serverTimeMillis)
+		formattedTime = serverTime.Format("2006-01-02 15:04:05")
+	}
 
 	return &EmployeeCheckin{
 		Docstatus:          0,
@@ -79,13 +85,21 @@ func generateUniqueID() string {
 }
 
 // RecordEmployeeCheckin sends the check-in data to ERPNEXT
-// It uses the server's time for recording the attendance
+// RecordEmployeeCheckin sends the check-in data to ERPNEXT
+// It uses Vietnam time for recording the attendance
 // Returns the formatted time string used for recording
 func (p *Plugin) RecordEmployeeCheckin(employeeName string) (string, error) {
 	p.API.LogDebug("Recording employee check-in", "employee", employeeName)
 
-	// Get current server time (milliseconds since epoch)
-	serverTime := model.GetMillis()
+	// Get Vietnam time instead of server time
+	var serverTime int64
+	vietTime, err := GetVietnamTime()
+	if err != nil {
+		p.API.LogWarn("Failed to get Vietnam time, falling back to server time", "error", err.Error())
+		serverTime = model.GetMillis() // Fallback to server time
+	} else {
+		serverTime = vietTime.UnixMilli()
+	}
 
 	checkin, formattedTime := NewEmployeeCheckin(employeeName, serverTime)
 
