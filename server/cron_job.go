@@ -69,14 +69,25 @@ func (c *CronJob) checkScheduledTasks() {
 	// Format current time as HH:MM:00 for comparison
 	currentTimeStr := vietTime.Format("15:04:00")
 
+	// Get configured checkout time
+	autoCheckoutTime := c.plugin.getConfiguration().AutoCheckoutTime
+	if autoCheckoutTime == "" {
+		autoCheckoutTime = DefaultAutoCheckoutTime
+	}
+
+	autoStartRollCallTime := c.plugin.getConfiguration().AutoStartRollCallTime
+	if autoStartRollCallTime == "" {
+		autoStartRollCallTime = DefaultRollCallStartTime
+	}
+
 	// Check if it's time to start roll call (8:00 AM)
-	if currentTimeStr == RollCallStartTime {
+	if currentTimeStr == autoStartRollCallTime {
 		c.plugin.API.LogInfo("Starting daily roll call")
 		go c.plugin.StartDailyRollCall()
 	}
 
-	// Check if it's time to end roll call (5:30 PM)
-	if currentTimeStr == RollCallEndTime {
+	// Check if it's time to end roll call (configured checkout time)
+	if currentTimeStr == autoCheckoutTime {
 		c.plugin.API.LogInfo("Ending daily roll call")
 		go c.plugin.EndDailyRollCall()
 	}

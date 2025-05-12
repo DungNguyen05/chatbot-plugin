@@ -126,8 +126,14 @@ func (p *Plugin) handleRollCallResponse(bot *Bot, channel *model.Channel, user *
 				_ = p.rollCallManager.MarkUserERPRecorded(channel.Id, user.Id)
 				checkinTimeFormatted = formattedTime
 
+				// Get configured checkout time
+				configuredCheckoutTime := p.getConfiguration().AutoCheckoutTime
+				if configuredCheckoutTime == "" {
+					configuredCheckoutTime = DefaultAutoCheckoutTime
+				}
+
 				// Get today's date with the configured checkout time
-				checkoutTime, timeErr := GetCheckoutTimeForToday(AutoCheckoutTime)
+				checkoutTime, timeErr := GetCheckoutTimeForToday(configuredCheckoutTime)
 				if timeErr != nil {
 					p.API.LogWarn("Failed to get checkout time", "error", timeErr.Error())
 					erpMessage = fmt.Sprintf("\n\n✅ Your check-in has been recorded in the ERP system at **%s**.\nℹ️ No automatic checkout scheduled: %s",
@@ -150,13 +156,8 @@ func (p *Plugin) handleRollCallResponse(bot *Bot, channel *model.Channel, user *
 						// Mark checkout as recorded
 						_ = p.rollCallManager.MarkUserCheckoutRecorded(channel.Id, user.Id)
 
-						// Calculate time difference between checkin and checkout
-						checkinParsed, _ := time.Parse("2006-01-02 15:04:05", formattedTime)
-						checkoutParsed, _ := time.Parse("2006-01-02 15:04:05", checkoutFormatted)
-						duration := checkoutParsed.Sub(checkinParsed)
-
-						erpMessage = fmt.Sprintf("\n\n✅ Your attendance has been recorded in the ERP system:\n- Check-in: **%s**\n- Check-out: **%s** (%s)",
-							formattedTime, checkoutFormatted, formatDuration(duration))
+						erpMessage = fmt.Sprintf("\n\n✅ Your attendance has been recorded in the ERP system:\n- Check-in: **%s**\n- Check-out: **%s**",
+							formattedTime, checkoutFormatted)
 					}
 				}
 			}
@@ -264,8 +265,14 @@ func (p *Plugin) handleRollCallSummary(bot *Bot, channel *model.Channel, user *m
 		checkoutCount = len(rollCall.CheckoutRecordedUsers)
 	}
 
+	// Get configured auto checkout time
+	autoCheckoutTime := p.getConfiguration().AutoCheckoutTime
+	if autoCheckoutTime == "" {
+		autoCheckoutTime = DefaultAutoCheckoutTime
+	}
+
 	// Add ERP info with checkout configuration
-	autoCheckoutInfo := fmt.Sprintf("enabled at **%s** daily", AutoCheckoutTime)
+	autoCheckoutInfo := fmt.Sprintf("enabled at **%s** daily", autoCheckoutTime)
 
 	erpInfo := fmt.Sprintf("\n\n**ERP Integration:** %d check-ins and %d check-outs recorded\n**Auto Checkout:** %s",
 		checkinCount, checkoutCount, autoCheckoutInfo)

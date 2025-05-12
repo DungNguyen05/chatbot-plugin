@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	RollCallStartTime = "08:00:00" // 8 AM Vietnam time
-	RollCallEndTime   = "17:30:00" // 5:30 PM Vietnam time
+	DefaultRollCallStartTime = "08:00:00" // 8 AM Vietnam time
+	DefaultAutoCheckoutTime  = "17:30:00" // Default checkout time if not configured
 )
 
 // StartDailyRollCall starts a roll call in all configured channels
@@ -55,6 +55,12 @@ func (p *Plugin) StartDailyRollCall() {
 		}
 		dateStr := vietTime.Format("Monday, January 2, 2006")
 
+		// Get configured auto checkout time
+		autoCheckoutTime := p.getConfiguration().AutoCheckoutTime
+		if autoCheckoutTime == "" {
+			autoCheckoutTime = DefaultAutoCheckoutTime
+		}
+
 		// Create the announcement post
 		post := &model.Post{
 			ChannelId: channel.Id,
@@ -66,7 +72,7 @@ func (p *Plugin) StartDailyRollCall() {
 					"* Automatic checkout will be recorded at %s\n"+
 					"* If you're working remotely, please add a note with your location",
 				dateStr,
-				AutoCheckoutTime,
+				autoCheckoutTime,
 			),
 		}
 

@@ -24,7 +24,9 @@ type Config = {
     enableLLMTrace: boolean,
     enableCallSummary: boolean,
     allowedUpstreamHostnames: string,
-    embeddingSearchConfig: EmbeddingSearchConfig
+    embeddingSearchConfig: EmbeddingSearchConfig,
+    autoCheckoutTime: string
+    autoStartRollCallTime : string
 }
 
 type Props = {
@@ -65,6 +67,8 @@ const defaultConfig = {
     llmBackend: '',
     transcriptBackend: '',
     enableLLMTrace: false,
+    autoCheckoutTime: '17:30:00',
+    autoStartRollCallTime: '08:00:00',
     embeddingSearchConfig: {
         type: 'disabled',
         vectorStore: {
@@ -172,7 +176,7 @@ const Config = (props: Props) => {
             </Panel>
             <Panel
                 title={intl.formatMessage({defaultMessage: 'AI Functions'})}
-                subtitle={intl.formatMessage({defaultMessage: 'Choose a default bot.'})}
+                subtitle={intl.formatMessage({defaultMessage: 'Choose a default bot and configure automated features.'})}
             >
                 <ItemList>
                     <SelectionItem
@@ -193,9 +197,30 @@ const Config = (props: Props) => {
                         ))}
                     </SelectionItem>
                     <TextItem
+                        label={intl.formatMessage({defaultMessage: 'Auto Start Roll Call Time (HH:MM:SS)'})}
+                        value={value.autoStartRollCallTime || '08:00:00'}
+                        onChange={(e) => {
+                            props.onChange(props.id, {...value, autoStartRollCallTime: e.target.value});
+                            props.setSaveNeeded();
+                        }}
+                        helptext={intl.formatMessage({defaultMessage: 'Time for automatic start roll call in 24-hour format (HH:MM:SS). This will be used for the daily roll call feature.'})}
+                    />
+                    <TextItem
+                        label={intl.formatMessage({defaultMessage: 'Auto Checkout Time (HH:MM:SS)'})}
+                        value={value.autoCheckoutTime || '17:30:00'}
+                        onChange={(e) => {
+                            props.onChange(props.id, {...value, autoCheckoutTime: e.target.value});
+                            props.setSaveNeeded();
+                        }}
+                        helptext={intl.formatMessage({defaultMessage: 'Time for automatic checkout in 24-hour format (HH:MM:SS). This will be used for the daily roll call feature.'})}
+                    />
+                    <TextItem
                         label={intl.formatMessage({defaultMessage: 'Allowed Upstream Hostnames (csv)'})}
                         value={value.allowedUpstreamHostnames}
-                        onChange={(e) => props.onChange(props.id, {...value, allowedUpstreamHostnames: e.target.value})}
+                        onChange={(e) => {
+                            props.onChange(props.id, {...value, allowedUpstreamHostnames: e.target.value});
+                            props.setSaveNeeded();
+                        }}
                         helptext={intl.formatMessage({defaultMessage: 'Comma separated list of hostnames that LLMs are allowed to contact when using tools. Supports wildcards like *.mydomain.com. For instance to allow JIRA tool use to the Mattermost JIRA instance use mattermost.atlassian.net'})}
                     />
                 </ItemList>
