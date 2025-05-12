@@ -43,13 +43,10 @@ func (p *Plugin) handleStartRollCall(bot *Bot, channel *model.Channel, user *mod
 		return p.botCreateNonResponsePost(bot.mmBot.UserId, user.Id, responsePost)
 	}
 
-	// // Automatically mark the initiator as present
-	// _, _ = p.rollCallManager.RespondToRollCall(channel.Id, user.Id)
-
 	// Create a post to announce the roll call
 	responsePost := &model.Post{
 		ChannelId: channel.Id,
-		Message:   "📋 **Roll Call Started!** Please respond with 'here', 'present', or similar message to mark your attendance.",
+		Message:   "📋 **Roll Call Started!** Please respond with 'present' to mark your attendance. Your attendance will be automatically recorded in the ERP system.",
 	}
 	if post.RootId != "" {
 		responsePost.RootId = post.RootId
@@ -73,9 +70,15 @@ func (p *Plugin) handleEndRollCall(bot *Bot, channel *model.Channel, user *model
 	}
 
 	// Create a post to announce the roll call has ended
+	erpCount := len(rollCall.ERPRecordedUsers)
+	erpMessage := ""
+	if erpCount > 0 {
+		erpMessage = fmt.Sprintf(" %d attendance records were sent to the ERP system.", erpCount)
+	}
+
 	responsePost := &model.Post{
 		ChannelId: channel.Id,
-		Message:   fmt.Sprintf("📋 **Roll Call Ended!** %d members have responded. Ask for a 'roll call summary' to see details.", rollCall.ResponseCount),
+		Message:   fmt.Sprintf("📋 **Roll Call Ended!** %d members have responded.%s Ask for a 'roll call summary' to see details.", rollCall.ResponseCount, erpMessage),
 	}
 	if post.RootId != "" {
 		responsePost.RootId = post.RootId
@@ -86,16 +89,55 @@ func (p *Plugin) handleEndRollCall(bot *Bot, channel *model.Channel, user *model
 // handleRollCallResponse handles a user's response to a roll call
 func (p *Plugin) handleRollCallResponse(bot *Bot, channel *model.Channel, user *model.User, post *model.Post) error {
 	// Record a user's response to a roll call
-	_, err := p.rollCallManager.RespondToRollCall(channel.Id, user.Id)
+	_, isNewResponse, err := p.rollCallManager.RespondToRollCall(channel.Id, user.Id)
 	if err != nil {
 		// Don't respond if there's no active roll call - could be a normal message
 		return nil
 	}
 
+	// If this is a new response, record it in ERP
+	var erpMessage string
+	var timeFormatted string
+
+	if isNewResponse {
+		// Check if user has already been recorded in ERP
+		alreadyRecorded, _ := p.rollCallManager.IsUserERPRecorded(channel.Id, user.Id)
+		if !alreadyRecorded {
+			// Get employee name from user
+			employeeName := p.GetEmployeeNameFromUser(user)
+
+			// Try to record in ERP - this now returns the formatted time string used
+			formattedTime, erpErr := p.RecordEmployeeCheckin(employeeName)
+			if erpErr != nil {
+				p.API.LogError("Failed to record employee check-in in ERP", "error", erpErr.Error())
+				erpMessage = "\n\n⚠️ There was an issue recording your attendance in the ERP system. An administrator has been notified."
+
+				// Use server time for the response even if ERP failed
+				serverTime := model.GetMillis()
+				timeFormatted = time.UnixMilli(serverTime).Format("2006-01-02 15:04:05")
+			} else {
+				// Mark user as recorded in ERP
+				_ = p.rollCallManager.MarkUserERPRecorded(channel.Id, user.Id)
+				erpMessage = fmt.Sprintf("\n\n✅ Your attendance has also been recorded in the ERP system at **%s**.", formattedTime)
+
+				// Use the same formatted time that was sent to ERP
+				timeFormatted = formattedTime
+			}
+		} else {
+			// Get server time for cases where ERP recording isn't needed
+			serverTime := model.GetMillis()
+			timeFormatted = time.UnixMilli(serverTime).Format("2006-01-02 15:04:05")
+		}
+	} else {
+		// User already responded previously, just use current time
+		serverTime := model.GetMillis()
+		timeFormatted = time.UnixMilli(serverTime).Format("2006-01-02 15:04:05")
+	}
+
 	// For DM channels, acknowledge the response
 	responsePost := &model.Post{
 		ChannelId: channel.Id,
-		Message:   "✅ Your attendance has been recorded!",
+		Message:   fmt.Sprintf("✅ Your attendance has been recorded at **%s**!%s", timeFormatted, erpMessage),
 	}
 	if post.RootId != "" {
 		responsePost.RootId = post.RootId
@@ -125,11 +167,19 @@ func (p *Plugin) handleRollCallSummary(bot *Bot, channel *model.Channel, user *m
 		if userErr != nil {
 			continue
 		}
+
 		name := respondedUser.Username
 		if respondedUser.FirstName != "" || respondedUser.LastName != "" {
 			name = fmt.Sprintf("%s %s (@%s)", respondedUser.FirstName, respondedUser.LastName, respondedUser.Username)
 		}
-		respondedMembers = append(respondedMembers, name)
+
+		// Check if recorded in ERP
+		erpStatus := ""
+		if recorded, _ := p.rollCallManager.IsUserERPRecorded(channel.Id, userID); recorded {
+			erpStatus = " ✓ (ERP)"
+		}
+
+		respondedMembers = append(respondedMembers, name+erpStatus)
 	}
 
 	// Format duration
@@ -152,9 +202,12 @@ func (p *Plugin) handleRollCallSummary(bot *Bot, channel *model.Channel, user *m
 		membersList = "- " + strings.Join(respondedMembers, "\n- ")
 	}
 
+	// Add ERP info
+	erpInfo := fmt.Sprintf("\n\n**ERP Integration:** %d attendance records sent to ERP system", len(rollCall.ERPRecordedUsers))
+
 	responsePost := &model.Post{
 		ChannelId: channel.Id,
-		Message:   fmt.Sprintf("## Roll Call Summary %s\n\n**Status:** %s\n**Responses:** %d\n\n### Members Present:\n%s", durationStr, status, rollCall.ResponseCount, membersList),
+		Message:   fmt.Sprintf("## Roll Call Summary %s\n\n**Status:** %s\n**Responses:** %d%s\n\n### Members Present:\n%s", durationStr, status, rollCall.ResponseCount, erpInfo, membersList),
 	}
 	if post.RootId != "" {
 		responsePost.RootId = post.RootId

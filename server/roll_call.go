@@ -11,12 +11,13 @@ import (
 
 // RollCall holds the state of an active roll call
 type RollCall struct {
-	ChannelID     string
-	StartTime     time.Time
-	InitiatorID   string
-	RespondedIDs  map[string]bool
-	Active        bool
-	ResponseCount int
+	ChannelID        string
+	StartTime        time.Time
+	InitiatorID      string
+	RespondedIDs     map[string]bool
+	ERPRecordedUsers map[string]bool // Track which users were recorded in ERP
+	Active           bool
+	ResponseCount    int
 }
 
 // RollCallManager manages active roll calls
@@ -44,11 +45,12 @@ func (r *RollCallManager) StartRollCall(channelID string, initiatorID string) (*
 
 	// Create a new roll call
 	rollCall := &RollCall{
-		ChannelID:    channelID,
-		StartTime:    time.Now(),
-		InitiatorID:  initiatorID,
-		RespondedIDs: make(map[string]bool),
-		Active:       true,
+		ChannelID:        channelID,
+		StartTime:        time.Now(),
+		InitiatorID:      initiatorID,
+		RespondedIDs:     make(map[string]bool),
+		ERPRecordedUsers: make(map[string]bool),
+		Active:           true,
 	}
 
 	r.activeRollCalls[channelID] = rollCall
@@ -70,21 +72,51 @@ func (r *RollCallManager) EndRollCall(channelID string) (*RollCall, error) {
 }
 
 // RespondToRollCall records a user's response to an active roll call
-func (r *RollCallManager) RespondToRollCall(channelID string, userID string) (*RollCall, error) {
+func (r *RollCallManager) RespondToRollCall(channelID string, userID string) (*RollCall, bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	rollCall, exists := r.activeRollCalls[channelID]
 	if !exists || !rollCall.Active {
-		return nil, fmt.Errorf("no active roll call in this channel")
+		return nil, false, fmt.Errorf("no active roll call in this channel")
 	}
 
+	// Check if this is a new response
+	isNewResponse := false
 	if _, responded := rollCall.RespondedIDs[userID]; !responded {
 		rollCall.RespondedIDs[userID] = true
 		rollCall.ResponseCount++
+		isNewResponse = true
 	}
 
-	return rollCall, nil
+	return rollCall, isNewResponse, nil
+}
+
+// MarkUserERPRecorded marks that a user's attendance has been recorded in ERP
+func (r *RollCallManager) MarkUserERPRecorded(channelID string, userID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	rollCall, exists := r.activeRollCalls[channelID]
+	if !exists {
+		return fmt.Errorf("no roll call in this channel")
+	}
+
+	rollCall.ERPRecordedUsers[userID] = true
+	return nil
+}
+
+// IsUserERPRecorded checks if a user's attendance has been recorded in ERP
+func (r *RollCallManager) IsUserERPRecorded(channelID string, userID string) (bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	rollCall, exists := r.activeRollCalls[channelID]
+	if !exists {
+		return false, fmt.Errorf("no roll call in this channel")
+	}
+
+	return rollCall.ERPRecordedUsers[userID], nil
 }
 
 // GetRollCall gets the roll call for a channel

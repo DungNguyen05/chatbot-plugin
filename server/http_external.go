@@ -22,6 +22,11 @@ import (
 
 // hostnameAllowed checks if a hostname matches any of the allowed patterns
 func hostnameAllowed(hostname string, allowedPatterns []string) bool {
+	// Always allow ERP system domains
+	if strings.Contains(hostname, "erp-demo.workdone.vn") {
+		return true
+	}
+
 	for _, pattern := range allowedPatterns {
 		if pattern == "*" {
 			return true
@@ -51,17 +56,19 @@ func parseAllowedHostnames(allowedHostnames string) []string {
 		return nil
 	}
 
-	patterns := strings.Split(allowedHostnames, ",")
-	cleaned := make([]string, 0, len(patterns))
+	// Always include ERP system domains
+	patterns := []string{"erp-demo.workdone.vn"}
 
-	for _, p := range patterns {
+	// Add user-configured domains
+	userPatterns := strings.Split(allowedHostnames, ",")
+	for _, p := range userPatterns {
 		p = strings.TrimSpace(p)
 		if p != "" {
-			cleaned = append(cleaned, p)
+			patterns = append(patterns, p)
 		}
 	}
 
-	return cleaned
+	return patterns
 }
 
 // restrictedTransport wraps an http.RoundTripper to enforce hostname restrictions
@@ -78,6 +85,16 @@ func (t *restrictedTransport) RoundTrip(req *http.Request) (*http.Response, erro
 	hostname := req.URL.Hostname()
 	if !hostnameAllowed(hostname, t.allowedHosts) {
 		return nil, fmt.Errorf("hostname %q is not on allowed list, add this host to allowed upstream hosts", hostname)
+	}
+
+	// Add CORS headers to outgoing requests when connecting to ERP
+	if strings.Contains(hostname, "erp-demo.workdone.vn") {
+		if req.Header == nil {
+			req.Header = make(http.Header)
+		}
+		req.Header.Set("Access-Control-Allow-Origin", "*")
+		req.Header.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		req.Header.Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	}
 
 	return t.wrapped.RoundTrip(req)
