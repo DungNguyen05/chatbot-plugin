@@ -1,12 +1,12 @@
 {
   "id": "mattermost-ai",
-  "name": "Copilot",
+  "name": "ChatBot plugin",
   "description": "",
   "homepage_url": "https://github.com/mattermost/mattermost-plugin-ai",
   "support_url": "https://github.com/mattermost/mattermost-plugin-ai/issues",
   "release_notes_url": "https://github.com/mattermost/mattermost-plugin-ai",
   "icon_path": "assets/bot_icon.png",
-  "min_server_version": "6.2.1",
+  "min_server_version": "7.7.0",
   "server": {
     "executables": {
       "linux-amd64": "server/dist/plugin-linux-amd64",
@@ -20,13 +20,21 @@
     "bundle_path": "webapp/dist/main.js"
   },
   "settings_schema": {
-    "header": "",
-    "footer": "",
-    "settings": [
-      {
-        "key": "Config",
-        "type": "custom"
-      }
-    ]
-  }
+        "header": "Configure Mattermost AI plugin settings",
+        "footer": "To report an issue, make a suggestion, or contribute, [check the repository](https://github.com/mattermost/mattermost-plugin-ai).",
+        "settings": [
+            {
+              "key": "Config",
+              "type": "custom"
+            },
+            {
+                "key": "autoCheckoutTime",
+                "display_name": "Auto-Checkout Time",
+                "type": "text",
+                "help_text": "Set the fixed time (in HH:MM:SS format, 24-hour format) when automatic checkouts should occur. For example, '17:30:00' for 5:30 PM. Leave empty to disable automatic checkouts.",
+                "placeholder": "17:30:00",
+                "default": ""
+            }
+        ]
+    }
 }

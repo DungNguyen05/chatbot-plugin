@@ -19,6 +19,7 @@ type Config struct {
 	// Note: We still keep the EmbeddingSearchConfig field to avoid breaking existing
 	// configurations, but it won't be used in MySQL version
 	EmbeddingSearchConfig interface{} `json:"embeddingSearchConfig"`
+	AutoCheckoutTime      string      `json:"autoCheckoutTime"`
 }
 
 // configuration captures the plugin's external configuration as exposed in the Mattermost server

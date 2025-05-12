@@ -4,6 +4,7 @@
 package main
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -30,4 +31,53 @@ func FormatVietnamTime() (string, error) {
 	}
 
 	return vietTime.Format("2006-01-02 15:04:05"), nil
+}
+
+// ParseCheckoutTime parses and validates the checkout time format (HH:MM:SS)
+func ParseCheckoutTime(timeStr string) (time.Time, error) {
+	if timeStr == "" {
+		return time.Time{}, fmt.Errorf("checkout time is not configured")
+	}
+
+	// Parse the time
+	layout := "15:04:05" // 24-hour format
+	t, err := time.Parse(layout, timeStr)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid checkout time format (must be HH:MM:SS): %w", err)
+	}
+
+	return t, nil
+}
+
+// GetCheckoutTimeForToday returns a time.Time for today with the configured checkout time
+func GetCheckoutTimeForToday(configuredTime string) (time.Time, error) {
+	// Parse the configured time
+	parsedTime, err := ParseCheckoutTime(configuredTime)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	// Get current date in Vietnam timezone
+	vietNow, err := GetVietnamTime()
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	// Combine current date with configured time
+	checkoutTime := time.Date(
+		vietNow.Year(), vietNow.Month(), vietNow.Day(),
+		parsedTime.Hour(), parsedTime.Minute(), parsedTime.Second(),
+		0, vietNow.Location())
+
+	// If the configured time is already past for today, return error
+	if checkoutTime.Before(vietNow) {
+		return time.Time{}, fmt.Errorf("configured checkout time %s has already passed for today", configuredTime)
+	}
+
+	return checkoutTime, nil
+}
+
+// FormatTimeForERP formats time for ERP in the standard format
+func FormatTimeForERP(t time.Time) string {
+	return t.Format("2006-01-02 15:04:05")
 }

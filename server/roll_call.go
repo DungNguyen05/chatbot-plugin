@@ -11,13 +11,14 @@ import (
 
 // RollCall holds the state of an active roll call
 type RollCall struct {
-	ChannelID        string
-	StartTime        time.Time
-	InitiatorID      string
-	RespondedIDs     map[string]bool
-	ERPRecordedUsers map[string]bool // Track which users were recorded in ERP
-	Active           bool
-	ResponseCount    int
+	ChannelID             string
+	StartTime             time.Time
+	InitiatorID           string
+	RespondedIDs          map[string]bool
+	ERPRecordedUsers      map[string]bool // Track which users were recorded in ERP
+	Active                bool
+	ResponseCount         int
+	CheckoutRecordedUsers map[string]bool
 }
 
 // RollCallManager manages active roll calls
@@ -130,6 +131,42 @@ func (r *RollCallManager) GetRollCall(channelID string) (*RollCall, error) {
 	}
 
 	return rollCall, nil
+}
+
+// MarkUserCheckoutRecorded marks that a user's checkout has been recorded in ERP
+func (r *RollCallManager) MarkUserCheckoutRecorded(channelID string, userID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	rollCall, exists := r.activeRollCalls[channelID]
+	if !exists {
+		return fmt.Errorf("no roll call in this channel")
+	}
+
+	// Initialize map if needed
+	if rollCall.CheckoutRecordedUsers == nil {
+		rollCall.CheckoutRecordedUsers = make(map[string]bool)
+	}
+
+	rollCall.CheckoutRecordedUsers[userID] = true
+	return nil
+}
+
+// IsUserCheckoutRecorded checks if a user's checkout has been recorded in ERP
+func (r *RollCallManager) IsUserCheckoutRecorded(channelID string, userID string) (bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	rollCall, exists := r.activeRollCalls[channelID]
+	if !exists {
+		return false, fmt.Errorf("no roll call in this channel")
+	}
+
+	if rollCall.CheckoutRecordedUsers == nil {
+		return false, nil
+	}
+
+	return rollCall.CheckoutRecordedUsers[userID], nil
 }
 
 // Helper function to format duration

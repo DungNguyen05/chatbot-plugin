@@ -87,7 +87,6 @@ func (p *Plugin) handleEndRollCall(bot *Bot, channel *model.Channel, user *model
 }
 
 // handleRollCallResponse handles a user's response to a roll call
-// handleRollCallResponse handles a user's response to a roll call
 func (p *Plugin) handleRollCallResponse(bot *Bot, channel *model.Channel, user *model.User, post *model.Post) error {
 	// Record a user's response to a roll call
 	_, isNewResponse, err := p.rollCallManager.RespondToRollCall(channel.Id, user.Id)
@@ -98,7 +97,7 @@ func (p *Plugin) handleRollCallResponse(bot *Bot, channel *model.Channel, user *
 
 	// If this is a new response, record it in ERP
 	var erpMessage string
-	var timeFormatted string
+	var checkinTimeFormatted string
 
 	if isNewResponse {
 		// Check if user has already been recorded in ERP
@@ -107,7 +106,7 @@ func (p *Plugin) handleRollCallResponse(bot *Bot, channel *model.Channel, user *
 			// Get employee name from user
 			employeeName := p.GetEmployeeNameFromUser(user)
 
-			// Try to record in ERP - this now returns the formatted time string used
+			// Try to record check-in in ERP
 			formattedTime, erpErr := p.RecordEmployeeCheckin(employeeName)
 			if erpErr != nil {
 				p.API.LogError("Failed to record employee check-in in ERP", "error", erpErr.Error())
@@ -119,17 +118,57 @@ func (p *Plugin) handleRollCallResponse(bot *Bot, channel *model.Channel, user *
 					p.API.LogError("Failed to get Vietnam time", "error", timeErr.Error())
 					// Fallback to server time if Vietnam time fails
 					serverTime := model.GetMillis()
-					timeFormatted = time.UnixMilli(serverTime).Format("2006-01-02 15:04:05")
+					checkinTimeFormatted = time.UnixMilli(serverTime).Format("2006-01-02 15:04:05")
 				} else {
-					timeFormatted = vietTimeStr
+					checkinTimeFormatted = vietTimeStr
 				}
 			} else {
 				// Mark user as recorded in ERP
 				_ = p.rollCallManager.MarkUserERPRecorded(channel.Id, user.Id)
-				erpMessage = fmt.Sprintf("\n\n✅ Your attendance has also been recorded in the ERP system at **%s**.", formattedTime)
+				checkinTimeFormatted = formattedTime
 
-				// Use the same formatted time that was sent to ERP
-				timeFormatted = formattedTime
+				// Get the configured checkout time
+				configuredCheckoutTime := p.getConfiguration().AutoCheckoutTime
+
+				// Check if checkout time is configured
+				if configuredCheckoutTime != "" {
+					// Get today's date with the configured checkout time
+					checkoutTime, timeErr := GetCheckoutTimeForToday(configuredCheckoutTime)
+					if timeErr != nil {
+						p.API.LogWarn("Failed to get checkout time", "error", timeErr.Error())
+						erpMessage = fmt.Sprintf("\n\n✅ Your check-in has been recorded in the ERP system at **%s**.\nℹ️ No automatic checkout scheduled: %s",
+							formattedTime, timeErr.Error())
+					} else {
+						// Format checkout time for ERP
+						checkoutTimeStr := FormatTimeForERP(checkoutTime)
+
+						p.API.LogDebug("Scheduled checkout",
+							"user", user.Username,
+							"checkin", formattedTime,
+							"checkout", checkoutTimeStr)
+
+						// Record checkout in ERP
+						checkoutFormatted, checkoutErr := p.RecordEmployeeCheckout(employeeName, checkoutTimeStr)
+						if checkoutErr != nil {
+							p.API.LogError("Failed to record employee checkout in ERP", "error", checkoutErr.Error())
+							erpMessage = fmt.Sprintf("\n\n✅ Your check-in has been recorded in the ERP system at **%s**.\n⚠️ There was an issue recording your automatic checkout. An administrator has been notified.", formattedTime)
+						} else {
+							// Mark checkout as recorded
+							_ = p.rollCallManager.MarkUserCheckoutRecorded(channel.Id, user.Id)
+
+							// Calculate time difference between checkin and checkout
+							checkinParsed, _ := time.Parse("2006-01-02 15:04:05", formattedTime)
+							checkoutParsed, _ := time.Parse("2006-01-02 15:04:05", checkoutFormatted)
+							duration := checkoutParsed.Sub(checkinParsed)
+
+							erpMessage = fmt.Sprintf("\n\n✅ Your attendance has been recorded in the ERP system:\n- Check-in: **%s**\n- Check-out: **%s** (%s)",
+								formattedTime, checkoutFormatted, formatDuration(duration))
+						}
+					}
+				} else {
+					// No checkout time configured
+					erpMessage = fmt.Sprintf("\n\n✅ Your check-in has been recorded in the ERP system at **%s**.\nℹ️ No automatic checkout is configured.", formattedTime)
+				}
 			}
 		} else {
 			// Get Vietnam time for cases where ERP recording isn't needed
@@ -138,9 +177,9 @@ func (p *Plugin) handleRollCallResponse(bot *Bot, channel *model.Channel, user *
 				p.API.LogError("Failed to get Vietnam time", "error", timeErr.Error())
 				// Fallback to server time if Vietnam time fails
 				serverTime := model.GetMillis()
-				timeFormatted = time.UnixMilli(serverTime).Format("2006-01-02 15:04:05")
+				checkinTimeFormatted = time.UnixMilli(serverTime).Format("2006-01-02 15:04:05")
 			} else {
-				timeFormatted = vietTimeStr
+				checkinTimeFormatted = vietTimeStr
 			}
 		}
 	} else {
@@ -150,16 +189,16 @@ func (p *Plugin) handleRollCallResponse(bot *Bot, channel *model.Channel, user *
 			p.API.LogError("Failed to get Vietnam time", "error", timeErr.Error())
 			// Fallback to server time if Vietnam time fails
 			serverTime := model.GetMillis()
-			timeFormatted = time.UnixMilli(serverTime).Format("2006-01-02 15:04:05")
+			checkinTimeFormatted = time.UnixMilli(serverTime).Format("2006-01-02 15:04:05")
 		} else {
-			timeFormatted = vietTimeStr
+			checkinTimeFormatted = vietTimeStr
 		}
 	}
 
 	// For DM channels, acknowledge the response
 	responsePost := &model.Post{
 		ChannelId: channel.Id,
-		Message:   fmt.Sprintf("✅ Your attendance has been recorded at **%s**!%s", timeFormatted, erpMessage),
+		Message:   fmt.Sprintf("✅ Your attendance has been recorded at **%s**!%s", checkinTimeFormatted, erpMessage),
 	}
 	if post.RootId != "" {
 		responsePost.RootId = post.RootId
@@ -167,7 +206,6 @@ func (p *Plugin) handleRollCallResponse(bot *Bot, channel *model.Channel, user *
 	return p.botCreateNonResponsePost(bot.mmBot.UserId, user.Id, responsePost)
 }
 
-// handleRollCallSummary handles a request for a roll call summary
 func (p *Plugin) handleRollCallSummary(bot *Bot, channel *model.Channel, user *model.User, post *model.Post) error {
 	// Get the roll call summary
 	rollCall, err := p.rollCallManager.GetRollCall(channel.Id)
@@ -196,12 +234,17 @@ func (p *Plugin) handleRollCallSummary(bot *Bot, channel *model.Channel, user *m
 		}
 
 		// Check if recorded in ERP
-		erpStatus := ""
+		status := ""
 		if recorded, _ := p.rollCallManager.IsUserERPRecorded(channel.Id, userID); recorded {
-			erpStatus = " ✓ (ERP)"
+			status += " ✓ (Check-in recorded)"
 		}
 
-		respondedMembers = append(respondedMembers, name+erpStatus)
+		// Check if checkout was recorded
+		if recorded, _ := p.rollCallManager.IsUserCheckoutRecorded(channel.Id, userID); recorded {
+			status += " ✓ (Check-out recorded)"
+		}
+
+		respondedMembers = append(respondedMembers, name+status)
 	}
 
 	// Format duration
@@ -224,8 +267,24 @@ func (p *Plugin) handleRollCallSummary(bot *Bot, channel *model.Channel, user *m
 		membersList = "- " + strings.Join(respondedMembers, "\n- ")
 	}
 
-	// Add ERP info
-	erpInfo := fmt.Sprintf("\n\n**ERP Integration:** %d attendance records sent to ERP system", len(rollCall.ERPRecordedUsers))
+	// Count checkins and checkouts
+	checkinCount := len(rollCall.ERPRecordedUsers)
+	checkoutCount := 0
+	if rollCall.CheckoutRecordedUsers != nil {
+		checkoutCount = len(rollCall.CheckoutRecordedUsers)
+	}
+
+	// Get the configured checkout time
+	configuredCheckoutTime := p.getConfiguration().AutoCheckoutTime
+
+	// Add ERP info with checkout configuration
+	autoCheckoutInfo := "disabled"
+	if configuredCheckoutTime != "" {
+		autoCheckoutInfo = fmt.Sprintf("enabled at **%s** daily", configuredCheckoutTime)
+	}
+
+	erpInfo := fmt.Sprintf("\n\n**ERP Integration:** %d check-ins and %d check-outs recorded\n**Auto Checkout:** %s",
+		checkinCount, checkoutCount, autoCheckoutInfo)
 
 	responsePost := &model.Post{
 		ChannelId: channel.Id,
