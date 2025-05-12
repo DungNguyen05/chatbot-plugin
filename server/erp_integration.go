@@ -191,7 +191,6 @@ type EmployeeCheckout struct {
 }
 
 // RecordEmployeeCheckout sends the check-out data to ERPNEXT
-// It uses the same time as the check-in for simplicity
 func (p *Plugin) RecordEmployeeCheckout(employeeName string, checkoutTime string) (string, error) {
 	p.API.LogDebug("Recording employee check-out", "employee", employeeName, "time", checkoutTime)
 

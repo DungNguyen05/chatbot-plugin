@@ -30,6 +30,7 @@ const (
 	CallsRecordingPostType = "custom_calls_recording"
 	CallsBotUsername       = "calls"
 	ZoomBotUsername        = "zoom"
+	AutoCheckoutTime       = "17:30:00"
 
 	ffmpegPluginPath = "./plugins/mattermost-ai/server/dist/ffmpeg"
 )

@@ -86,7 +86,6 @@ func (p *Plugin) handleEndRollCall(bot *Bot, channel *model.Channel, user *model
 	return p.botCreateNonResponsePost(bot.mmBot.UserId, user.Id, responsePost)
 }
 
-// handleRollCallResponse handles a user's response to a roll call
 func (p *Plugin) handleRollCallResponse(bot *Bot, channel *model.Channel, user *model.User, post *model.Post) error {
 	// Record a user's response to a roll call
 	_, isNewResponse, err := p.rollCallManager.RespondToRollCall(channel.Id, user.Id)
@@ -127,47 +126,38 @@ func (p *Plugin) handleRollCallResponse(bot *Bot, channel *model.Channel, user *
 				_ = p.rollCallManager.MarkUserERPRecorded(channel.Id, user.Id)
 				checkinTimeFormatted = formattedTime
 
-				// Get the configured checkout time
-				configuredCheckoutTime := p.getConfiguration().AutoCheckoutTime
-
-				// Check if checkout time is configured
-				if configuredCheckoutTime != "" {
-					// Get today's date with the configured checkout time
-					checkoutTime, timeErr := GetCheckoutTimeForToday(configuredCheckoutTime)
-					if timeErr != nil {
-						p.API.LogWarn("Failed to get checkout time", "error", timeErr.Error())
-						erpMessage = fmt.Sprintf("\n\n✅ Your check-in has been recorded in the ERP system at **%s**.\nℹ️ No automatic checkout scheduled: %s",
-							formattedTime, timeErr.Error())
-					} else {
-						// Format checkout time for ERP
-						checkoutTimeStr := FormatTimeForERP(checkoutTime)
-
-						p.API.LogDebug("Scheduled checkout",
-							"user", user.Username,
-							"checkin", formattedTime,
-							"checkout", checkoutTimeStr)
-
-						// Record checkout in ERP
-						checkoutFormatted, checkoutErr := p.RecordEmployeeCheckout(employeeName, checkoutTimeStr)
-						if checkoutErr != nil {
-							p.API.LogError("Failed to record employee checkout in ERP", "error", checkoutErr.Error())
-							erpMessage = fmt.Sprintf("\n\n✅ Your check-in has been recorded in the ERP system at **%s**.\n⚠️ There was an issue recording your automatic checkout. An administrator has been notified.", formattedTime)
-						} else {
-							// Mark checkout as recorded
-							_ = p.rollCallManager.MarkUserCheckoutRecorded(channel.Id, user.Id)
-
-							// Calculate time difference between checkin and checkout
-							checkinParsed, _ := time.Parse("2006-01-02 15:04:05", formattedTime)
-							checkoutParsed, _ := time.Parse("2006-01-02 15:04:05", checkoutFormatted)
-							duration := checkoutParsed.Sub(checkinParsed)
-
-							erpMessage = fmt.Sprintf("\n\n✅ Your attendance has been recorded in the ERP system:\n- Check-in: **%s**\n- Check-out: **%s** (%s)",
-								formattedTime, checkoutFormatted, formatDuration(duration))
-						}
-					}
+				// Get today's date with the configured checkout time
+				checkoutTime, timeErr := GetCheckoutTimeForToday(AutoCheckoutTime)
+				if timeErr != nil {
+					p.API.LogWarn("Failed to get checkout time", "error", timeErr.Error())
+					erpMessage = fmt.Sprintf("\n\n✅ Your check-in has been recorded in the ERP system at **%s**.\nℹ️ No automatic checkout scheduled: %s",
+						formattedTime, timeErr.Error())
 				} else {
-					// No checkout time configured
-					erpMessage = fmt.Sprintf("\n\n✅ Your check-in has been recorded in the ERP system at **%s**.\nℹ️ No automatic checkout is configured.", formattedTime)
+					// Format checkout time for ERP
+					checkoutTimeStr := FormatTimeForERP(checkoutTime)
+
+					p.API.LogDebug("Scheduled checkout",
+						"user", user.Username,
+						"checkin", formattedTime,
+						"checkout", checkoutTimeStr)
+
+					// Record checkout in ERP
+					checkoutFormatted, checkoutErr := p.RecordEmployeeCheckout(employeeName, checkoutTimeStr)
+					if checkoutErr != nil {
+						p.API.LogError("Failed to record employee checkout in ERP", "error", checkoutErr.Error())
+						erpMessage = fmt.Sprintf("\n\n✅ Your check-in has been recorded in the ERP system at **%s**.\n⚠️ There was an issue recording your automatic checkout. An administrator has been notified.", formattedTime)
+					} else {
+						// Mark checkout as recorded
+						_ = p.rollCallManager.MarkUserCheckoutRecorded(channel.Id, user.Id)
+
+						// Calculate time difference between checkin and checkout
+						checkinParsed, _ := time.Parse("2006-01-02 15:04:05", formattedTime)
+						checkoutParsed, _ := time.Parse("2006-01-02 15:04:05", checkoutFormatted)
+						duration := checkoutParsed.Sub(checkinParsed)
+
+						erpMessage = fmt.Sprintf("\n\n✅ Your attendance has been recorded in the ERP system:\n- Check-in: **%s**\n- Check-out: **%s** (%s)",
+							formattedTime, checkoutFormatted, formatDuration(duration))
+					}
 				}
 			}
 		} else {
@@ -274,14 +264,8 @@ func (p *Plugin) handleRollCallSummary(bot *Bot, channel *model.Channel, user *m
 		checkoutCount = len(rollCall.CheckoutRecordedUsers)
 	}
 
-	// Get the configured checkout time
-	configuredCheckoutTime := p.getConfiguration().AutoCheckoutTime
-
 	// Add ERP info with checkout configuration
-	autoCheckoutInfo := "disabled"
-	if configuredCheckoutTime != "" {
-		autoCheckoutInfo = fmt.Sprintf("enabled at **%s** daily", configuredCheckoutTime)
-	}
+	autoCheckoutInfo := fmt.Sprintf("enabled at **%s** daily", AutoCheckoutTime)
 
 	erpInfo := fmt.Sprintf("\n\n**ERP Integration:** %d check-ins and %d check-outs recorded\n**Auto Checkout:** %s",
 		checkinCount, checkoutCount, autoCheckoutInfo)

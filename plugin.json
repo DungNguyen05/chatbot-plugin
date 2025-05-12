@@ -26,14 +26,6 @@
             {
               "key": "Config",
               "type": "custom"
-            },
-            {
-                "key": "autoCheckoutTime",
-                "display_name": "Auto-Checkout Time",
-                "type": "text",
-                "help_text": "Set the fixed time (in HH:MM:SS format, 24-hour format) when automatic checkouts should occur. For example, '17:30:00' for 5:30 PM. Leave empty to disable automatic checkouts.",
-                "placeholder": "17:30:00",
-                "default": ""
             }
         ]
     }
