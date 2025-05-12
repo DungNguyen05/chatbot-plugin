@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	RollCallStartTime = "15:52:00" // 8 AM Vietnam time
+	RollCallStartTime = "08:00:00" // 8 AM Vietnam time
 	RollCallEndTime   = "17:30:00" // 5:30 PM Vietnam time
 )
 
