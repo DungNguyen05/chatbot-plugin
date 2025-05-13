@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mattermost/mattermost-plugin-ai/server/llm"
 	"github.com/mattermost/mattermost/server/public/model"
 )
 
@@ -18,13 +19,6 @@ const (
 
 // StartDailyRollCall starts a roll call in all configured channels
 func (p *Plugin) StartDailyRollCall() {
-	// Get all teams
-	teams, appErr := p.API.GetTeams()
-	if appErr != nil {
-		p.API.LogError("Failed to get teams for automatic roll call", "error", appErr.Error())
-		return
-	}
-
 	// Get the bot
 	bot := p.GetBotByUsernameOrFirst(p.getConfiguration().DefaultBotName)
 	if bot == nil {
@@ -32,38 +26,128 @@ func (p *Plugin) StartDailyRollCall() {
 		return
 	}
 
-	for _, team := range teams {
-		// Get Town Square for each team
-		channel, appErr := p.API.GetChannelByName(team.Id, "town-square", false)
+	// Get channels from bot configuration instead of hardcoding town-square
+	var channelsToPost []string
+
+	// Handle all possible channel access configurations
+	switch bot.cfg.ChannelAccessLevel {
+	case llm.ChannelAccessLevelAll:
+		// Allow for all channels - get all channels the bot has access to
+		teams, appErr := p.API.GetTeams()
 		if appErr != nil {
-			p.API.LogError("Failed to get Town Square for team", "teamId", team.Id, "error", appErr.Error())
-			continue
+			p.API.LogError("Failed to get teams for automatic roll call", "error", appErr.Error())
+			return
 		}
 
+		for _, team := range teams {
+			channels, appErr := p.API.GetChannelsForTeamForUser(team.Id, bot.mmBot.UserId, false)
+			if appErr != nil {
+				p.API.LogError("Failed to get channels for team", "teamId", team.Id, "error", appErr.Error())
+				continue
+			}
+
+			// Only include public and private channels (not DMs or GMs)
+			for _, channel := range channels {
+				if channel.Type == model.ChannelTypeOpen || channel.Type == model.ChannelTypePrivate {
+					channelsToPost = append(channelsToPost, channel.Id)
+				}
+			}
+		}
+
+	case llm.ChannelAccessLevelAllow:
+		// Allow for selected channels only
+		if len(bot.cfg.ChannelIDs) > 0 {
+			// Only post to the explicitly allowed channels
+			channelsToPost = append(channelsToPost, bot.cfg.ChannelIDs...)
+		} else {
+			// If no channels are explicitly allowed, don't post anywhere
+			p.API.LogInfo("No channels are explicitly allowed for roll call")
+		}
+
+	case llm.ChannelAccessLevelBlock:
+		// Block selected channels - get all channels except the blocked ones
+		if len(bot.cfg.ChannelIDs) == 0 {
+			// If no channels are explicitly blocked, this behaves like "Allow for all channels"
+			teams, appErr := p.API.GetTeams()
+			if appErr != nil {
+				p.API.LogError("Failed to get teams for automatic roll call", "error", appErr.Error())
+				return
+			}
+
+			for _, team := range teams {
+				channels, appErr := p.API.GetChannelsForTeamForUser(team.Id, bot.mmBot.UserId, false)
+				if appErr != nil {
+					p.API.LogError("Failed to get channels for team", "teamId", team.Id, "error", appErr.Error())
+					continue
+				}
+
+				// Only include public and private channels (not DMs or GMs)
+				for _, channel := range channels {
+					if channel.Type == model.ChannelTypeOpen || channel.Type == model.ChannelTypePrivate {
+						channelsToPost = append(channelsToPost, channel.Id)
+					}
+				}
+			}
+		} else {
+			// Get all channels, exclude the blocked ones
+			teams, appErr := p.API.GetTeams()
+			if appErr != nil {
+				p.API.LogError("Failed to get teams for automatic roll call", "error", appErr.Error())
+				return
+			}
+
+			for _, team := range teams {
+				channels, appErr := p.API.GetChannelsForTeamForUser(team.Id, bot.mmBot.UserId, false)
+				if appErr != nil {
+					p.API.LogError("Failed to get channels for team", "teamId", team.Id, "error", appErr.Error())
+					continue
+				}
+
+				// Only include public and private channels (not DMs or GMs), excluding blocked ones
+				for _, channel := range channels {
+					if (channel.Type == model.ChannelTypeOpen || channel.Type == model.ChannelTypePrivate) &&
+						!contains(bot.cfg.ChannelIDs, channel.Id) {
+						channelsToPost = append(channelsToPost, channel.Id)
+					}
+				}
+			}
+		}
+
+	case llm.ChannelAccessLevelNone:
+		// Block all channels - don't post anywhere
+		p.API.LogInfo("Channel access level is set to None, not posting roll call to any channels")
+		return
+	}
+
+	// Log the number of channels found
+	p.API.LogInfo("Starting automatic roll call", "channelCount", len(channelsToPost))
+
+	// Get the current date in Vietnam format
+	vietTime, err := GetVietnamTime()
+	if err != nil {
+		p.API.LogError("Failed to get Vietnam time", "error", err.Error())
+		vietTime = time.Now() // Fallback to server time
+	}
+	dateStr := vietTime.Format("Monday, January 2, 2006")
+
+	// Get configured auto checkout time
+	autoCheckoutTime := p.getConfiguration().AutoCheckoutTime
+	if autoCheckoutTime == "" {
+		autoCheckoutTime = DefaultAutoCheckoutTime
+	}
+
+	// Post to each channel
+	for _, channelID := range channelsToPost {
 		// Start a roll call in this channel
-		_, err := p.rollCallManager.StartRollCall(channel.Id, bot.mmBot.UserId)
+		_, err := p.rollCallManager.StartRollCall(channelID, bot.mmBot.UserId)
 		if err != nil {
-			p.API.LogError("Failed to start roll call", "channelId", channel.Id, "error", err.Error())
+			p.API.LogError("Failed to start roll call", "channelId", channelID, "error", err.Error())
 			continue
-		}
-
-		// Get the current date in Vietnam format
-		vietTime, err := GetVietnamTime()
-		if err != nil {
-			p.API.LogError("Failed to get Vietnam time", "error", err.Error())
-			vietTime = time.Now() // Fallback to server time
-		}
-		dateStr := vietTime.Format("Monday, January 2, 2006")
-
-		// Get configured auto checkout time
-		autoCheckoutTime := p.getConfiguration().AutoCheckoutTime
-		if autoCheckoutTime == "" {
-			autoCheckoutTime = DefaultAutoCheckoutTime
 		}
 
 		// Create the announcement post
 		post := &model.Post{
-			ChannelId: channel.Id,
+			ChannelId: channelID,
 			UserId:    bot.mmBot.UserId,
 			Message: fmt.Sprintf(
 				"# 📋 Daily Roll Call - %s\n\n"+
@@ -78,12 +162,22 @@ func (p *Plugin) StartDailyRollCall() {
 
 		// Post the message
 		if _, appErr := p.API.CreatePost(post); appErr != nil {
-			p.API.LogError("Failed to create roll call post", "channelId", channel.Id, "error", appErr.Error())
+			p.API.LogError("Failed to create roll call post", "channelId", channelID, "error", appErr.Error())
 			continue
 		}
 
-		p.API.LogInfo("Started automatic roll call", "channelId", channel.Id, "date", dateStr)
+		p.API.LogInfo("Started automatic roll call", "channelId", channelID, "date", dateStr)
 	}
+}
+
+// Helper function to check if a slice contains a value
+func contains(slice []string, val string) bool {
+	for _, item := range slice {
+		if item == val {
+			return true
+		}
+	}
+	return false
 }
 
 // EndDailyRollCall ends all active roll calls and posts summaries
