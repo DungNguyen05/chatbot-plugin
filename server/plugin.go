@@ -30,7 +30,6 @@ const (
 	CallsRecordingPostType = "custom_calls_recording"
 	CallsBotUsername       = "calls"
 	ZoomBotUsername        = "zoom"
-	AutoCheckoutTime       = "17:30:00"
 
 	ffmpegPluginPath = "./plugins/mattermost-ai/server/dist/ffmpeg"
 )
@@ -50,8 +49,6 @@ type Plugin struct {
 	configuration *configuration
 
 	pluginAPI *pluginapi.Client
-
-	cronJob *CronJob // Keep the cron job for sending auto-checkout reminders
 
 	ffmpegPath string
 
@@ -99,9 +96,6 @@ func (p *Plugin) OnActivate() error {
 	})
 	p.metricsHandler = metrics.NewMetricsHandler(p.GetMetrics())
 
-	// Initialize cron job with fixed schedule
-	p.cronJob = NewCronJob(p)
-
 	p.i18n = i18nInit()
 
 	p.llmUpstreamHTTPClient = httpservice.MakeHTTPServicePlugin(p.API).MakeClient(true)
@@ -141,19 +135,11 @@ func (p *Plugin) OnActivate() error {
 
 	p.streamingContexts = map[string]PostStreamContext{}
 
-	// Start the cron job
-	p.cronJob.Start()
-
 	return nil
 }
 
 // OnDeactivate handles cleanup when the plugin is deactivated
 func (p *Plugin) OnDeactivate() error {
-	// Stop the cron job
-	if p.cronJob != nil {
-		p.cronJob.Stop()
-	}
-
 	return nil
 }
 

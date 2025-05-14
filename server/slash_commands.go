@@ -219,12 +219,18 @@ func (p *Plugin) executeAbsentCommand(args *model.CommandArgs) *model.CommandRes
 	// Get employee name with reason
 	employeeName := p.GetEmployeeNameFromUser(user) + " (ABSENT: " + reason + ")"
 
-	// Notify ERP of absence
-	// You could create a new function in erp_integration.go for this, but for now just log it
-	p.API.LogInfo("Recording absence in ERP", "employee", employeeName, "date", dateStr)
+	// Record absence in ERP
+	recordedDate, absenceErr := p.RecordEmployeeAbsent(employeeName, reason)
+	if absenceErr != nil {
+		p.API.LogError("Failed to record employee absence in ERP", "error", absenceErr.Error())
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         "⚠️ There was an issue recording your absence in the ERP system. An administrator has been notified.",
+		}
+	}
 
 	// Create response message
-	responseText := fmt.Sprintf("📝 Your absence has been recorded for **%s** with reason: \"%s\"", dateStr, reason)
+	responseText := fmt.Sprintf("📝 Your absence has been recorded for **%s** with reason: \"%s\"", recordedDate, reason)
 
 	// Return success response
 	return &model.CommandResponse{
