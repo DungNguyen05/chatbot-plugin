@@ -19,7 +19,6 @@ func (p *Plugin) registerSlashCommands() error {
 		DisplayName:      "Check-in",
 		Description:      "Record your attendance for today",
 		AutoComplete:     true,
-		AutoCompleteHint: "[optional note]",
 		AutoCompleteDesc: "Mark yourself as present in the system",
 	}); err != nil {
 		return err
@@ -30,7 +29,6 @@ func (p *Plugin) registerSlashCommands() error {
 		DisplayName:      "Check-out",
 		Description:      "Record your departure for today",
 		AutoComplete:     true,
-		AutoCompleteHint: "[optional note]",
 		AutoCompleteDesc: "Record when you're leaving for the day",
 	}); err != nil {
 		return err
@@ -84,17 +82,16 @@ func (p *Plugin) executeCheckInCommand(args *model.CommandArgs) *model.CommandRe
 		}
 	}
 
-	// Extract note from command
-	note := ""
+	// Check if there are additional arguments (notes are no longer allowed)
 	if len(strings.Fields(args.Command)) > 1 {
-		note = strings.TrimSpace(strings.TrimPrefix(args.Command, "/checkin"))
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         "The check-in command doesn't accept additional parameters. Please use `/checkin` without any notes.",
+		}
 	}
 
 	// Get employee name
 	employeeName := p.GetEmployeeNameFromUser(user)
-	if note != "" {
-		employeeName += " (" + note + ")"
-	}
 
 	// Try to record check-in in ERP
 	formattedTime, erpErr := p.RecordEmployeeCheckin(employeeName)
@@ -108,9 +105,6 @@ func (p *Plugin) executeCheckInCommand(args *model.CommandArgs) *model.CommandRe
 
 	// Create response message with successful ERP recording
 	responseText := fmt.Sprintf("✅ Your check-in has been recorded in the ERP system at **%s**!", formattedTime)
-	if note != "" {
-		responseText = fmt.Sprintf("✅ Your check-in has been recorded in the ERP system at **%s** with note: \"%s\"", formattedTime, note)
-	}
 
 	// Return success response
 	return &model.CommandResponse{
@@ -130,17 +124,16 @@ func (p *Plugin) executeCheckOutCommand(args *model.CommandArgs) *model.CommandR
 		}
 	}
 
-	// Extract note from command
-	note := ""
+	// Check if there are additional arguments (notes are no longer allowed)
 	if len(strings.Fields(args.Command)) > 1 {
-		note = strings.TrimSpace(strings.TrimPrefix(args.Command, "/checkout"))
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         "The check-out command doesn't accept additional parameters. Please use `/checkout` without any notes.",
+		}
 	}
 
 	// Get employee name
 	employeeName := p.GetEmployeeNameFromUser(user)
-	if note != "" {
-		employeeName += " (" + note + ")"
-	}
 
 	// Try to record check-out in ERP
 	formattedTime, erpErr := p.RecordEmployeeCheckout(employeeName)
@@ -154,9 +147,6 @@ func (p *Plugin) executeCheckOutCommand(args *model.CommandArgs) *model.CommandR
 
 	// Create response message with successful ERP recording
 	responseText := fmt.Sprintf("✅ Your check-out has been recorded in the ERP system at **%s**!", formattedTime)
-	if note != "" {
-		responseText = fmt.Sprintf("✅ Your check-out has been recorded in the ERP system at **%s** with note: \"%s\"", formattedTime, note)
-	}
 
 	// Return success response
 	return &model.CommandResponse{
