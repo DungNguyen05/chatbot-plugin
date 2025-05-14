@@ -122,6 +122,12 @@ func (p *Plugin) OnActivate() error {
 		// where it can't be configured from the system console.
 	}
 
+	// Register slash commands
+	if err := p.registerSlashCommands(); err != nil {
+		p.pluginAPI.Log.Error("Failed to register slash commands", "error", err)
+		// Continue even if command registration fails
+	}
+
 	if err := p.SetupDB(); err != nil {
 		return err
 	}

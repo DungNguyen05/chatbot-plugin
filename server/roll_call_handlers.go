@@ -236,6 +236,13 @@ func (p *Plugin) handleRollCallSummary(bot *Bot, channel *model.Channel, user *m
 			status += " ✓ (Check-out recorded)"
 		}
 
+		// Add note if available
+		if rollCall.RespondedNotes != nil {
+			if note, hasNote := rollCall.RespondedNotes[userID]; hasNote && note != "" {
+				status += fmt.Sprintf(" - Note: %s", note)
+			}
+		}
+
 		respondedMembers = append(respondedMembers, name+status)
 	}
 

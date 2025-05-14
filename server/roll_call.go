@@ -15,7 +15,8 @@ type RollCall struct {
 	StartTime             time.Time
 	InitiatorID           string
 	RespondedIDs          map[string]bool
-	ERPRecordedUsers      map[string]bool // Track which users were recorded in ERP
+	RespondedNotes        map[string]string // New field to store user notes
+	ERPRecordedUsers      map[string]bool   // Track which users were recorded in ERP
 	Active                bool
 	ResponseCount         int
 	CheckoutRecordedUsers map[string]bool
@@ -50,6 +51,7 @@ func (r *RollCallManager) StartRollCall(channelID string, initiatorID string) (*
 		StartTime:        time.Now(),
 		InitiatorID:      initiatorID,
 		RespondedIDs:     make(map[string]bool),
+		RespondedNotes:   make(map[string]string), // Initialize notes map
 		ERPRecordedUsers: make(map[string]bool),
 		Active:           true,
 	}
