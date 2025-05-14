@@ -106,6 +106,18 @@ func (p *Plugin) executeCheckInCommand(args *model.CommandArgs) *model.CommandRe
 	// Create response message with successful ERP recording
 	responseText := fmt.Sprintf("✅ Your check-in has been recorded in the ERP system at **%s**!", formattedTime)
 
+	// Asynchronously send notifications about the check-in
+	go func() {
+		if err := p.sendRollCallNotification(
+			user.Id,
+			employeeName,
+			RollCallEventCheckIn,
+			formattedTime,
+			""); err != nil {
+			p.API.LogError("Failed to send check-in notification", "error", err.Error())
+		}
+	}()
+
 	// Return success response
 	return &model.CommandResponse{
 		ResponseType: model.CommandResponseTypeEphemeral,
@@ -147,6 +159,18 @@ func (p *Plugin) executeCheckOutCommand(args *model.CommandArgs) *model.CommandR
 
 	// Create response message with successful ERP recording
 	responseText := fmt.Sprintf("✅ Your check-out has been recorded in the ERP system at **%s**!", formattedTime)
+
+	// Asynchronously send notifications about the check-out
+	go func() {
+		if err := p.sendRollCallNotification(
+			user.Id,
+			employeeName,
+			RollCallEventCheckOut,
+			formattedTime,
+			""); err != nil {
+			p.API.LogError("Failed to send check-out notification", "error", err.Error())
+		}
+	}()
 
 	// Return success response
 	return &model.CommandResponse{
@@ -194,7 +218,7 @@ func (p *Plugin) executeAbsentCommand(args *model.CommandArgs) *model.CommandRes
 		"reason", reason)
 
 	// Get employee name with reason
-	employeeName := p.GetEmployeeNameFromUser(user) + " (ABSENT: " + reason + ")"
+	employeeName := p.GetEmployeeNameFromUser(user)
 
 	// Record absence in ERP
 	recordedDate, absenceErr := p.RecordEmployeeAbsent(employeeName, reason)
@@ -208,6 +232,18 @@ func (p *Plugin) executeAbsentCommand(args *model.CommandArgs) *model.CommandRes
 
 	// Create response message
 	responseText := fmt.Sprintf("📝 Your absence has been recorded for **%s** with reason: \"%s\"", recordedDate, reason)
+
+	// Asynchronously send notifications about the absence
+	go func() {
+		if err := p.sendRollCallNotification(
+			user.Id,
+			employeeName,
+			RollCallEventAbsent,
+			recordedDate,
+			reason); err != nil {
+			p.API.LogError("Failed to send absence notification", "error", err.Error())
+		}
+	}()
 
 	// Return success response
 	return &model.CommandResponse{
