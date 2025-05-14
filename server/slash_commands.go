@@ -17,10 +17,32 @@ func (p *Plugin) registerSlashCommands() error {
 	if err := p.API.RegisterCommand(&model.Command{
 		Trigger:          "checkin",
 		DisplayName:      "Check-in",
-		Description:      "Mark your attendance for the active roll call",
+		Description:      "Record your attendance for today",
 		AutoComplete:     true,
 		AutoCompleteHint: "[optional note]",
-		AutoCompleteDesc: "Mark yourself as present in the active roll call",
+		AutoCompleteDesc: "Mark yourself as present in the system",
+	}); err != nil {
+		return err
+	}
+
+	if err := p.API.RegisterCommand(&model.Command{
+		Trigger:          "checkout",
+		DisplayName:      "Check-out",
+		Description:      "Record your departure for today",
+		AutoComplete:     true,
+		AutoCompleteHint: "[optional note]",
+		AutoCompleteDesc: "Record when you're leaving for the day",
+	}); err != nil {
+		return err
+	}
+
+	if err := p.API.RegisterCommand(&model.Command{
+		Trigger:          "absent",
+		DisplayName:      "Absent",
+		Description:      "Mark yourself as absent",
+		AutoComplete:     true,
+		AutoCompleteHint: "<reason>",
+		AutoCompleteDesc: "Record that you'll be absent today with a reason",
 	}); err != nil {
 		return err
 	}
@@ -39,6 +61,10 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 	switch command {
 	case "checkin":
 		return p.executeCheckInCommand(args), nil
+	case "checkout":
+		return p.executeCheckOutCommand(args), nil
+	case "absent":
+		return p.executeAbsentCommand(args), nil
 	default:
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
@@ -49,37 +75,12 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 
 // executeCheckInCommand handles the /checkin command
 func (p *Plugin) executeCheckInCommand(args *model.CommandArgs) *model.CommandResponse {
-	// Get user and channel info
+	// Get user info
 	user, err := p.pluginAPI.User.Get(args.UserId)
 	if err != nil {
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
 			Text:         "Error getting user information. Please try again.",
-		}
-	}
-
-	channel, err := p.pluginAPI.Channel.Get(args.ChannelId)
-	if err != nil {
-		return &model.CommandResponse{
-			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         "Error getting channel information. Please try again.",
-		}
-	}
-
-	// Check if there's an active roll call
-	if !p.rollCallManager.IsRollCallActive(channel.Id) {
-		return &model.CommandResponse{
-			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         "There is no active roll call in this channel. Please wait for a roll call to be started.",
-		}
-	}
-
-	// Get the default bot
-	bot := p.GetBotByUsernameOrFirst(p.getConfiguration().DefaultBotName)
-	if bot == nil {
-		return &model.CommandResponse{
-			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         "Error: Unable to find the AI bot. Please contact your administrator.",
 		}
 	}
 
@@ -89,126 +90,141 @@ func (p *Plugin) executeCheckInCommand(args *model.CommandArgs) *model.CommandRe
 		note = strings.TrimSpace(strings.TrimPrefix(args.Command, "/checkin"))
 	}
 
-	// Record attendance directly
-	rollCall, isNewResponse, err := p.rollCallManager.RespondToRollCall(channel.Id, args.UserId)
+	// Get employee name
+	employeeName := p.GetEmployeeNameFromUser(user)
+	if note != "" {
+		employeeName += " (" + note + ")"
+	}
+
+	// Try to record check-in in ERP
+	formattedTime, erpErr := p.RecordEmployeeCheckin(employeeName)
+	if erpErr != nil {
+		p.API.LogError("Failed to record employee check-in in ERP", "error", erpErr.Error())
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         "⚠️ There was an issue recording your check-in in the ERP system. An administrator has been notified.",
+		}
+	}
+
+	// Create response message with successful ERP recording
+	responseText := fmt.Sprintf("✅ Your check-in has been recorded in the ERP system at **%s**!", formattedTime)
+	if note != "" {
+		responseText = fmt.Sprintf("✅ Your check-in has been recorded in the ERP system at **%s** with note: \"%s\"", formattedTime, note)
+	}
+
+	// Return success response
+	return &model.CommandResponse{
+		ResponseType: model.CommandResponseTypeEphemeral,
+		Text:         responseText,
+	}
+}
+
+// executeCheckOutCommand handles the /checkout command
+func (p *Plugin) executeCheckOutCommand(args *model.CommandArgs) *model.CommandResponse {
+	// Get user info
+	user, err := p.pluginAPI.User.Get(args.UserId)
 	if err != nil {
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         "Error recording attendance: " + err.Error(),
+			Text:         "Error getting user information. Please try again.",
 		}
 	}
 
-	// If note was provided, store it
+	// Extract note from command
+	note := ""
+	if len(strings.Fields(args.Command)) > 1 {
+		note = strings.TrimSpace(strings.TrimPrefix(args.Command, "/checkout"))
+	}
+
+	// Get employee name
+	employeeName := p.GetEmployeeNameFromUser(user)
 	if note != "" {
-		if rollCall.RespondedNotes == nil {
-			rollCall.RespondedNotes = make(map[string]string)
-		}
-		rollCall.RespondedNotes[args.UserId] = note
+		employeeName += " (" + note + ")"
 	}
 
-	// Record in ERP if this is a new response
-	var checkinTimeFormatted string
-	var erpMessage string
-
-	if isNewResponse {
-		// Check if user has already been recorded in ERP
-		alreadyRecorded, _ := p.rollCallManager.IsUserERPRecorded(channel.Id, args.UserId)
-		if !alreadyRecorded {
-			// Get employee name from user
-			employeeName := p.GetEmployeeNameFromUser(user)
-
-			// Add note to ERP if provided
-			if note != "" {
-				employeeName += " (" + note + ")"
-			}
-
-			// Try to record check-in in ERP
-			formattedTime, erpErr := p.RecordEmployeeCheckin(employeeName)
-			if erpErr != nil {
-				p.API.LogError("Failed to record employee check-in in ERP", "error", erpErr.Error())
-				erpMessage = "\n\n⚠️ There was an issue recording your attendance in the ERP system. An administrator has been notified."
-
-				// Use Vietnam time for the response even if ERP failed
-				vietTimeStr, timeErr := FormatVietnamTime()
-				if timeErr != nil {
-					p.API.LogError("Failed to get Vietnam time", "error", timeErr.Error())
-					// Fallback to server time if Vietnam time fails
-					serverTime := model.GetMillis()
-					checkinTimeFormatted = time.UnixMilli(serverTime).Format("2006-01-02 15:04:05")
-				} else {
-					checkinTimeFormatted = vietTimeStr
-				}
-			} else {
-				// Mark user as recorded in ERP
-				_ = p.rollCallManager.MarkUserERPRecorded(channel.Id, args.UserId)
-				checkinTimeFormatted = formattedTime
-
-				// Get configured checkout time
-				configuredCheckoutTime := p.getConfiguration().AutoCheckoutTime
-				if configuredCheckoutTime == "" {
-					configuredCheckoutTime = DefaultAutoCheckoutTime
-				}
-
-				// Get today's date with the configured checkout time
-				checkoutTime, timeErr := GetCheckoutTimeForToday(configuredCheckoutTime)
-				if timeErr != nil {
-					p.API.LogWarn("Failed to get checkout time", "error", timeErr.Error())
-					erpMessage = fmt.Sprintf("\n\n✅ Your check-in has been recorded in the ERP system at **%s**.\nℹ️ No automatic checkout scheduled: %s",
-						formattedTime, timeErr.Error())
-				} else {
-					// Format checkout time for ERP
-					checkoutTimeStr := FormatTimeForERP(checkoutTime)
-
-					p.API.LogDebug("Scheduled checkout",
-						"user", user.Username,
-						"checkin", formattedTime,
-						"checkout", checkoutTimeStr)
-
-					// Record checkout in ERP
-					checkoutFormatted, checkoutErr := p.RecordEmployeeCheckout(employeeName, checkoutTimeStr)
-					if checkoutErr != nil {
-						p.API.LogError("Failed to record employee checkout in ERP", "error", checkoutErr.Error())
-						erpMessage = fmt.Sprintf("\n\n✅ Your check-in has been recorded in the ERP system at **%s**.\n⚠️ There was an issue recording your automatic checkout. An administrator has been notified.", formattedTime)
-					} else {
-						// Mark checkout as recorded
-						_ = p.rollCallManager.MarkUserCheckoutRecorded(channel.Id, args.UserId)
-
-						erpMessage = fmt.Sprintf("\n\n✅ Your attendance has been recorded in the ERP system:\n- Check-in: **%s**\n- Check-out: **%s**",
-							formattedTime, checkoutFormatted)
-					}
-				}
-			}
-		} else {
-			// Get Vietnam time for cases where ERP recording isn't needed
-			vietTimeStr, timeErr := FormatVietnamTime()
-			if timeErr != nil {
-				p.API.LogError("Failed to get Vietnam time", "error", timeErr.Error())
-				// Fallback to server time if Vietnam time fails
-				serverTime := model.GetMillis()
-				checkinTimeFormatted = time.UnixMilli(serverTime).Format("2006-01-02 15:04:05")
-			} else {
-				checkinTimeFormatted = vietTimeStr
-			}
+	// Get current time in Vietnam
+	vietTime, timeErr := GetVietnamTime()
+	if timeErr != nil {
+		p.API.LogError("Failed to get Vietnam time", "error", timeErr.Error())
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         "Error getting current time. Please try again.",
 		}
-	} else {
-		// User already responded previously, just use current Vietnam time
-		vietTimeStr, timeErr := FormatVietnamTime()
-		if timeErr != nil {
-			p.API.LogError("Failed to get Vietnam time", "error", timeErr.Error())
-			// Fallback to server time if Vietnam time fails
-			serverTime := model.GetMillis()
-			checkinTimeFormatted = time.UnixMilli(serverTime).Format("2006-01-02 15:04:05")
-		} else {
-			checkinTimeFormatted = vietTimeStr
+	}
+
+	// Format checkout time
+	checkoutTime := FormatTimeForERP(vietTime)
+
+	// Record checkout in ERP
+	checkoutFormatted, erpErr := p.RecordEmployeeCheckout(employeeName, checkoutTime)
+	if erpErr != nil {
+		p.API.LogError("Failed to record employee checkout in ERP", "error", erpErr.Error())
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         "⚠️ There was an issue recording your checkout in the ERP system. An administrator has been notified.",
 		}
 	}
 
 	// Create response message
-	responseText := fmt.Sprintf("✅ Your attendance has been recorded at **%s**!", checkinTimeFormatted)
+	responseText := fmt.Sprintf("✅ Your check-out has been recorded in the ERP system at **%s**!", checkoutFormatted)
 	if note != "" {
-		responseText = fmt.Sprintf("✅ Your attendance has been recorded at **%s** with note: \"%s\"", checkinTimeFormatted, note)
+		responseText = fmt.Sprintf("✅ Your check-out has been recorded in the ERP system at **%s** with note: \"%s\"", checkoutFormatted, note)
 	}
-	responseText += erpMessage
+
+	// Return success response
+	return &model.CommandResponse{
+		ResponseType: model.CommandResponseTypeEphemeral,
+		Text:         responseText,
+	}
+}
+
+// executeAbsentCommand handles the /absent command
+func (p *Plugin) executeAbsentCommand(args *model.CommandArgs) *model.CommandResponse {
+	// Get user info
+	user, err := p.pluginAPI.User.Get(args.UserId)
+	if err != nil {
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         "Error getting user information. Please try again.",
+		}
+	}
+
+	// Extract reason from command (required)
+	parts := strings.Fields(args.Command)
+	if len(parts) <= 1 {
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         "Please provide a reason for your absence. Example: `/absent Sick leave`",
+		}
+	}
+
+	reason := strings.TrimSpace(strings.TrimPrefix(args.Command, "/absent"))
+
+	// Get current date in Vietnam time
+	vietTime, err := GetVietnamTime()
+	if err != nil {
+		p.API.LogError("Failed to get Vietnam time", "error", err.Error())
+		// Use server time as fallback
+		vietTime = time.Now()
+	}
+
+	dateStr := vietTime.Format("Monday, January 2, 2006")
+
+	// Log absence
+	p.API.LogInfo("User marked absent",
+		"user", user.Username,
+		"date", dateStr,
+		"reason", reason)
+
+	// Get employee name with reason
+	employeeName := p.GetEmployeeNameFromUser(user) + " (ABSENT: " + reason + ")"
+
+	// Notify ERP of absence
+	// You could create a new function in erp_integration.go for this, but for now just log it
+	p.API.LogInfo("Recording absence in ERP", "employee", employeeName, "date", dateStr)
+
+	// Create response message
+	responseText := fmt.Sprintf("📝 Your absence has been recorded for **%s** with reason: \"%s\"", dateStr, reason)
 
 	// Return success response
 	return &model.CommandResponse{

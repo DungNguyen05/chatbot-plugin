@@ -51,8 +51,7 @@ type Plugin struct {
 
 	pluginAPI *pluginapi.Client
 
-	rollCallManager *RollCallManager
-	cronJob         *CronJob // Add cron job to the Plugin struct
+	cronJob *CronJob // Keep the cron job for sending auto-checkout reminders
 
 	ffmpegPath string
 
@@ -74,7 +73,6 @@ type Plugin struct {
 	i18n *i18n.Bundle
 
 	llmUpstreamHTTPClient *http.Client
-	// search field removed since we don't support vector search in MySQL
 }
 
 func resolveffmpegPath() string {
@@ -100,8 +98,6 @@ func (p *Plugin) OnActivate() error {
 		PluginVersion:  manifest.Version,
 	})
 	p.metricsHandler = metrics.NewMetricsHandler(p.GetMetrics())
-
-	p.rollCallManager = NewRollCallManager()
 
 	// Initialize cron job with fixed schedule
 	p.cronJob = NewCronJob(p)

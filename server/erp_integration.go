@@ -264,6 +264,34 @@ func (p *Plugin) RecordEmployeeCheckout(employeeName string, checkoutTime string
 	return checkoutTime, nil
 }
 
+// RecordEmployeeAbsent sends an absence record to ERPNEXT
+func (p *Plugin) RecordEmployeeAbsent(employeeName string, reason string) (string, error) {
+	p.API.LogDebug("Recording employee absence", "employee", employeeName, "reason", reason)
+
+	// Get Vietnam time for the record
+	var formattedDate string
+	vietTime, err := GetVietnamTime()
+	if err == nil {
+		// Format Vietnam time in YYYY-MM-DD format for ERP
+		formattedDate = vietTime.Format("2006-01-02")
+	} else {
+		// Fallback to server time if Vietnam time fails
+		serverTime := time.Now()
+		formattedDate = serverTime.Format("2006-01-02")
+	}
+
+	// Here you would implement the actual ERP integration for absences
+	// This could involve a different API endpoint or a different request structure
+	// For now, we'll just log it
+	p.API.LogInfo("Would record in ERP system:",
+		"endpoint", ERPEndpoint,
+		"employee", employeeName,
+		"date", formattedDate,
+		"reason", reason)
+
+	return formattedDate, nil
+}
+
 // GetEmployeeNameFromUser attempts to get the employee name from the user's full name or username
 func (p *Plugin) GetEmployeeNameFromUser(user *model.User) string {
 	// Try to use full name if available

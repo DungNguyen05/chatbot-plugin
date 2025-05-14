@@ -75,20 +75,9 @@ func (c *CronJob) checkScheduledTasks() {
 		autoCheckoutTime = DefaultAutoCheckoutTime
 	}
 
-	autoStartRollCallTime := c.plugin.getConfiguration().AutoStartRollCallTime
-	if autoStartRollCallTime == "" {
-		autoStartRollCallTime = DefaultRollCallStartTime
-	}
-
-	// Check if it's time to start roll call (8:00 AM)
-	if currentTimeStr == autoStartRollCallTime {
-		c.plugin.API.LogInfo("Starting daily roll call")
-		go c.plugin.StartDailyRollCall()
-	}
-
-	// Check if it's time to end roll call (configured checkout time)
+	// Check if it's time for auto checkout announcement
 	if currentTimeStr == autoCheckoutTime {
-		c.plugin.API.LogInfo("Ending daily roll call")
-		go c.plugin.EndDailyRollCall()
+		c.plugin.API.LogInfo("Sending automatic checkout announcements")
+		go c.plugin.AutoRecordCheckouts()
 	}
 }
