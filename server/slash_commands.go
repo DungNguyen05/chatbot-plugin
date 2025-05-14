@@ -142,33 +142,20 @@ func (p *Plugin) executeCheckOutCommand(args *model.CommandArgs) *model.CommandR
 		employeeName += " (" + note + ")"
 	}
 
-	// Get current time in Vietnam
-	vietTime, timeErr := GetVietnamTime()
-	if timeErr != nil {
-		p.API.LogError("Failed to get Vietnam time", "error", timeErr.Error())
-		return &model.CommandResponse{
-			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         "Error getting current time. Please try again.",
-		}
-	}
-
-	// Format checkout time
-	checkoutTime := FormatTimeForERP(vietTime)
-
-	// Record checkout in ERP
-	checkoutFormatted, erpErr := p.RecordEmployeeCheckout(employeeName, checkoutTime)
+	// Try to record check-out in ERP
+	formattedTime, erpErr := p.RecordEmployeeCheckout(employeeName)
 	if erpErr != nil {
-		p.API.LogError("Failed to record employee checkout in ERP", "error", erpErr.Error())
+		p.API.LogError("Failed to record employee check-out in ERP", "error", erpErr.Error())
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         "⚠️ There was an issue recording your checkout in the ERP system. An administrator has been notified.",
+			Text:         "⚠️ There was an issue recording your check-out in the ERP system. An administrator has been notified.",
 		}
 	}
 
-	// Create response message
-	responseText := fmt.Sprintf("✅ Your check-out has been recorded in the ERP system at **%s**!", checkoutFormatted)
+	// Create response message with successful ERP recording
+	responseText := fmt.Sprintf("✅ Your check-out has been recorded in the ERP system at **%s**!", formattedTime)
 	if note != "" {
-		responseText = fmt.Sprintf("✅ Your check-out has been recorded in the ERP system at **%s** with note: \"%s\"", checkoutFormatted, note)
+		responseText = fmt.Sprintf("✅ Your check-out has been recorded in the ERP system at **%s** with note: \"%s\"", formattedTime, note)
 	}
 
 	// Return success response

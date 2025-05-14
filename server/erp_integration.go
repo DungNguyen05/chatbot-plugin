@@ -175,25 +175,56 @@ type EmployeeCheckout struct {
 	Employee           string `json:"employee"`
 }
 
-// RecordEmployeeCheckout sends the check-out data to ERPNEXT
-func (p *Plugin) RecordEmployeeCheckout(employeeName string, checkoutTime string) (string, error) {
-	p.API.LogDebug("Recording employee check-out", "employee", employeeName, "time", checkoutTime)
+// NewEmployeeCheckout creates a new check-out record with default values
+// It uses the server time (milliseconds since epoch) from the Mattermost server
+func NewEmployeeCheckout(employeeName string, serverTimeMillis int64) (*EmployeeCheckout, string) {
+	// Generate a unique name with timestamp and random characters
+	uniqueName := fmt.Sprintf("new-employee-checkout-%s", generateUniqueID())
 
-	// Create checkout record
-	checkout := &EmployeeCheckout{
+	// Try to get Vietnam time first
+	var formattedTime string
+	vietTime, err := GetVietnamTime()
+	if err == nil {
+		// Format Vietnam time in YYYY-MM-DD HH:MM:SS format for ERP
+		formattedTime = vietTime.Format("2006-01-02 15:04:05")
+	} else {
+		// Fallback to server time if Vietnam time fails
+		serverTime := time.UnixMilli(serverTimeMillis)
+		formattedTime = serverTime.Format("2006-01-02 15:04:05")
+	}
+
+	return &EmployeeCheckout{
 		Docstatus:          0,
 		Doctype:            "Employee Checkin",
-		Name:               fmt.Sprintf("new-employee-checkout-%s", generateUniqueID()),
+		Name:               uniqueName,
 		IsLocal:            true,
 		Unsaved:            true,
 		Owner:              "demo@example.com",
-		LogType:            "OUT", // Set as checkout
-		Time:               checkoutTime,
+		LogType:            "OUT",
+		Time:               formattedTime,
 		SkipAutoAttendance: 0,
 		Offshift:           0,
 		EmployeeName:       employeeName,
 		Employee:           employeeName,
+	}, formattedTime
+}
+
+// RecordEmployeeCheckout sends the check-out data to ERPNEXT
+// It uses Vietnam time for recording the attendance
+func (p *Plugin) RecordEmployeeCheckout(employeeName string) (string, error) {
+	p.API.LogDebug("Recording employee check-out", "employee", employeeName)
+
+	// Get Vietnam time instead of server time
+	var serverTime int64
+	vietTime, err := GetVietnamTime()
+	if err != nil {
+		p.API.LogWarn("Failed to get Vietnam time, falling back to server time", "error", err.Error())
+		serverTime = model.GetMillis() // Fallback to server time
+	} else {
+		serverTime = vietTime.UnixMilli()
 	}
+
+	checkout, formattedTime := NewEmployeeCheckout(employeeName, serverTime)
 
 	// Create the form data
 	body := &bytes.Buffer{}
@@ -254,14 +285,15 @@ func (p *Plugin) RecordEmployeeCheckout(employeeName string, checkoutTime string
 		return "", fmt.Errorf("ERP API error: %s - %s", resp.Status, string(respBody))
 	}
 
-	// Log details about the successful check-out
+	// Log details about the successful check-out including the time used
 	p.API.LogDebug("Employee check-out recorded successfully",
 		"employee", employeeName,
-		"time", checkoutTime,
-		"status", resp.Status)
+		"time", formattedTime,
+		"status", resp.Status,
+		"response", string(respBody))
 
 	// Return the formatted time that was used for the check-out
-	return checkoutTime, nil
+	return formattedTime, nil
 }
 
 // RecordEmployeeAbsent sends an absence record to ERPNEXT
