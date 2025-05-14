@@ -13,6 +13,7 @@ import (
 
 // handleRollCall processes roll call related commands
 func (p *Plugin) handleRollCall(bot *Bot, channel *model.Channel, user *model.User, post *model.Post) error {
+
 	message := strings.ToLower(post.Message)
 
 	if strings.Contains(message, "start roll call") {

@@ -34,7 +34,6 @@ type EmployeeCheckin struct {
 	Time               string `json:"time"`
 	SkipAutoAttendance int    `json:"skip_auto_attendance"`
 	Offshift           int    `json:"offshift"`
-	Shift              string `json:"shift"`
 	EmployeeName       string `json:"employee_name"`
 	Employee           string `json:"employee"`
 }
@@ -68,26 +67,13 @@ func NewEmployeeCheckin(employeeName string, serverTimeMillis int64) (*EmployeeC
 		Time:               formattedTime,
 		SkipAutoAttendance: 0,
 		Offshift:           0,
-		Shift:              "Hành Chính",
 		EmployeeName:       employeeName,
 		Employee:           employeeName,
 	}, formattedTime
 }
 
-// generateUniqueID creates a simple unique ID for the checkin record
-func generateUniqueID() string {
-	const letters = "abcdefghijklmnopqrstuvwxyz"
-	result := make([]byte, 10)
-	for i := range result {
-		result[i] = letters[time.Now().UnixNano()%int64(len(letters))]
-	}
-	return string(result)
-}
-
-// RecordEmployeeCheckin sends the check-in data to ERPNEXT
 // RecordEmployeeCheckin sends the check-in data to ERPNEXT
 // It uses Vietnam time for recording the attendance
-// Returns the formatted time string used for recording
 func (p *Plugin) RecordEmployeeCheckin(employeeName string) (string, error) {
 	p.API.LogDebug("Recording employee check-in", "employee", employeeName)
 
@@ -185,7 +171,6 @@ type EmployeeCheckout struct {
 	Time               string `json:"time"`
 	SkipAutoAttendance int    `json:"skip_auto_attendance"`
 	Offshift           int    `json:"offshift"`
-	Shift              string `json:"shift"`
 	EmployeeName       string `json:"employee_name"`
 	Employee           string `json:"employee"`
 }
@@ -206,7 +191,6 @@ func (p *Plugin) RecordEmployeeCheckout(employeeName string, checkoutTime string
 		Time:               checkoutTime,
 		SkipAutoAttendance: 0,
 		Offshift:           0,
-		Shift:              "Hành Chính",
 		EmployeeName:       employeeName,
 		Employee:           employeeName,
 	}
@@ -292,4 +276,14 @@ func (p *Plugin) GetEmployeeNameFromUser(user *model.User) string {
 
 	// Fall back to username
 	return user.Username
+}
+
+// generateUniqueID creates a simple unique ID for the checkin record
+func generateUniqueID() string {
+	const letters = "abcdefghijklmnopqrstuvwxyz"
+	result := make([]byte, 10)
+	for i := range result {
+		result[i] = letters[time.Now().UnixNano()%int64(len(letters))]
+	}
+	return string(result)
 }
