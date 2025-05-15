@@ -95,45 +95,27 @@ func (p *Plugin) sendRollCallNotification(userID, employeeName string, eventType
 
 	case llm.ChannelAccessLevelBlock:
 		// Block selected channels - get all channels except the blocked ones
-		if len(bot.cfg.ChannelIDs) == 0 {
-			// If no channels are explicitly blocked, this behaves like "Allow for all channels"
-			teams, appErr := p.API.GetTeams()
+		teams, appErr := p.API.GetTeams()
+		if appErr != nil {
+			p.API.LogError("Failed to get teams for automatic notifications", "error", appErr.Error())
+			return appErr
+		}
+
+		blockedChannelIDs := make(map[string]bool)
+		for _, channelID := range bot.cfg.ChannelIDs {
+			blockedChannelIDs[channelID] = true
+		}
+
+		for _, team := range teams {
+			channels, appErr := p.API.GetChannelsForTeamForUser(team.Id, bot.mmBot.UserId, false)
 			if appErr != nil {
-				p.API.LogError("Failed to get teams for automatic notifications", "error", appErr.Error())
-				return appErr
+				p.API.LogError("Failed to get channels for team", "teamId", team.Id, "error", appErr.Error())
+				continue
 			}
 
-			for _, team := range teams {
-				channels, appErr := p.API.GetChannelsForTeamForUser(team.Id, bot.mmBot.UserId, false)
-				if appErr != nil {
-					p.API.LogError("Failed to get channels for team", "teamId", team.Id, "error", appErr.Error())
-					continue
-				}
-
-				// Include both public and private channels (not DMs or GMs)
-				for _, channel := range channels {
-					if channel.Type == model.ChannelTypeOpen || channel.Type == model.ChannelTypePrivate {
-						channelsToNotify = append(channelsToNotify, channel)
-					}
-				}
-			}
-		} else {
-			// Get all channels, exclude the blocked ones
-			teams, appErr := p.API.GetTeams()
-			if appErr != nil {
-				p.API.LogError("Failed to get teams for automatic notifications", "error", appErr.Error())
-				return appErr
-			}
-
-			for _, team := range teams {
-				channels, appErr := p.API.GetChannelsForTeamForUser(team.Id, bot.mmBot.UserId, false)
-				if appErr != nil {
-					p.API.LogError("Failed to get channels for team", "teamId", team.Id, "error", appErr.Error())
-					continue
-				}
-
-				// Include both public and private channels (not DMs or GMs), excluding blocked ones
-				for _, channel := range channels {
+			// Include both public and private channels (not DMs or GMs), excluding blocked ones
+			for _, channel := range channels {
+				if (channel.Type == model.ChannelTypeOpen || channel.Type == model.ChannelTypePrivate) && !blockedChannelIDs[channel.Id] {
 					channelsToNotify = append(channelsToNotify, channel)
 				}
 			}
