@@ -1,6 +1,6 @@
 {
-  "id": "mattermost-ai",
-  "name": "ChatBot plugin",
+  "id": "ai-agent-plugin",
+  "name": "AI Agent Plugin",
   "description": "",
   "homepage_url": "https://github.com/mattermost/mattermost-plugin-ai",
   "support_url": "https://github.com/mattermost/mattermost-plugin-ai/issues",

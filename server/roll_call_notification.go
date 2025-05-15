@@ -4,7 +4,9 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"html/template"
 	"time"
 
 	"github.com/mattermost/mattermost-plugin-ai/server/llm"
@@ -151,18 +153,14 @@ func (p *Plugin) sendRollCallNotification(userID, employeeName string, eventType
 
 	// Create notification message
 	var message string
-	icon := "🚶‍♂️"
 
 	switch eventType {
 	case RollCallEventCheckIn:
-		icon = "🏢"
-		message = fmt.Sprintf("%s **%s** has checked in at %s", icon, employeeName, eventTime)
+		message = fmt.Sprintf("**%s** has checked in at %s", employeeName, eventTime)
 	case RollCallEventCheckOut:
-		icon = "🏡"
-		message = fmt.Sprintf("%s **%s** has checked out at %s", icon, employeeName, eventTime)
+		message = fmt.Sprintf("**%s** has checked out at %s", employeeName, eventTime)
 	case RollCallEventAbsent:
-		icon = "🗓️"
-		message = fmt.Sprintf("%s **%s** has reported absence for today: \"%s\"", icon, employeeName, reason)
+		message = fmt.Sprintf("**%s** has reported absence for today: \"%s\"", employeeName, reason)
 	}
 
 	// Send to all allowed channels
@@ -225,18 +223,24 @@ func (p *Plugin) sendPersonalizedRollCallMessage(bot *Bot, user *model.User, eve
 	switch eventType {
 	case RollCallEventCheckIn:
 		promptText = `You are a friendly workplace assistant. Generate a SHORT, MODERN, and ENERGETIC welcome message (1-2 sentences only) 
-for {{.RequestingUser.FirstName}} who just checked in to work at {{.Parameters.EventTime}}. 
-It's currently {{.Parameters.TimeOfDay}} on {{.Parameters.DayOfWeek}}. 
+for {{.UserName}} who just checked in to work at {{.EventTime}}. 
+It's currently {{.TimeOfDay}} on {{.DayOfWeek}}. 
 Make it sound professional but friendly. DO NOT USE MORE THAN 2 SENTENCES.`
 
 	case RollCallEventCheckOut:
 		promptText = `You are a friendly workplace assistant. Generate a SHORT, MODERN, and FRIENDLY goodbye message (1-2 sentences only) 
-for {{.RequestingUser.FirstName}} who just checked out from work at {{.Parameters.EventTime}}. 
-It's currently {{.Parameters.TimeOfDay}} on {{.Parameters.DayOfWeek}}. 
+for {{.UserName}} who just checked out from work at {{.EventTime}}. 
+It's currently {{.TimeOfDay}} on {{.DayOfWeek}}. 
 Wish them a pleasant time off. DO NOT USE MORE THAN 2 SENTENCES.`
 
 	default:
 		return fmt.Errorf("unsupported event type for personalized message")
+	}
+
+	// Replace template variables in the prompt
+	processedPrompt, err := processTemplate(promptText, context.Parameters)
+	if err != nil {
+		return fmt.Errorf("failed to process template: %w", err)
 	}
 
 	// Use the LLM to generate the personalized message
@@ -244,7 +248,7 @@ Wish them a pleasant time off. DO NOT USE MORE THAN 2 SENTENCES.`
 		Posts: []llm.Post{
 			{
 				Role:    llm.PostRoleSystem,
-				Message: promptText,
+				Message: processedPrompt,
 			},
 		},
 		Context: context,
@@ -265,6 +269,20 @@ Wish them a pleasant time off. DO NOT USE MORE THAN 2 SENTENCES.`
 	}
 
 	return nil
+}
+
+func processTemplate(templateText string, data map[string]any) (string, error) {
+	tmpl, err := template.New("prompt").Parse(templateText)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	return buf.String(), nil
 }
 
 // getTimeOfDay returns a string describing the time of day
