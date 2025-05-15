@@ -22,11 +22,6 @@ import (
 
 // hostnameAllowed checks if a hostname matches any of the allowed patterns
 func hostnameAllowed(hostname string, allowedPatterns []string) bool {
-	// Always allow ERP system domains
-	if strings.Contains(hostname, "erp-demo.workdone.vn") {
-		return true
-	}
-
 	for _, pattern := range allowedPatterns {
 		if pattern == "*" {
 			return true
@@ -56,10 +51,7 @@ func parseAllowedHostnames(allowedHostnames string) []string {
 		return nil
 	}
 
-	// Always include ERP system domains
-	patterns := []string{"erp-demo.workdone.vn"}
-
-	// Add user-configured domains
+	var patterns []string
 	userPatterns := strings.Split(allowedHostnames, ",")
 	for _, p := range userPatterns {
 		p = strings.TrimSpace(p)
@@ -87,15 +79,13 @@ func (t *restrictedTransport) RoundTrip(req *http.Request) (*http.Response, erro
 		return nil, fmt.Errorf("hostname %q is not on allowed list, add this host to allowed upstream hosts", hostname)
 	}
 
-	// Add CORS headers to outgoing requests when connecting to ERP
-	if strings.Contains(hostname, "erp-demo.workdone.vn") {
-		if req.Header == nil {
-			req.Header = make(http.Header)
-		}
-		req.Header.Set("Access-Control-Allow-Origin", "*")
-		req.Header.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		req.Header.Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	// Add CORS headers to outgoing requests
+	if req.Header == nil {
+		req.Header = make(http.Header)
 	}
+	req.Header.Set("Access-Control-Allow-Origin", "*")
+	req.Header.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	req.Header.Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
 	return t.wrapped.RoundTrip(req)
 }
@@ -126,5 +116,37 @@ func createRestrictedClient(client *http.Client, allowedHostnames []string) *htt
 
 func (p *Plugin) createExternalHTTPClient() *http.Client {
 	baseClient := httpservice.MakeHTTPServicePlugin(p.API).MakeClient(false)
-	return createRestrictedClient(baseClient, parseAllowedHostnames(p.getConfiguration().AllowedUpstreamHostnames))
+	config := p.getConfiguration()
+
+	// Add ERP domain to allowed hostnames if configured
+	var allowedHosts []string
+	if config.ERPDomain != "" {
+		// Extract hostname from ERP domain
+		erpHost := extractHostname(config.ERPDomain)
+		// Add to allowed hostnames
+		if erpHost != "" {
+			allowedHosts = append([]string{erpHost}, parseAllowedHostnames(config.AllowedUpstreamHostnames)...)
+		} else {
+			allowedHosts = parseAllowedHostnames(config.AllowedUpstreamHostnames)
+		}
+	} else {
+		allowedHosts = parseAllowedHostnames(config.AllowedUpstreamHostnames)
+	}
+
+	return createRestrictedClient(baseClient, allowedHosts)
+}
+
+// extractHostname extracts the hostname from a URL
+func extractHostname(urlStr string) string {
+	if !strings.HasPrefix(urlStr, "http://") && !strings.HasPrefix(urlStr, "https://") {
+		urlStr = "https://" + urlStr
+	}
+
+	// Simple extraction without using url.Parse to avoid potential errors
+	host := strings.TrimPrefix(urlStr, "http://")
+	host = strings.TrimPrefix(host, "https://")
+	host = strings.Split(host, "/")[0]
+	host = strings.Split(host, ":")[0] // Remove port if present
+
+	return host
 }

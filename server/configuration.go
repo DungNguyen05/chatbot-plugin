@@ -16,6 +16,9 @@ type Config struct {
 	TranscriptGenerator      string              `json:"transcriptBackend"`
 	EnableLLMTrace           bool                `json:"enableLLMTrace"`
 	AllowedUpstreamHostnames string              `json:"allowedUpstreamHostnames"`
+	// ERP integration configuration
+	ERPDomain string `json:"erpDomain"`
+	ERPToken  string `json:"erpToken"`
 	// Note: We still keep the EmbeddingSearchConfig field to avoid breaking existing
 	// configurations, but it won't be used in MySQL version
 	EmbeddingSearchConfig interface{} `json:"embeddingSearchConfig"`

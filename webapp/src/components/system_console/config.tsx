@@ -11,7 +11,7 @@ import {ServiceData} from './service';
 import Panel, {PanelFooterText} from './panel';
 import Bots, {firstNewBot} from './bots';
 import {LLMBotConfig} from './bot';
-import {BooleanItem, ItemList, SelectionItem, SelectionItemOption, TextItem} from './item';
+import {BooleanItem, ItemList, SelectionItem, SelectionItemOption, TextItem, PasswordItem} from './item';
 import NoBotsPage from './no_bots_page';
 import EmbeddingSearchPanel from './embedding_search/embedding_search_panel';
 import {EmbeddingSearchConfig} from './embedding_search/types';
@@ -24,6 +24,8 @@ type Config = {
     enableLLMTrace: boolean,
     enableCallSummary: boolean,
     allowedUpstreamHostnames: string,
+    erpDomain: string,
+    erpToken: string,
     embeddingSearchConfig: EmbeddingSearchConfig
 }
 
@@ -65,6 +67,8 @@ const defaultConfig = {
     llmBackend: '',
     transcriptBackend: '',
     enableLLMTrace: false,
+    erpDomain: '',
+    erpToken: '',
     embeddingSearchConfig: {
         type: 'disabled',
         vectorStore: {
@@ -172,7 +176,7 @@ const Config = (props: Props) => {
             </Panel>
             <Panel
                 title={intl.formatMessage({defaultMessage: 'AI Functions'})}
-                subtitle={intl.formatMessage({defaultMessage: 'Choose a default bot.'})}
+                subtitle={intl.formatMessage({defaultMessage: 'Choose a default bot and configure integration settings.'})}
             >
                 <ItemList>
                     <SelectionItem
@@ -197,6 +201,29 @@ const Config = (props: Props) => {
                         value={value.allowedUpstreamHostnames}
                         onChange={(e) => props.onChange(props.id, {...value, allowedUpstreamHostnames: e.target.value})}
                         helptext={intl.formatMessage({defaultMessage: 'Comma separated list of hostnames that LLMs are allowed to contact when using tools. Supports wildcards like *.mydomain.com. For instance to allow JIRA tool use to the Mattermost JIRA instance use mattermost.atlassian.net'})}
+                    />
+                    
+                    {/* ERP Integration Settings */}
+                    <TextItem
+                        label={intl.formatMessage({defaultMessage: 'ERP Domain'})}
+                        value={value.erpDomain || ''}
+                        onChange={(e) => {
+                            props.onChange(props.id, {...value, erpDomain: e.target.value});
+                            props.setSaveNeeded();
+                        }}
+                        helptext={intl.formatMessage({defaultMessage: 'The ERP system domain (e.g., https://example.erp.com)'})}
+                        placeholder="https://example.erp.com"
+                    />
+                    <TextItem
+                        label={intl.formatMessage({defaultMessage: 'ERP Authentication Token'})}
+                        type="password"
+                        value={value.erpToken || ''}
+                        onChange={(e) => {
+                            props.onChange(props.id, {...value, erpToken: e.target.value});
+                            props.setSaveNeeded();
+                        }}
+                        helptext={intl.formatMessage({defaultMessage: 'Authentication token for the ERP system'})}
+                        placeholder="api_key:api_secret"
                     />
                 </ItemList>
             </Panel>

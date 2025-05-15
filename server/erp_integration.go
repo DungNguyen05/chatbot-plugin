@@ -16,11 +16,8 @@ import (
 	"github.com/mattermost/mattermost/server/public/model"
 )
 
-const (
-	ERPEndpoint    = "https://erp-demo.workdone.vn/api/method/frappe.desk.form.save.savedocs"
-	ERPToken       = "98747a657e0431d:f30282990366777"
-	ERPTokenHeader = "token " + ERPToken
-)
+// API endpoint suffix for ERP (this is fixed)
+const ERPEndpointSuffix = "/api/method/frappe.desk.form.save.savedocs"
 
 // EmployeeCheckin represents the data structure for ERPNEXT employee check-in
 type EmployeeCheckin struct {
@@ -77,6 +74,22 @@ func NewEmployeeCheckin(employeeName string, serverTimeMillis int64) (*EmployeeC
 func (p *Plugin) RecordEmployeeCheckin(employeeName string) (string, error) {
 	p.API.LogDebug("Recording employee check-in", "employee", employeeName)
 
+	// Get ERP configuration from plugin settings
+	config := p.getConfiguration()
+	erpDomain := config.ERPDomain
+	erpToken := config.ERPToken
+
+	// Validate configuration
+	if erpDomain == "" {
+		return "", fmt.Errorf("ERP domain not configured")
+	}
+	if erpToken == "" {
+		return "", fmt.Errorf("ERP token not configured")
+	}
+
+	// Build the complete ERP endpoint
+	erpEndpoint := strings.TrimSuffix(erpDomain, "/") + ERPEndpointSuffix
+
 	// Get Vietnam time instead of server time
 	var serverTime int64
 	vietTime, err := GetVietnamTime()
@@ -115,14 +128,14 @@ func (p *Plugin) RecordEmployeeCheckin(employeeName string) (string, error) {
 	}
 
 	// Create the request
-	req, err := http.NewRequest("POST", ERPEndpoint, body)
+	req, err := http.NewRequest("POST", erpEndpoint, body)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
 	// Set headers
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("Authorization", ERPTokenHeader)
+	req.Header.Set("Authorization", "token "+erpToken)
 
 	// Add CORS headers
 	req.Header.Set("Access-Control-Allow-Origin", "*")
@@ -214,6 +227,22 @@ func NewEmployeeCheckout(employeeName string, serverTimeMillis int64) (*Employee
 func (p *Plugin) RecordEmployeeCheckout(employeeName string) (string, error) {
 	p.API.LogDebug("Recording employee check-out", "employee", employeeName)
 
+	// Get ERP configuration from plugin settings
+	config := p.getConfiguration()
+	erpDomain := config.ERPDomain
+	erpToken := config.ERPToken
+
+	// Validate configuration
+	if erpDomain == "" {
+		return "", fmt.Errorf("ERP domain not configured")
+	}
+	if erpToken == "" {
+		return "", fmt.Errorf("ERP token not configured")
+	}
+
+	// Build the complete ERP endpoint
+	erpEndpoint := strings.TrimSuffix(erpDomain, "/") + ERPEndpointSuffix
+
 	// Get Vietnam time instead of server time
 	var serverTime int64
 	vietTime, err := GetVietnamTime()
@@ -252,14 +281,14 @@ func (p *Plugin) RecordEmployeeCheckout(employeeName string) (string, error) {
 	}
 
 	// Create the request
-	req, err := http.NewRequest("POST", ERPEndpoint, body)
+	req, err := http.NewRequest("POST", erpEndpoint, body)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
 	// Set headers
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("Authorization", ERPTokenHeader)
+	req.Header.Set("Authorization", "token "+erpToken)
 
 	// Add CORS headers
 	req.Header.Set("Access-Control-Allow-Origin", "*")
@@ -300,6 +329,19 @@ func (p *Plugin) RecordEmployeeCheckout(employeeName string) (string, error) {
 func (p *Plugin) RecordEmployeeAbsent(employeeName string, reason string) (string, error) {
 	p.API.LogDebug("Recording employee absence", "employee", employeeName, "reason", reason)
 
+	// Get ERP configuration from plugin settings
+	config := p.getConfiguration()
+	erpDomain := config.ERPDomain
+	erpToken := config.ERPToken
+
+	// Validate configuration
+	if erpDomain == "" {
+		return "", fmt.Errorf("ERP domain not configured")
+	}
+	if erpToken == "" {
+		return "", fmt.Errorf("ERP token not configured")
+	}
+
 	// Get Vietnam time for the record
 	var formattedDate string
 	vietTime, err := GetVietnamTime()
@@ -316,7 +358,8 @@ func (p *Plugin) RecordEmployeeAbsent(employeeName string, reason string) (strin
 	// This could involve a different API endpoint or a different request structure
 	// For now, we'll just log it
 	p.API.LogInfo("Would record in ERP system:",
-		"endpoint", ERPEndpoint,
+		"endpoint", erpDomain+ERPEndpointSuffix,
+		"token", "[REDACTED]",
 		"employee", employeeName,
 		"date", formattedDate,
 		"reason", reason)
