@@ -36,8 +36,7 @@ type EmployeeCheckin struct {
 }
 
 // NewEmployeeCheckin creates a new check-in record with default values
-// It uses the server time (milliseconds since epoch) from the Mattermost server
-func NewEmployeeCheckin(employeeName string, serverTimeMillis int64) (*EmployeeCheckin, string) {
+func NewEmployeeCheckin(employeeID string, serverTimeMillis int64) (*EmployeeCheckin, string) {
 	// Generate a unique name with timestamp and random characters
 	uniqueName := fmt.Sprintf("new-employee-checkin-%s", generateUniqueID())
 
@@ -64,15 +63,15 @@ func NewEmployeeCheckin(employeeName string, serverTimeMillis int64) (*EmployeeC
 		Time:               formattedTime,
 		SkipAutoAttendance: 0,
 		Offshift:           0,
-		EmployeeName:       employeeName,
-		Employee:           employeeName,
+		EmployeeName:       employeeID, // This should be the ERPNext employee ID
+		Employee:           employeeID, // This should be the ERPNext employee ID
 	}, formattedTime
 }
 
 // RecordEmployeeCheckin sends the check-in data to ERPNEXT
 // It uses Vietnam time for recording the attendance
-func (p *Plugin) RecordEmployeeCheckin(employeeName string) (string, error) {
-	p.API.LogDebug("Recording employee check-in", "employee", employeeName)
+func (p *Plugin) RecordEmployeeCheckin(employeeID string) (string, error) {
+	p.API.LogDebug("Recording employee check-in", "employee_id", employeeID)
 
 	// Get ERP configuration from roll call settings
 	config := p.getConfiguration()
@@ -107,7 +106,7 @@ func (p *Plugin) RecordEmployeeCheckin(employeeName string) (string, error) {
 		serverTime = vietTime.UnixMilli()
 	}
 
-	checkin, formattedTime := NewEmployeeCheckin(employeeName, serverTime)
+	checkin, formattedTime := NewEmployeeCheckin(employeeID, serverTime)
 
 	// Create the form data
 	body := &bytes.Buffer{}
@@ -170,7 +169,7 @@ func (p *Plugin) RecordEmployeeCheckin(employeeName string) (string, error) {
 
 	// Log details about the successful check-in including the time used
 	p.API.LogDebug("Employee check-in recorded successfully",
-		"employee", employeeName,
+		"employee_id", employeeID,
 		"time", formattedTime,
 		"status", resp.Status,
 		"response", string(respBody))
@@ -196,8 +195,7 @@ type EmployeeCheckout struct {
 }
 
 // NewEmployeeCheckout creates a new check-out record with default values
-// It uses the server time (milliseconds since epoch) from the Mattermost server
-func NewEmployeeCheckout(employeeName string, serverTimeMillis int64) (*EmployeeCheckout, string) {
+func NewEmployeeCheckout(employeeID string, serverTimeMillis int64) (*EmployeeCheckout, string) {
 	// Generate a unique name with timestamp and random characters
 	uniqueName := fmt.Sprintf("new-employee-checkout-%s", generateUniqueID())
 
@@ -224,15 +222,12 @@ func NewEmployeeCheckout(employeeName string, serverTimeMillis int64) (*Employee
 		Time:               formattedTime,
 		SkipAutoAttendance: 0,
 		Offshift:           0,
-		EmployeeName:       employeeName,
-		Employee:           employeeName,
+		EmployeeName:       employeeID, // This should be the ERPNext employee ID
+		Employee:           employeeID, // This should be the ERPNext employee ID
 	}, formattedTime
-}
-
-// RecordEmployeeCheckout sends the check-out data to ERPNEXT
-// It uses Vietnam time for recording the attendance
-func (p *Plugin) RecordEmployeeCheckout(employeeName string) (string, error) {
-	p.API.LogDebug("Recording employee check-out", "employee", employeeName)
+} // RecordEmployeeCheckout - modify similarly
+func (p *Plugin) RecordEmployeeCheckout(employeeID string) (string, error) {
+	p.API.LogDebug("Recording employee check-out", "employee_id", employeeID)
 
 	// Get ERP configuration from roll call settings
 	config := p.getConfiguration()
@@ -267,7 +262,7 @@ func (p *Plugin) RecordEmployeeCheckout(employeeName string) (string, error) {
 		serverTime = vietTime.UnixMilli()
 	}
 
-	checkout, formattedTime := NewEmployeeCheckout(employeeName, serverTime)
+	checkout, formattedTime := NewEmployeeCheckout(employeeID, serverTime)
 
 	// Create the form data
 	body := &bytes.Buffer{}
@@ -330,7 +325,7 @@ func (p *Plugin) RecordEmployeeCheckout(employeeName string) (string, error) {
 
 	// Log details about the successful check-out including the time used
 	p.API.LogDebug("Employee check-out recorded successfully",
-		"employee", employeeName,
+		"employee_id", employeeID,
 		"time", formattedTime,
 		"status", resp.Status,
 		"response", string(respBody))
@@ -339,11 +334,10 @@ func (p *Plugin) RecordEmployeeCheckout(employeeName string) (string, error) {
 	return formattedTime, nil
 }
 
-// RecordEmployeeAbsent sends an absence record to ERPNEXT
-func (p *Plugin) RecordEmployeeAbsent(employeeName string, reason string) (string, error) {
-	p.API.LogDebug("Recording employee absence", "employee", employeeName, "reason", reason)
+// RecordEmployeeAbsent - modify to use employee ID
+func (p *Plugin) RecordEmployeeAbsent(employeeID string, reason string) (string, error) {
+	p.API.LogDebug("Recording employee absence", "employee_id", employeeID, "reason", reason)
 
-	// Get ERP configuration from roll call settings
 	// Get ERP configuration from roll call settings
 	config := p.getConfiguration()
 	erpDomain := config.RollCall.ERPDomain
@@ -360,9 +354,6 @@ func (p *Plugin) RecordEmployeeAbsent(employeeName string, reason string) (strin
 	if erpAPISecret == "" {
 		return "", fmt.Errorf("ERP API secret not configured")
 	}
-
-	// Combine API key and secret for token
-	// erpToken := erpAPIKey + ":" + erpAPISecret
 
 	// Get Vietnam time for the record
 	var formattedDate string
@@ -382,25 +373,148 @@ func (p *Plugin) RecordEmployeeAbsent(employeeName string, reason string) (strin
 	p.API.LogInfo("Would record in ERP system:",
 		"endpoint", erpDomain+ERPEndpointSuffix,
 		"token", "[REDACTED]",
-		"employee", employeeName,
+		"employee_id", employeeID,
 		"date", formattedDate,
 		"reason", reason)
 
 	return formattedDate, nil
 }
 
-// GetEmployeeNameFromUser attempts to get the employee name from the user's full name or username
-func (p *Plugin) GetEmployeeNameFromUser(user *model.User) string {
-	// Try to use full name if available
-	if user.FirstName != "" || user.LastName != "" {
-		fullName := strings.TrimSpace(user.FirstName + " " + user.LastName)
-		if fullName != "" {
-			return fullName
-		}
+func (p *Plugin) GetEmployeeIDFromUser(user *model.User) (string, error) {
+	// Use the user's ID as the chat ID to lookup in ERPNext
+	chatID := user.Id
+
+	employeeID, err := p.GetEmployeeByChatID(chatID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get employee by chat ID %s: %w", chatID, err)
 	}
 
-	// Fall back to username
-	return user.Username
+	return employeeID, nil
+}
+
+// GetEmployeeByChatID fetches employee information from ERPNext using chat ID
+func (p *Plugin) GetEmployeeByChatID(chatID string) (string, error) {
+	p.API.LogDebug("Getting employee by chat ID", "chat_id", chatID)
+
+	config := p.getConfiguration()
+	erpDomain := config.RollCall.ERPDomain
+	erpAPIKey := config.RollCall.ERPAPIKey
+	erpAPISecret := config.RollCall.ERPAPISecret
+
+	// Validate configuration
+	if erpDomain == "" {
+		return "", fmt.Errorf("ERP domain not configured")
+	}
+	if erpAPIKey == "" {
+		return "", fmt.Errorf("ERP API key not configured")
+	}
+	if erpAPISecret == "" {
+		return "", fmt.Errorf("ERP API secret not configured")
+	}
+
+	// Combine API key and secret for token
+	erpToken := erpAPIKey + ":" + erpAPISecret
+
+	// Build the API endpoint for fetching employee by custom_chat_id
+	baseURL := strings.TrimSuffix(erpDomain, "/") + "/api/resource/Employee"
+
+	// Try different URL formats for ERPNext API
+	urls := []string{
+		// Format 1: Standard ERPNext filter format
+		fmt.Sprintf(`%s?fields=["name","employee_name","custom_chat_id"]&filters=[["custom_chat_id","=","%s"]]`, baseURL, chatID),
+		// Format 2: JSON object filter format
+		fmt.Sprintf(`%s?fields=["name","employee_name","custom_chat_id"]&filters={"custom_chat_id":"%s"}`, baseURL, chatID),
+		// Format 3: Simple filter format
+		fmt.Sprintf(`%s?fields=["name","employee_name","custom_chat_id"]&custom_chat_id=%s`, baseURL, chatID),
+	}
+
+	for i, testURL := range urls {
+		p.API.LogDebug("Trying URL format", "attempt", i+1, "url", testURL)
+
+		// Create the request
+		req, err := http.NewRequest("GET", testURL, nil)
+		if err != nil {
+			p.API.LogError("Failed to create request", "error", err.Error())
+			continue
+		}
+
+		// Set headers
+		req.Header.Set("Authorization", "token "+erpToken)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+
+		// Make the request
+		client := p.createExternalHTTPClient()
+		resp, err := client.Do(req)
+		if err != nil {
+			p.API.LogError("Failed to send request", "error", err.Error())
+			continue
+		}
+
+		// Read the response
+		respBody, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			p.API.LogError("Failed to read response", "error", err.Error())
+			continue
+		}
+
+		p.API.LogDebug("ERPNext API Response", "attempt", i+1, "status", resp.Status, "body", string(respBody))
+
+		// Check the response status
+		if resp.StatusCode >= 400 {
+			p.API.LogError("ERP API error", "status", resp.Status, "body", string(respBody))
+			continue
+		}
+
+		// Parse the response
+		var apiResponse struct {
+			Data []struct {
+				Name         string `json:"name"`
+				EmployeeName string `json:"employee_name"`
+				CustomChatID string `json:"custom_chat_id"`
+			} `json:"data"`
+		}
+
+		if err := json.Unmarshal(respBody, &apiResponse); err != nil {
+			p.API.LogError("Failed to parse response", "error", err.Error())
+			continue
+		}
+
+		// Filter results manually if the API didn't filter properly
+		var matchedEmployees []struct {
+			Name         string `json:"name"`
+			EmployeeName string `json:"employee_name"`
+			CustomChatID string `json:"custom_chat_id"`
+		}
+
+		for _, emp := range apiResponse.Data {
+			if emp.CustomChatID == chatID {
+				matchedEmployees = append(matchedEmployees, emp)
+			}
+		}
+
+		// Check if employee found
+		if len(matchedEmployees) == 0 {
+			// If this was the last URL format to try, return error
+			if i == len(urls)-1 {
+				return "", fmt.Errorf("no employee found with chat_id: %s", chatID)
+			}
+			// Otherwise, try next URL format
+			continue
+		}
+
+		if len(matchedEmployees) > 1 {
+			return "", fmt.Errorf("multiple employees found with chat_id: %s", chatID)
+		}
+
+		p.API.LogDebug("Found employee", "employee_id", matchedEmployees[0].Name, "employee_name", matchedEmployees[0].EmployeeName)
+
+		// Return the employee name (ID) for ERPNext operations
+		return matchedEmployees[0].Name, nil
+	}
+
+	return "", fmt.Errorf("failed to get employee with all URL formats tried")
 }
 
 // generateUniqueID creates a simple unique ID for the checkin record
