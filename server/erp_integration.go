@@ -74,18 +74,25 @@ func NewEmployeeCheckin(employeeName string, serverTimeMillis int64) (*EmployeeC
 func (p *Plugin) RecordEmployeeCheckin(employeeName string) (string, error) {
 	p.API.LogDebug("Recording employee check-in", "employee", employeeName)
 
-	// Get ERP configuration from plugin settings
+	// Get ERP configuration from roll call settings
 	config := p.getConfiguration()
-	erpDomain := config.ERPDomain
-	erpToken := config.ERPToken
+	erpDomain := config.RollCall.ERPDomain
+	erpAPIKey := config.RollCall.ERPAPIKey
+	erpAPISecret := config.RollCall.ERPAPISecret
 
 	// Validate configuration
 	if erpDomain == "" {
 		return "", fmt.Errorf("ERP domain not configured")
 	}
-	if erpToken == "" {
-		return "", fmt.Errorf("ERP token not configured")
+	if erpAPIKey == "" {
+		return "", fmt.Errorf("ERP API key not configured")
 	}
+	if erpAPISecret == "" {
+		return "", fmt.Errorf("ERP API secret not configured")
+	}
+
+	// Combine API key and secret for token
+	erpToken := erpAPIKey + ":" + erpAPISecret
 
 	// Build the complete ERP endpoint
 	erpEndpoint := strings.TrimSuffix(erpDomain, "/") + ERPEndpointSuffix
@@ -227,18 +234,25 @@ func NewEmployeeCheckout(employeeName string, serverTimeMillis int64) (*Employee
 func (p *Plugin) RecordEmployeeCheckout(employeeName string) (string, error) {
 	p.API.LogDebug("Recording employee check-out", "employee", employeeName)
 
-	// Get ERP configuration from plugin settings
+	// Get ERP configuration from roll call settings
 	config := p.getConfiguration()
-	erpDomain := config.ERPDomain
-	erpToken := config.ERPToken
+	erpDomain := config.RollCall.ERPDomain
+	erpAPIKey := config.RollCall.ERPAPIKey
+	erpAPISecret := config.RollCall.ERPAPISecret
 
 	// Validate configuration
 	if erpDomain == "" {
 		return "", fmt.Errorf("ERP domain not configured")
 	}
-	if erpToken == "" {
-		return "", fmt.Errorf("ERP token not configured")
+	if erpAPIKey == "" {
+		return "", fmt.Errorf("ERP API key not configured")
 	}
+	if erpAPISecret == "" {
+		return "", fmt.Errorf("ERP API secret not configured")
+	}
+
+	// Combine API key and secret for token
+	erpToken := erpAPIKey + ":" + erpAPISecret
 
 	// Build the complete ERP endpoint
 	erpEndpoint := strings.TrimSuffix(erpDomain, "/") + ERPEndpointSuffix
@@ -329,18 +343,26 @@ func (p *Plugin) RecordEmployeeCheckout(employeeName string) (string, error) {
 func (p *Plugin) RecordEmployeeAbsent(employeeName string, reason string) (string, error) {
 	p.API.LogDebug("Recording employee absence", "employee", employeeName, "reason", reason)
 
-	// Get ERP configuration from plugin settings
+	// Get ERP configuration from roll call settings
+	// Get ERP configuration from roll call settings
 	config := p.getConfiguration()
-	erpDomain := config.ERPDomain
-	erpToken := config.ERPToken
+	erpDomain := config.RollCall.ERPDomain
+	erpAPIKey := config.RollCall.ERPAPIKey
+	erpAPISecret := config.RollCall.ERPAPISecret
 
 	// Validate configuration
 	if erpDomain == "" {
 		return "", fmt.Errorf("ERP domain not configured")
 	}
-	if erpToken == "" {
-		return "", fmt.Errorf("ERP token not configured")
+	if erpAPIKey == "" {
+		return "", fmt.Errorf("ERP API key not configured")
 	}
+	if erpAPISecret == "" {
+		return "", fmt.Errorf("ERP API secret not configured")
+	}
+
+	// Combine API key and secret for token
+	// erpToken := erpAPIKey + ":" + erpAPISecret
 
 	// Get Vietnam time for the record
 	var formattedDate string

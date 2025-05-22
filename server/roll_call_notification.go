@@ -25,18 +25,30 @@ const (
 	RollCallEventAbsent RollCallEventType = "absent"
 )
 
-// sendRollCallNotification sends a notification to all bot-allowed public channels
-// about a user checking in or checking out
+// sendRollCallNotification sends a notification to configured channels
+// instead of all bot-allowed channels
 func (p *Plugin) sendRollCallNotification(userID, employeeName string, eventType RollCallEventType, eventTime string, reason string) error {
 	p.API.LogDebug("Sending roll call notification",
 		"user_id", userID,
 		"event_type", string(eventType),
 		"time", eventTime)
 
-	// Find bot-allowed public channels
-	var channelsToNotify []*model.Channel
+	config := p.getConfiguration()
 
-	// Get all bots
+	// Check if roll call is enabled
+	if !config.RollCall.Enabled {
+		p.API.LogDebug("Roll call is disabled, skipping notification")
+		return nil
+	}
+
+	// Get configured notification channels
+	notifyChannelIDs := config.RollCall.NotifyChannels
+	if len(notifyChannelIDs) == 0 {
+		p.API.LogDebug("No notification channels configured for roll call")
+		return nil
+	}
+
+	// Find bot to use for notifications
 	p.botsLock.RLock()
 	defer p.botsLock.RUnlock()
 
@@ -46,86 +58,6 @@ func (p *Plugin) sendRollCallNotification(userID, employeeName string, eventType
 
 	// Use the first bot for notifications
 	bot := p.bots[0]
-
-	// Determine which channels to send to based on channel access configuration
-	switch bot.cfg.ChannelAccessLevel {
-	case llm.ChannelAccessLevelAll:
-		// Allow for all channels - get all channels the bot has access to
-		teams, appErr := p.API.GetTeams()
-		if appErr != nil {
-			p.API.LogError("Failed to get teams for automatic notifications", "error", appErr.Error())
-			return appErr
-		}
-
-		for _, team := range teams {
-			channels, appErr := p.API.GetChannelsForTeamForUser(team.Id, bot.mmBot.UserId, false)
-			if appErr != nil {
-				p.API.LogError("Failed to get channels for team", "teamId", team.Id, "error", appErr.Error())
-				continue
-			}
-
-			// Include both public and private channels (not DMs or GMs)
-			for _, channel := range channels {
-				if channel.Type == model.ChannelTypeOpen || channel.Type == model.ChannelTypePrivate {
-					channelsToNotify = append(channelsToNotify, channel)
-				}
-			}
-		}
-
-	case llm.ChannelAccessLevelAllow:
-		// Allow for selected channels only
-		if len(bot.cfg.ChannelIDs) > 0 {
-			// Only notify the explicitly allowed channels
-			for _, channelID := range bot.cfg.ChannelIDs {
-				channel, err := p.API.GetChannel(channelID)
-				if err != nil {
-					p.API.LogError("Failed to get channel", "channelId", channelID, "error", err.Error())
-					continue
-				}
-
-				// Include both public and private channels
-				if channel.Type == model.ChannelTypeOpen || channel.Type == model.ChannelTypePrivate {
-					channelsToNotify = append(channelsToNotify, channel)
-				}
-			}
-		} else {
-			// If no channels are explicitly allowed, don't notify anywhere
-			p.API.LogInfo("No channels are explicitly allowed for notifications")
-		}
-
-	case llm.ChannelAccessLevelBlock:
-		// Block selected channels - get all channels except the blocked ones
-		teams, appErr := p.API.GetTeams()
-		if appErr != nil {
-			p.API.LogError("Failed to get teams for automatic notifications", "error", appErr.Error())
-			return appErr
-		}
-
-		blockedChannelIDs := make(map[string]bool)
-		for _, channelID := range bot.cfg.ChannelIDs {
-			blockedChannelIDs[channelID] = true
-		}
-
-		for _, team := range teams {
-			channels, appErr := p.API.GetChannelsForTeamForUser(team.Id, bot.mmBot.UserId, false)
-			if appErr != nil {
-				p.API.LogError("Failed to get channels for team", "teamId", team.Id, "error", appErr.Error())
-				continue
-			}
-
-			// Include both public and private channels (not DMs or GMs), excluding blocked ones
-			for _, channel := range channels {
-				if (channel.Type == model.ChannelTypeOpen || channel.Type == model.ChannelTypePrivate) && !blockedChannelIDs[channel.Id] {
-					channelsToNotify = append(channelsToNotify, channel)
-				}
-			}
-		}
-
-	case llm.ChannelAccessLevelNone:
-		// Block all channels - don't notify anywhere
-		p.API.LogInfo("Channel access level is set to None, not sending notifications to any channels")
-		return nil
-	}
 
 	// Get the user's details for more personalized messages
 	user, err := p.pluginAPI.User.Get(userID)
@@ -145,17 +77,17 @@ func (p *Plugin) sendRollCallNotification(userID, employeeName string, eventType
 		message = fmt.Sprintf("**%s** has reported absence for today: \"%s\"", employeeName, reason)
 	}
 
-	// Send to all allowed channels
-	for _, channel := range channelsToNotify {
+	// Send to configured notification channels only
+	for _, channelID := range notifyChannelIDs {
 		post := &model.Post{
 			UserId:    bot.mmBot.UserId,
-			ChannelId: channel.Id,
+			ChannelId: channelID,
 			Message:   message,
 		}
 
 		if err := p.pluginAPI.Post.CreatePost(post); err != nil {
 			p.API.LogError("Failed to send roll call notification",
-				"channel_id", channel.Id,
+				"channel_id", channelID,
 				"error", err.Error())
 		}
 	}

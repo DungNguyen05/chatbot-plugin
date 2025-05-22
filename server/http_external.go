@@ -120,9 +120,9 @@ func (p *Plugin) createExternalHTTPClient() *http.Client {
 
 	// Add ERP domain to allowed hostnames if configured
 	var allowedHosts []string
-	if config.ERPDomain != "" {
+	if config.RollCall.ERPDomain != "" {
 		// Extract hostname from ERP domain
-		erpHost := extractHostname(config.ERPDomain)
+		erpHost := extractHostname(config.RollCall.ERPDomain)
 		// Add to allowed hostnames
 		if erpHost != "" {
 			allowedHosts = append([]string{erpHost}, parseAllowedHostnames(config.AllowedUpstreamHostnames)...)

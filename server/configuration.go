@@ -9,6 +9,14 @@ import (
 	"github.com/mattermost/mattermost-plugin-ai/server/llm"
 )
 
+type RollCallConfig struct {
+	Enabled        bool     `json:"enabled"`
+	ERPDomain      string   `json:"erpDomain"`
+	ERPAPIKey      string   `json:"erpAPIKey"`
+	ERPAPISecret   string   `json:"erpAPISecret"`
+	NotifyChannels []string `json:"notifyChannels"`
+}
+
 type Config struct {
 	Services                 []llm.ServiceConfig `json:"services"`
 	Bots                     []llm.BotConfig     `json:"bots"`
@@ -16,9 +24,7 @@ type Config struct {
 	TranscriptGenerator      string              `json:"transcriptBackend"`
 	EnableLLMTrace           bool                `json:"enableLLMTrace"`
 	AllowedUpstreamHostnames string              `json:"allowedUpstreamHostnames"`
-	// ERP integration configuration
-	ERPDomain string `json:"erpDomain"`
-	ERPToken  string `json:"erpToken"`
+	RollCall                 RollCallConfig      `json:"rollCall"`
 	// Note: We still keep the EmbeddingSearchConfig field to avoid breaking existing
 	// configurations, but it won't be used in MySQL version
 	EmbeddingSearchConfig interface{} `json:"embeddingSearchConfig"`
