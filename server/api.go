@@ -36,6 +36,12 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 	router.GET("/ai_threads", p.handleGetAIThreads)
 	router.GET("/ai_bots", p.handleGetAIBots)
 
+	// Add new roll call API routes
+	apiV1 := router.Group("/api/v1")
+	apiV1.POST("/checkin", p.handleAPICheckIn)
+	apiV1.POST("/checkout", p.handleAPICheckOut)
+	apiV1.POST("/absent", p.handleAPIAbsent)
+
 	botRequiredRouter := router.Group("")
 	botRequiredRouter.Use(p.aiBotRequired)
 
@@ -61,6 +67,7 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 	router.ServeHTTP(w, r)
 }
 
+// Rest of the file remains the same...
 func (p *Plugin) aiBotRequired(c *gin.Context) {
 	botUsername := c.DefaultQuery("botUsername", p.getConfiguration().DefaultBotName)
 	bot := p.GetBotByUsernameOrFirst(botUsername)

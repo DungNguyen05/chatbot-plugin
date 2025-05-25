@@ -14,6 +14,18 @@ import (
 
 // registerSlashCommands registers all slash commands the plugin uses
 func (p *Plugin) registerSlashCommands() error {
+	// Register the new UI-based rollcall command
+	if err := p.API.RegisterCommand(&model.Command{
+		Trigger:          "rollcall",
+		DisplayName:      "Roll Call UI",
+		Description:      "Open the Roll Call interface",
+		AutoComplete:     true,
+		AutoCompleteDesc: "Open the Roll Call interface for check-in, check-out, and absence marking",
+	}); err != nil {
+		return err
+	}
+
+	// Keep the original commands but modify them to suggest using the UI
 	if err := p.API.RegisterCommand(&model.Command{
 		Trigger:          "checkin",
 		DisplayName:      "Check-in",
@@ -57,7 +69,12 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 	command = strings.TrimPrefix(command, "/")
 
 	switch command {
+	case "rollcall":
+		return p.executeRollCallUICommand(args), nil
 	case "checkin":
+		// You can choose to either:
+		// 1. Process the command as before (current implementation)
+		// 2. Show a message suggesting to use the UI
 		return p.executeCheckInCommand(args), nil
 	case "checkout":
 		return p.executeCheckOutCommand(args), nil
@@ -71,9 +88,30 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 	}
 }
 
-// executeCheckInCommand - modify to use employee ID lookup
+// executeRollCallUICommand shows a message about the UI
+func (p *Plugin) executeRollCallUICommand(args *model.CommandArgs) *model.CommandResponse {
+	return &model.CommandResponse{
+		ResponseType: model.CommandResponseTypeEphemeral,
+		Text:         "Roll Call interface is opening... You can also access it from the main menu or channel header button for a better experience with clickable buttons!",
+	}
+}
+
+// Keep your existing command implementations or modify them to suggest the UI:
+
+// executeCheckInCommand - you can modify this to suggest using the UI
 func (p *Plugin) executeCheckInCommand(args *model.CommandArgs) *model.CommandResponse {
-	// Get user info
+	// Option 1: Keep existing functionality (recommended for backward compatibility)
+	// [Your existing implementation here]
+
+	// Option 2: Suggest using the UI instead
+	/*
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         "💡 **Tip:** Use the Roll Call interface for a better experience! Type `/rollcall` or find it in the main menu for clickable buttons.",
+		}
+	*/
+
+	// For now, keeping the existing implementation:
 	user, err := p.pluginAPI.User.Get(args.UserId)
 	if err != nil {
 		return &model.CommandResponse{
@@ -82,7 +120,6 @@ func (p *Plugin) executeCheckInCommand(args *model.CommandArgs) *model.CommandRe
 		}
 	}
 
-	// Check if there are additional arguments (notes are no longer allowed)
 	if len(strings.Fields(args.Command)) > 1 {
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
@@ -90,7 +127,6 @@ func (p *Plugin) executeCheckInCommand(args *model.CommandArgs) *model.CommandRe
 		}
 	}
 
-	// Get employee ID from ERPNext using chat ID
 	employeeID, err := p.GetEmployeeIDFromUser(user)
 	if err != nil {
 		p.API.LogError("Failed to get employee ID for user", "user_id", user.Id, "error", err.Error())
@@ -100,7 +136,6 @@ func (p *Plugin) executeCheckInCommand(args *model.CommandArgs) *model.CommandRe
 		}
 	}
 
-	// Try to record check-in in ERP
 	formattedTime, erpErr := p.RecordEmployeeCheckin(employeeID)
 	if erpErr != nil {
 		p.API.LogError("Failed to record employee check-in in ERP", "employee_id", employeeID, "error", erpErr.Error())
@@ -110,20 +145,17 @@ func (p *Plugin) executeCheckInCommand(args *model.CommandArgs) *model.CommandRe
 		}
 	}
 
-	// Create response message with successful ERP recording
 	responseText := fmt.Sprintf("✅ Your check-in has been recorded in the ERP system at **%s**!", formattedTime)
 
-	// Get employee name for notifications (you may want to store this from the API call)
-	employeeName := user.Username // Fallback to username for display
+	employeeName := user.Username
 	if user.FirstName != "" || user.LastName != "" {
 		employeeName = strings.TrimSpace(user.FirstName + " " + user.LastName)
 	}
 
-	// Asynchronously send notifications about the check-in
 	go func() {
 		if err := p.sendRollCallNotification(
 			user.Id,
-			employeeName, // Use display name for notifications
+			employeeName,
 			RollCallEventCheckIn,
 			formattedTime,
 			""); err != nil {
@@ -131,7 +163,6 @@ func (p *Plugin) executeCheckInCommand(args *model.CommandArgs) *model.CommandRe
 		}
 	}()
 
-	// Return success response
 	return &model.CommandResponse{
 		ResponseType: model.CommandResponseTypeEphemeral,
 		Text:         responseText,
@@ -140,7 +171,6 @@ func (p *Plugin) executeCheckInCommand(args *model.CommandArgs) *model.CommandRe
 
 // executeCheckOutCommand handles the /checkout command
 func (p *Plugin) executeCheckOutCommand(args *model.CommandArgs) *model.CommandResponse {
-	// Get user info
 	user, err := p.pluginAPI.User.Get(args.UserId)
 	if err != nil {
 		return &model.CommandResponse{
@@ -149,7 +179,6 @@ func (p *Plugin) executeCheckOutCommand(args *model.CommandArgs) *model.CommandR
 		}
 	}
 
-	// Check if there are additional arguments (notes are no longer allowed)
 	if len(strings.Fields(args.Command)) > 1 {
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
@@ -157,7 +186,6 @@ func (p *Plugin) executeCheckOutCommand(args *model.CommandArgs) *model.CommandR
 		}
 	}
 
-	// Get employee ID from ERPNext using chat ID
 	employeeID, err := p.GetEmployeeIDFromUser(user)
 	if err != nil {
 		p.API.LogError("Failed to get employee ID for user", "user_id", user.Id, "error", err.Error())
@@ -167,7 +195,6 @@ func (p *Plugin) executeCheckOutCommand(args *model.CommandArgs) *model.CommandR
 		}
 	}
 
-	// Try to record check-out in ERP
 	formattedTime, erpErr := p.RecordEmployeeCheckout(employeeID)
 	if erpErr != nil {
 		p.API.LogError("Failed to record employee check-out in ERP", "employee_id", employeeID, "error", erpErr.Error())
@@ -177,20 +204,17 @@ func (p *Plugin) executeCheckOutCommand(args *model.CommandArgs) *model.CommandR
 		}
 	}
 
-	// Create response message with successful ERP recording
 	responseText := fmt.Sprintf("✅ Your check-out has been recorded in the ERP system at **%s**!", formattedTime)
 
-	// Get employee name for notifications
-	employeeName := user.Username // Fallback to username for display
+	employeeName := user.Username
 	if user.FirstName != "" || user.LastName != "" {
 		employeeName = strings.TrimSpace(user.FirstName + " " + user.LastName)
 	}
 
-	// Asynchronously send notifications about the check-out
 	go func() {
 		if err := p.sendRollCallNotification(
 			user.Id,
-			employeeName, // Use display name for notifications
+			employeeName,
 			RollCallEventCheckOut,
 			formattedTime,
 			""); err != nil {
@@ -198,16 +222,14 @@ func (p *Plugin) executeCheckOutCommand(args *model.CommandArgs) *model.CommandR
 		}
 	}()
 
-	// Return success response
 	return &model.CommandResponse{
 		ResponseType: model.CommandResponseTypeEphemeral,
 		Text:         responseText,
 	}
 }
 
-// executeAbsentCommand - modify similarly
+// executeAbsentCommand handles the /absent command
 func (p *Plugin) executeAbsentCommand(args *model.CommandArgs) *model.CommandResponse {
-	// Get user info
 	user, err := p.pluginAPI.User.Get(args.UserId)
 	if err != nil {
 		return &model.CommandResponse{
@@ -216,7 +238,6 @@ func (p *Plugin) executeAbsentCommand(args *model.CommandArgs) *model.CommandRes
 		}
 	}
 
-	// Extract reason from command (required)
 	parts := strings.Fields(args.Command)
 	if len(parts) <= 1 {
 		return &model.CommandResponse{
@@ -227,7 +248,6 @@ func (p *Plugin) executeAbsentCommand(args *model.CommandArgs) *model.CommandRes
 
 	reason := strings.TrimSpace(strings.TrimPrefix(args.Command, "/absent"))
 
-	// Get employee ID from ERPNext using chat ID
 	employeeID, err := p.GetEmployeeIDFromUser(user)
 	if err != nil {
 		p.API.LogError("Failed to get employee ID for user", "user_id", user.Id, "error", err.Error())
@@ -237,24 +257,20 @@ func (p *Plugin) executeAbsentCommand(args *model.CommandArgs) *model.CommandRes
 		}
 	}
 
-	// Get current date in Vietnam time
 	vietTime, err := GetVietnamTime()
 	if err != nil {
 		p.API.LogError("Failed to get Vietnam time", "error", err.Error())
-		// Use server time as fallback
 		vietTime = time.Now()
 	}
 
 	dateStr := vietTime.Format("Monday, January 2, 2006")
 
-	// Log absence
 	p.API.LogInfo("User marked absent",
 		"user", user.Username,
 		"employee_id", employeeID,
 		"date", dateStr,
 		"reason", reason)
 
-	// Record absence in ERP
 	recordedDate, absenceErr := p.RecordEmployeeAbsent(employeeID, reason)
 	if absenceErr != nil {
 		p.API.LogError("Failed to record employee absence in ERP", "employee_id", employeeID, "error", absenceErr.Error())
@@ -264,20 +280,17 @@ func (p *Plugin) executeAbsentCommand(args *model.CommandArgs) *model.CommandRes
 		}
 	}
 
-	// Create response message
 	responseText := fmt.Sprintf("📝 Your absence has been recorded for **%s** with reason: \"%s\"", recordedDate, reason)
 
-	// Get employee name for notifications
-	employeeName := user.Username // Fallback to username for display
+	employeeName := user.Username
 	if user.FirstName != "" || user.LastName != "" {
 		employeeName = strings.TrimSpace(user.FirstName + " " + user.LastName)
 	}
 
-	// Asynchronously send notifications about the absence
 	go func() {
 		if err := p.sendRollCallNotification(
 			user.Id,
-			employeeName, // Use display name for notifications
+			employeeName,
 			RollCallEventAbsent,
 			recordedDate,
 			reason); err != nil {
@@ -285,7 +298,6 @@ func (p *Plugin) executeAbsentCommand(args *model.CommandArgs) *model.CommandRes
 		}
 	}()
 
-	// Return success response
 	return &model.CommandResponse{
 		ResponseType: model.CommandResponseTypeEphemeral,
 		Text:         responseText,

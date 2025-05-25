@@ -3,12 +3,15 @@
 
 import {Client4 as Client4Class, ClientError} from '@mattermost/client';
 import {ChannelWithTeamData} from '@mattermost/types/channels';
-
 import {NotPagedTeamSearchOpts, Team} from '@mattermost/types/teams';
 
 import manifest from './manifest';
 
 const Client4 = new Client4Class();
+
+const getPluginRoute = (pluginId: string) => {
+    return `/plugins/${pluginId}`;
+};
 
 function baseRoute(): string {
     return `/plugins/${manifest.id}`;
@@ -21,6 +24,44 @@ function postRoute(postid: string): string {
 function channelRoute(channelid: string): string {
     return `${baseRoute()}/channel/${channelid}`;
 }
+
+export async function doCheckIn(): Promise<any> {
+    return Client4.doFetch(
+        `${getPluginRoute(manifest.id)}/api/v1/checkin`,
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        }
+    );
+}
+
+export async function doCheckOut(): Promise<any> {
+    return Client4.doFetch(
+        `${getPluginRoute(manifest.id)}/api/v1/checkout`,
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        }
+    );
+}
+
+export async function doAbsent(reason: string): Promise<any> {
+    return Client4.doFetch(
+        `${getPluginRoute(manifest.id)}/api/v1/absent`,
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ reason }),
+        }
+    );
+}
+
 
 export async function doReaction(postid: string) {
     const url = `${postRoute(postid)}/react`;
@@ -352,6 +393,7 @@ export async function cancelReindex() {
         url,
     });
 }
+
 export async function getChannelInterval(
     channelID: string,
     startTime: number,
