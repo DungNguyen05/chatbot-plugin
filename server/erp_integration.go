@@ -10,6 +10,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -418,103 +419,160 @@ func (p *Plugin) GetEmployeeByChatID(chatID string) (string, error) {
 	// Build the API endpoint for fetching employee by custom_chat_id
 	baseURL := strings.TrimSuffix(erpDomain, "/") + "/api/resource/Employee"
 
-	// Try different URL formats for ERPNext API
-	urls := []string{
-		// Format 1: Standard ERPNext filter format
-		fmt.Sprintf(`%s?fields=["name","employee_name","custom_chat_id"]&filters=[["custom_chat_id","=","%s"]]`, baseURL, chatID),
-		// Format 2: JSON object filter format
-		fmt.Sprintf(`%s?fields=["name","employee_name","custom_chat_id"]&filters={"custom_chat_id":"%s"}`, baseURL, chatID),
-		// Format 3: Simple filter format
-		fmt.Sprintf(`%s?fields=["name","employee_name","custom_chat_id"]&custom_chat_id=%s`, baseURL, chatID),
+	// Create the filter parameter - use exact match first, then try partial match
+	filterParam := fmt.Sprintf(`[["custom_chat_id","=","%s"]]`, chatID)
+
+	// Parse the base URL
+	reqURL, err := url.Parse(baseURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse URL: %w", err)
 	}
 
-	for i, testURL := range urls {
-		p.API.LogDebug("Trying URL format", "attempt", i+1, "url", testURL)
+	// Add query parameters
+	query := reqURL.Query()
+	query.Add("filters", filterParam)
+	query.Add("fields", `["name","employee_name","custom_chat_id"]`)
+	reqURL.RawQuery = query.Encode()
 
-		// Create the request
-		req, err := http.NewRequest("GET", testURL, nil)
-		if err != nil {
-			p.API.LogError("Failed to create request", "error", err.Error())
-			continue
-		}
+	p.API.LogDebug("Making request to ERPNext", "url", reqURL.String())
 
-		// Set headers
-		req.Header.Set("Authorization", "token "+erpToken)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json")
+	// Create the request
+	req, err := http.NewRequest("GET", reqURL.String(), nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
 
-		// Make the request
-		client := p.createExternalHTTPClient()
-		resp, err := client.Do(req)
-		if err != nil {
-			p.API.LogError("Failed to send request", "error", err.Error())
-			continue
-		}
+	// Set headers
+	req.Header.Set("Authorization", "token "+erpToken)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
 
-		// Read the response
-		respBody, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			p.API.LogError("Failed to read response", "error", err.Error())
-			continue
-		}
+	// Make the request
+	client := p.createExternalHTTPClient()
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
 
-		p.API.LogDebug("ERPNext API Response", "attempt", i+1, "status", resp.Status, "body", string(respBody))
+	// Read the response
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
 
-		// Check the response status
-		if resp.StatusCode >= 400 {
-			p.API.LogError("ERP API error", "status", resp.Status, "body", string(respBody))
-			continue
-		}
+	p.API.LogDebug("ERPNext API Response",
+		"status", resp.Status,
+		"body", string(respBody))
 
-		// Parse the response
-		var apiResponse struct {
-			Data []struct {
-				Name         string `json:"name"`
-				EmployeeName string `json:"employee_name"`
-				CustomChatID string `json:"custom_chat_id"`
-			} `json:"data"`
-		}
+	// Check the response status
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("ERP API error: %s - %s", resp.Status, string(respBody))
+	}
 
-		if err := json.Unmarshal(respBody, &apiResponse); err != nil {
-			p.API.LogError("Failed to parse response", "error", err.Error())
-			continue
-		}
-
-		// Filter results manually if the API didn't filter properly
-		var matchedEmployees []struct {
+	// Parse the response
+	var apiResponse struct {
+		Data []struct {
 			Name         string `json:"name"`
 			EmployeeName string `json:"employee_name"`
 			CustomChatID string `json:"custom_chat_id"`
-		}
-
-		for _, emp := range apiResponse.Data {
-			if emp.CustomChatID == chatID {
-				matchedEmployees = append(matchedEmployees, emp)
-			}
-		}
-
-		// Check if employee found
-		if len(matchedEmployees) == 0 {
-			// If this was the last URL format to try, return error
-			if i == len(urls)-1 {
-				return "", fmt.Errorf("no employee found with chat_id: %s", chatID)
-			}
-			// Otherwise, try next URL format
-			continue
-		}
-
-		if len(matchedEmployees) > 1 {
-			return "", fmt.Errorf("multiple employees found with chat_id: %s", chatID)
-		}
-
-		p.API.LogDebug("Found employee", "employee_id", matchedEmployees[0].Name, "employee_name", matchedEmployees[0].EmployeeName)
-
-		// Return the employee name (ID) for ERPNext operations
-		return matchedEmployees[0].Name, nil
+		} `json:"data"`
 	}
 
-	return "", fmt.Errorf("failed to get employee with all URL formats tried")
+	if err := json.Unmarshal(respBody, &apiResponse); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	p.API.LogDebug("Found employees", "count", len(apiResponse.Data))
+
+	// Check if employee found with exact match
+	if len(apiResponse.Data) > 0 {
+		employee := apiResponse.Data[0]
+		p.API.LogDebug("Found employee",
+			"employee_id", employee.Name,
+			"employee_name", employee.EmployeeName,
+			"custom_chat_id", employee.CustomChatID)
+		return employee.Name, nil
+	}
+
+	// If exact match failed, try partial match (like search)
+	p.API.LogDebug("Exact match failed, trying partial match")
+
+	// Create partial match filter
+	partialFilterParam := fmt.Sprintf(`[["custom_chat_id","like","%%%s%%"]]`, chatID)
+
+	// Update query with partial match
+	query = reqURL.Query()
+	query.Set("filters", partialFilterParam) // Use Set instead of Add to replace
+	reqURL.RawQuery = query.Encode()
+
+	p.API.LogDebug("Making partial match request", "url", reqURL.String())
+
+	// Create new request for partial match
+	req, err = http.NewRequest("GET", reqURL.String(), nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create partial match request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "token "+erpToken)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	// Make the partial match request
+	resp, err = client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to send partial match request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read the response
+	respBody, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read partial match response: %w", err)
+	}
+
+	p.API.LogDebug("ERPNext API Partial Match Response",
+		"status", resp.Status,
+		"body", string(respBody))
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("ERP API partial match error: %s - %s", resp.Status, string(respBody))
+	}
+
+	// Parse the partial match response
+	if err := json.Unmarshal(respBody, &apiResponse); err != nil {
+		return "", fmt.Errorf("failed to parse partial match response: %w", err)
+	}
+
+	p.API.LogDebug("Found employees with partial match", "count", len(apiResponse.Data))
+
+	// Check results from partial match
+	if len(apiResponse.Data) == 0 {
+		return "", fmt.Errorf("no employee found with chat_id: %s", chatID)
+	}
+
+	if len(apiResponse.Data) > 1 {
+		p.API.LogWarn("Multiple employees found with similar chat_id",
+			"chat_id", chatID,
+			"count", len(apiResponse.Data))
+		// Log all matches for debugging
+		for i, emp := range apiResponse.Data {
+			p.API.LogDebug("Match",
+				"index", i,
+				"employee_id", emp.Name,
+				"employee_name", emp.EmployeeName,
+				"custom_chat_id", emp.CustomChatID)
+		}
+	}
+
+	// Return the first matching employee
+	employee := apiResponse.Data[0]
+	p.API.LogDebug("Using first match",
+		"employee_id", employee.Name,
+		"employee_name", employee.EmployeeName,
+		"custom_chat_id", employee.CustomChatID)
+
+	return employee.Name, nil
 }
 
 // generateUniqueID creates a simple unique ID for the checkin record
