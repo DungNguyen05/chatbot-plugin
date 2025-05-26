@@ -13,6 +13,7 @@ const Container = styled.div<{show: boolean}>`
     background: var(--center-channel-bg);
     border-radius: 8px;
     color: var(--center-channel-color);
+    position: relative;
 `;
 
 const Title = styled.h2`
@@ -258,12 +259,40 @@ const LoadingSpinner = styled.div`
     }
 `;
 
+const CloseButton = styled.button`
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: rgba(var(--center-channel-color-rgb), 0.56);
+    padding: 4px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.15s ease-out;
+    z-index: 10;
+    
+    &:hover {
+        background-color: rgba(var(--center-channel-color-rgb), 0.08);
+        color: rgba(var(--center-channel-color-rgb), 0.72);
+    }
+    
+    &:active {
+        background-color: rgba(var(--center-channel-color-rgb), 0.16);
+    }
+`;
+
 interface RollCallInterfaceProps {
     onClose?: () => void;
-    setIsShowHeader?: (show: boolean) => void;
 }
 
-const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose, setIsShowHeader}) => {
+const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
     const [showAbsentModal, setShowAbsentModal] = useState(false);
     const [absentReason, setAbsentReason] = useState('');
     const [loading, setLoading] = useState(false);
@@ -300,7 +329,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose, setIsShow
             });
             setTimeout(() => {
                 onClose?.();
-            }, 2000);
+            }, 1000);
         } catch (error: any) {
             clearTimeout(timeout);
             const errorMessage = error?.message || 'An error occurred. Please try again.';
@@ -319,14 +348,12 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose, setIsShow
 
     const handleAbsentClick = () => {
         setShowAbsentModal(true);
-        setIsShowHeader?.(false);
     };
 
     const handleAbsentCancel = () => {
         setShowAbsentModal(false);
         setAbsentReason('');
         setStatusMessage(null);
-        setIsShowHeader?.(true);
         clearRequestTimeout();
     };
 
@@ -346,7 +373,6 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose, setIsShow
         
         setShowAbsentModal(false);
         setAbsentReason('');
-        setIsShowHeader?.(true);
     };
 
     const handleKeyDown = (event: React.KeyboardEvent) => {
@@ -355,6 +381,15 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose, setIsShow
                 handleAbsentCancel();
             } else {
                 onClose?.();
+            }
+        }
+    };
+
+    const handleTextareaKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault(); // Prevent new line
+            if (absentReason.trim() && !loading) {
+                handleAbsentSubmit();
             }
         }
     };
@@ -369,6 +404,13 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose, setIsShow
                 aria-labelledby="rollcall-title"
                 aria-describedby="rollcall-description"
             > 
+                <CloseButton 
+                    onClick={onClose}
+                    aria-label="Close Roll Call modal"
+                >
+                    ×
+                </CloseButton>
+
                 <div>
                     <Title id="rollcall-title">Roll Call</Title>
                     <Subtitle id="rollcall-description">Record your attendance for today</Subtitle>
@@ -425,9 +467,10 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose, setIsShow
                     )}
                     
                     <ReasonInput
-                        placeholder="Please provide a reason for your absence..."
+                        placeholder="Please provide a reason for your absence... "
                         value={absentReason}
                         onChange={(e) => setAbsentReason(e.target.value)}
+                        onKeyDown={handleTextareaKeyDown}
                         maxLength={500}
                         aria-label="Absence reason"
                         autoFocus

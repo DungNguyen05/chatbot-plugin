@@ -53,14 +53,14 @@ const RHSTitleContainer = styled.span`
 // Enhanced Roll Call Icon for the channel header
 const RollCallIcon = styled.i`
     font-size: 16px;
-    color: var(--button-bg);
+    color: #d0ed95;
     cursor: pointer;
     padding: 4px;
     border-radius: 4px;
     transition: all 0.15s ease-out;
     
     &:hover {
-        color: var(--button-color);
+        color: #94a86c;
         background: var(--button-bg);
         transform: scale(1.1);
     }
@@ -170,8 +170,6 @@ const RHSTitle = () => {
 const RollCallModal: React.FC<{
     onClose: () => void;
 }> = ({ onClose }) => {
-    const [isShowHeader, setIsShowHeader] = React.useState(true);
-
     const handleOverlayClick = React.useCallback((e: React.MouseEvent) => {
         if (e.target === e.currentTarget) {
             onClose();
@@ -200,21 +198,10 @@ const RollCallModal: React.FC<{
             tabIndex={-1}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="modal-title"
         >
             <ModalContainer>
-                {isShowHeader && (
-                    <ModalHeader>
-                        <ModalTitle id="modal-title">Roll Call</ModalTitle>
-                        <CloseButton 
-                            onClick={onClose}
-                            aria-label="Close Roll Call modal"
-                        >
-                            ×
-                        </CloseButton>
-                    </ModalHeader>
-                )}
-                <RollCallInterface onClose={onClose} setIsShowHeader={setIsShowHeader}/>
+                {/* Header completely removed */}
+                <RollCallInterface onClose={onClose} />
             </ModalContainer>
         </ModalOverlay>
     );

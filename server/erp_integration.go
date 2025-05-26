@@ -36,6 +36,23 @@ type EmployeeCheckin struct {
 	Employee           string `json:"employee"`
 }
 
+// EmployeeAttendance represents the data structure for ERPNEXT employee attendance (for absence)
+type EmployeeAttendance struct {
+	Docstatus      int    `json:"docstatus"`
+	Doctype        string `json:"doctype"`
+	Name           string `json:"name"`
+	IsLocal        bool   `json:"__islocal"`
+	Unsaved        bool   `json:"__unsaved"`
+	Owner          string `json:"owner"`
+	Employee       string `json:"employee"`
+	EmployeeName   string `json:"employee_name"`
+	AttendanceDate string `json:"attendance_date"`
+	Status         string `json:"status"`
+	Leave          string `json:"leave_type,omitempty"`
+	Reason         string `json:"reason,omitempty"`
+	Company        string `json:"company,omitempty"`
+}
+
 // NewEmployeeCheckin creates a new check-in record with default values
 func NewEmployeeCheckin(employeeID string, serverTimeMillis int64) (*EmployeeCheckin, string) {
 	// Generate a unique name with timestamp and random characters
@@ -54,7 +71,7 @@ func NewEmployeeCheckin(employeeID string, serverTimeMillis int64) (*EmployeeChe
 	}
 
 	return &EmployeeCheckin{
-		Docstatus:          0,
+		Docstatus:          1, // Set to 1 to submit the document
 		Doctype:            "Employee Checkin",
 		Name:               uniqueName,
 		IsLocal:            true,
@@ -67,6 +84,72 @@ func NewEmployeeCheckin(employeeID string, serverTimeMillis int64) (*EmployeeChe
 		EmployeeName:       employeeID, // This should be the ERPNext employee ID
 		Employee:           employeeID, // This should be the ERPNext employee ID
 	}, formattedTime
+}
+
+// NewEmployeeCheckout creates a new check-out record with default values
+func NewEmployeeCheckout(employeeID string, serverTimeMillis int64) (*EmployeeCheckout, string) {
+	// Generate a unique name with timestamp and random characters
+	uniqueName := fmt.Sprintf("new-employee-checkout-%s", generateUniqueID())
+
+	// Try to get Vietnam time first
+	var formattedTime string
+	vietTime, err := GetVietnamTime()
+	if err == nil {
+		// Format Vietnam time in YYYY-MM-DD HH:MM:SS format for ERP
+		formattedTime = vietTime.Format("2006-01-02 15:04:05")
+	} else {
+		// Fallback to server time if Vietnam time fails
+		serverTime := time.UnixMilli(serverTimeMillis)
+		formattedTime = serverTime.Format("2006-01-02 15:04:05")
+	}
+
+	return &EmployeeCheckout{
+		Docstatus:          1, // Set to 1 to submit the document
+		Doctype:            "Employee Checkin",
+		Name:               uniqueName,
+		IsLocal:            true,
+		Unsaved:            true,
+		Owner:              "demo@example.com",
+		LogType:            "OUT",
+		Time:               formattedTime,
+		SkipAutoAttendance: 0,
+		Offshift:           0,
+		EmployeeName:       employeeID, // This should be the ERPNext employee ID
+		Employee:           employeeID, // This should be the ERPNext employee ID
+	}, formattedTime
+}
+
+// NewEmployeeAttendance creates a new attendance record for absence
+func NewEmployeeAttendance(employeeID string, reason string, serverTimeMillis int64) (*EmployeeAttendance, string) {
+	// Generate a unique name with timestamp and random characters
+	uniqueName := fmt.Sprintf("new-employee-attendance-%s", generateUniqueID())
+
+	// Try to get Vietnam time first
+	var formattedDate string
+	vietTime, err := GetVietnamTime()
+	if err == nil {
+		// Format Vietnam time in YYYY-MM-DD format for ERP
+		formattedDate = vietTime.Format("2006-01-02")
+	} else {
+		// Fallback to server time if Vietnam time fails
+		serverTime := time.UnixMilli(serverTimeMillis)
+		formattedDate = serverTime.Format("2006-01-02")
+	}
+
+	return &EmployeeAttendance{
+		Docstatus:      1, // Set to 1 to submit the document
+		Doctype:        "Attendance",
+		Name:           uniqueName,
+		IsLocal:        true,
+		Unsaved:        true,
+		Owner:          "demo@example.com",
+		Employee:       employeeID,
+		EmployeeName:   employeeID,
+		AttendanceDate: formattedDate,
+		Status:         "Absent",
+		Reason:         reason,
+		Company:        "", // You may want to set this based on your ERP setup
+	}, formattedDate
 }
 
 // RecordEmployeeCheckin sends the check-in data to ERPNEXT
@@ -195,38 +278,7 @@ type EmployeeCheckout struct {
 	Employee           string `json:"employee"`
 }
 
-// NewEmployeeCheckout creates a new check-out record with default values
-func NewEmployeeCheckout(employeeID string, serverTimeMillis int64) (*EmployeeCheckout, string) {
-	// Generate a unique name with timestamp and random characters
-	uniqueName := fmt.Sprintf("new-employee-checkout-%s", generateUniqueID())
-
-	// Try to get Vietnam time first
-	var formattedTime string
-	vietTime, err := GetVietnamTime()
-	if err == nil {
-		// Format Vietnam time in YYYY-MM-DD HH:MM:SS format for ERP
-		formattedTime = vietTime.Format("2006-01-02 15:04:05")
-	} else {
-		// Fallback to server time if Vietnam time fails
-		serverTime := time.UnixMilli(serverTimeMillis)
-		formattedTime = serverTime.Format("2006-01-02 15:04:05")
-	}
-
-	return &EmployeeCheckout{
-		Docstatus:          0,
-		Doctype:            "Employee Checkin",
-		Name:               uniqueName,
-		IsLocal:            true,
-		Unsaved:            true,
-		Owner:              "demo@example.com",
-		LogType:            "OUT",
-		Time:               formattedTime,
-		SkipAutoAttendance: 0,
-		Offshift:           0,
-		EmployeeName:       employeeID, // This should be the ERPNext employee ID
-		Employee:           employeeID, // This should be the ERPNext employee ID
-	}, formattedTime
-} // RecordEmployeeCheckout - modify similarly
+// RecordEmployeeCheckout - modify similarly
 func (p *Plugin) RecordEmployeeCheckout(employeeID string) (string, error) {
 	p.API.LogDebug("Recording employee check-out", "employee_id", employeeID)
 
@@ -335,7 +387,7 @@ func (p *Plugin) RecordEmployeeCheckout(employeeID string) (string, error) {
 	return formattedTime, nil
 }
 
-// RecordEmployeeAbsent - modify to use employee ID
+// RecordEmployeeAbsent - COMPLETE IMPLEMENTATION
 func (p *Plugin) RecordEmployeeAbsent(employeeID string, reason string) (string, error) {
 	p.API.LogDebug("Recording employee absence", "employee_id", employeeID, "reason", reason)
 
@@ -356,28 +408,92 @@ func (p *Plugin) RecordEmployeeAbsent(employeeID string, reason string) (string,
 		return "", fmt.Errorf("ERP API secret not configured")
 	}
 
+	// Combine API key and secret for token
+	erpToken := erpAPIKey + ":" + erpAPISecret
+
+	// Build the complete ERP endpoint
+	erpEndpoint := strings.TrimSuffix(erpDomain, "/") + ERPEndpointSuffix
+
 	// Get Vietnam time for the record
-	var formattedDate string
+	var serverTime int64
 	vietTime, err := GetVietnamTime()
-	if err == nil {
-		// Format Vietnam time in YYYY-MM-DD format for ERP
-		formattedDate = vietTime.Format("2006-01-02")
+	if err != nil {
+		p.API.LogWarn("Failed to get Vietnam time, falling back to server time", "error", err.Error())
+		serverTime = model.GetMillis() // Fallback to server time
 	} else {
-		// Fallback to server time if Vietnam time fails
-		serverTime := time.Now()
-		formattedDate = serverTime.Format("2006-01-02")
+		serverTime = vietTime.UnixMilli()
 	}
 
-	// Here you would implement the actual ERP integration for absences
-	// This could involve a different API endpoint or a different request structure
-	// For now, we'll just log it
-	p.API.LogInfo("Would record in ERP system:",
-		"endpoint", erpDomain+ERPEndpointSuffix,
-		"token", "[REDACTED]",
+	attendance, formattedDate := NewEmployeeAttendance(employeeID, reason, serverTime)
+
+	// Create the form data
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	// Marshal the doc to JSON
+	docJSON, err := json.Marshal(attendance)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal employee attendance: %w", err)
+	}
+
+	// Add doc field
+	if err := writer.WriteField("doc", string(docJSON)); err != nil {
+		return "", fmt.Errorf("failed to write doc field: %w", err)
+	}
+
+	// Add action field
+	if err := writer.WriteField("action", "Save"); err != nil {
+		return "", fmt.Errorf("failed to write action field: %w", err)
+	}
+
+	// Close the writer
+	if err := writer.Close(); err != nil {
+		return "", fmt.Errorf("failed to close multipart writer: %w", err)
+	}
+
+	// Create the request
+	req, err := http.NewRequest("POST", erpEndpoint, body)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("Authorization", "token "+erpToken)
+
+	// Add CORS headers
+	req.Header.Set("Access-Control-Allow-Origin", "*")
+	req.Header.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	req.Header.Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	// Make the request
+	client := p.createExternalHTTPClient()
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read the response
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// Check the response status
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("ERP API error: %s - %s", resp.Status, string(respBody))
+	}
+
+	// Log details about the successful absence recording
+	p.API.LogDebug("Employee absence recorded successfully",
 		"employee_id", employeeID,
 		"date", formattedDate,
-		"reason", reason)
+		"reason", reason,
+		"status", resp.Status,
+		"response", string(respBody))
 
+	// Return the formatted date that was used for the absence
 	return formattedDate, nil
 }
 
