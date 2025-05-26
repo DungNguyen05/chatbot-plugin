@@ -31,14 +31,8 @@ import {doSelectPost} from './hooks';
 import {handleAskChannelCommand, handleSummarizeChannelCommand} from './commands';
 import SearchHints from './components/search_hints';
 
-// Import Roll Call components - add error handling
-let RollCallModal: any = null;
-try {
-    RollCallModal = require('./components/roll_call/roll_call_modal').default;
-    console.log('✅ RollCallModal imported successfully');
-} catch (error) {
-    console.error('❌ Failed to import RollCallModal:', error);
-}
+// Import Roll Call components properly
+import RollCallInterface from './components/roll_call/roll_call_interface';
 
 type WebappStore = Store<GlobalState, Action<Record<string, unknown>>>
 
@@ -68,6 +62,63 @@ const RollCallIcon = styled.i`
     }
 `;
 
+// Modal overlay styles
+const ModalOverlay = styled.div`
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+`;
+
+const ModalContainer = styled.div`
+    background: white;
+    border-radius: 8px;
+    max-width: 90%;
+    max-height: 90%;
+    overflow: auto;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+`;
+
+const ModalHeader = styled.div`
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1px solid rgba(var(--center-channel-color-rgb), 0.16);
+`;
+
+const ModalTitle = styled.h2`
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--center-channel-color);
+`;
+
+const CloseButton = styled.button`
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--center-channel-color);
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    
+    &:hover {
+        background-color: rgba(var(--center-channel-color-rgb), 0.08);
+    }
+`;
+
 const RHSTitle = () => {
     return (
         <RHSTitleContainer>
@@ -79,46 +130,48 @@ const RHSTitle = () => {
 
 export default class Plugin {
     postEventListener: PostEventListener = new PostEventListener();
-    private rollCallModalContainer: HTMLDivElement | null = null;
+    private rollCallModalRoot: any = null;
 
     // Helper function to open Roll Call modal
     private openRollCallModal = () => {
         console.log('🔄 Opening Roll Call modal...');
         
-        // Check if RollCallModal is available
-        if (!RollCallModal) {
-            console.error('❌ RollCallModal not available');
-            alert('Roll Call interface is not available. Please check the console for errors.');
-            return;
-        }
-
-        // Clean up any existing modal
-        this.closeRollCallModal();
-
         try {
+            // Clean up any existing modal
+            this.closeRollCallModal();
+
             // Create modal container
             const modalContainer = document.createElement('div');
             modalContainer.id = 'rollcall-modal-container';
-            modalContainer.style.position = 'fixed';
-            modalContainer.style.top = '0';
-            modalContainer.style.left = '0';
-            modalContainer.style.width = '100%';
-            modalContainer.style.height = '100%';
-            modalContainer.style.zIndex = '9999';
-            modalContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
             document.body.appendChild(modalContainer);
 
             console.log('📦 Modal container created');
 
-            // Create and render modal
-            const modalElement = React.createElement(RollCallModal, {
-                show: true,
-                onHide: this.closeRollCallModal
-            });
+            // Create the modal element
+            const ModalComponent = () => (
+                <ModalOverlay onClick={(e) => {
+                    // Close modal if clicking on overlay
+                    if (e.target === e.currentTarget) {
+                        this.closeRollCallModal();
+                    }
+                }}>
+                    <ModalContainer>
+                        <ModalHeader>
+                            <ModalTitle>
+                                <FormattedMessage defaultMessage="Roll Call"/>
+                            </ModalTitle>
+                            <CloseButton onClick={this.closeRollCallModal}>
+                                ×
+                            </CloseButton>
+                        </ModalHeader>
+                        <RollCallInterface onClose={this.closeRollCallModal} />
+                    </ModalContainer>
+                </ModalOverlay>
+            );
 
-            console.log('⚛️ Modal element created');
+            console.log('⚛️ Modal component created');
 
-            // Try to render with ReactDOM
+            // Import ReactDOM dynamically
             import('react-dom').then((ReactDOM) => {
                 console.log('📚 ReactDOM imported');
                 
@@ -126,41 +179,65 @@ export default class Plugin {
                     if ((ReactDOM as any).createRoot) {
                         // React 18
                         console.log('🚀 Using React 18 createRoot');
-                        const root = (ReactDOM as any).createRoot(modalContainer);
-                        root.render(modalElement);
+                        this.rollCallModalRoot = (ReactDOM as any).createRoot(modalContainer);
+                        this.rollCallModalRoot.render(React.createElement(ModalComponent));
                     } else {
                         // React 17 and below
                         console.log('🔧 Using React 17 render');
-                        ReactDOM.render(modalElement, modalContainer);
+                        ReactDOM.render(React.createElement(ModalComponent), modalContainer);
+                        this.rollCallModalRoot = modalContainer;
                     }
                     
-                    this.rollCallModalContainer = modalContainer;
                     console.log('✅ Modal rendered successfully');
                     
                 } catch (renderError) {
                     console.error('❌ Failed to render modal:', renderError);
                     this.closeRollCallModal();
-                    alert('Failed to open Roll Call interface. Check console for details.');
+                    alert('Failed to open Roll Call interface. Error: ' + renderError.message);
                 }
             }).catch((error) => {
                 console.error('❌ Failed to load ReactDOM:', error);
                 this.closeRollCallModal();
-                alert('Failed to load ReactDOM. Check console for details.');
+                alert('Failed to load ReactDOM. Error: ' + error.message);
             });
             
         } catch (error) {
             console.error('❌ Error in openRollCallModal:', error);
-            alert('Failed to open Roll Call interface. Check console for details.');
+            alert('Failed to open Roll Call interface. Error: ' + error.message);
         }
     };
 
     // Helper function to close Roll Call modal
     private closeRollCallModal = () => {
         console.log('🔄 Closing Roll Call modal...');
-        if (this.rollCallModalContainer && this.rollCallModalContainer.parentNode) {
-            this.rollCallModalContainer.parentNode.removeChild(this.rollCallModalContainer);
-            this.rollCallModalContainer = null;
-            console.log('✅ Modal closed successfully');
+        
+        try {
+            const modalContainer = document.getElementById('rollcall-modal-container');
+            
+            if (this.rollCallModalRoot) {
+                if (typeof this.rollCallModalRoot.unmount === 'function') {
+                    // React 18
+                    this.rollCallModalRoot.unmount();
+                } else if (typeof this.rollCallModalRoot === 'object' && this.rollCallModalRoot.parentNode) {
+                    // React 17 fallback
+                    import('react-dom').then((ReactDOM) => {
+                        ReactDOM.unmountComponentAtNode(this.rollCallModalRoot);
+                    });
+                }
+                this.rollCallModalRoot = null;
+            }
+            
+            if (modalContainer && modalContainer.parentNode) {
+                modalContainer.parentNode.removeChild(modalContainer);
+                console.log('✅ Modal closed successfully');
+            }
+        } catch (error) {
+            console.error('❌ Error closing modal:', error);
+            // Force cleanup
+            const modalContainer = document.getElementById('rollcall-modal-container');
+            if (modalContainer && modalContainer.parentNode) {
+                modalContainer.parentNode.removeChild(modalContainer);
+            }
         }
     };
 
