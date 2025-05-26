@@ -1,10 +1,9 @@
-// Copyright (c) 2023-present Mattermost, Inc. All Rights Reserved.
-// See LICENSE.txt for license information.
-
+// webapp/src/index.tsx - Fixed version for React component
 import React from 'react';
 import {Store, Action} from 'redux';
 import styled from 'styled-components';
 import {FormattedMessage} from 'react-intl';
+import ReactDOM from 'react-dom';
 
 import {GlobalState} from '@mattermost/types/store';
 
@@ -31,7 +30,7 @@ import {doSelectPost} from './hooks';
 import {handleAskChannelCommand, handleSummarizeChannelCommand} from './commands';
 import SearchHints from './components/search_hints';
 
-// Import Roll Call components properly
+// Import Roll Call components directly
 import RollCallInterface from './components/roll_call/roll_call_interface';
 
 type WebappStore = Store<GlobalState, Action<Record<string, unknown>>>
@@ -54,11 +53,11 @@ const RHSTitleContainer = styled.span`
 // Roll Call Icon for the channel header
 const RollCallIcon = styled.i`
     font-size: 16px;
-    color: var(--center-channel-color);
+    color: #f5cf47;
     cursor: pointer;
     
     &:hover {
-        color: var(--button-bg);
+        color: #9e862f;
     }
 `;
 
@@ -69,7 +68,8 @@ const ModalOverlay = styled.div`
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -78,26 +78,40 @@ const ModalOverlay = styled.div`
 
 const ModalContainer = styled.div`
     background: white;
-    border-radius: 8px;
+    border-radius: 12px;
     max-width: 90%;
     max-height: 90%;
     overflow: auto;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+    transform: scale(1);
+    animation: modalAppear 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    
+    @keyframes modalAppear {
+        from {
+            transform: scale(0.95);
+            opacity: 0;
+        }
+        to {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
 `;
 
 const ModalHeader = styled.div`
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px 24px;
-    border-bottom: 1px solid rgba(var(--center-channel-color-rgb), 0.16);
+    padding: 20px 24px;
+    border-bottom: 1px solid #e5e7eb;
 `;
 
 const ModalTitle = styled.h2`
     margin: 0;
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--center-channel-color);
+    font-size: 24px;
+    font-weight: 700;
+    color: #1a1a1a;
+    letter-spacing: -0.025em;
 `;
 
 const CloseButton = styled.button`
@@ -105,17 +119,19 @@ const CloseButton = styled.button`
     border: none;
     font-size: 24px;
     cursor: pointer;
-    color: var(--center-channel-color);
-    padding: 0;
+    color: #6b7280;
+    padding: 4px;
     width: 32px;
     height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
+    border-radius: 6px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     
     &:hover {
-        background-color: rgba(var(--center-channel-color-rgb), 0.08);
+        background-color: #f3f4f6;
+        color: #374151;
     }
 `;
 
@@ -130,36 +146,32 @@ const RHSTitle = () => {
 
 export default class Plugin {
     postEventListener: PostEventListener = new PostEventListener();
+    private rollCallModalElement: HTMLDivElement | null = null;
     private rollCallModalRoot: any = null;
 
-    // Helper function to open Roll Call modal
+    // Modern modal creation with proper React rendering
     private openRollCallModal = () => {
         console.log('🔄 Opening Roll Call modal...');
         
         try {
-            // Clean up any existing modal
+            // Close any existing modal first
             this.closeRollCallModal();
 
             // Create modal container
-            const modalContainer = document.createElement('div');
-            modalContainer.id = 'rollcall-modal-container';
-            document.body.appendChild(modalContainer);
+            this.rollCallModalElement = document.createElement('div');
+            this.rollCallModalElement.id = 'rollcall-modal-root';
+            document.body.appendChild(this.rollCallModalElement);
 
-            console.log('📦 Modal container created');
-
-            // Create the modal element
+            // Create the modal component using React
             const ModalComponent = () => (
                 <ModalOverlay onClick={(e) => {
-                    // Close modal if clicking on overlay
                     if (e.target === e.currentTarget) {
                         this.closeRollCallModal();
                     }
                 }}>
                     <ModalContainer>
                         <ModalHeader>
-                            <ModalTitle>
-                                <FormattedMessage defaultMessage="Roll Call"/>
-                            </ModalTitle>
+                            <ModalTitle>Roll Call</ModalTitle>
                             <CloseButton onClick={this.closeRollCallModal}>
                                 ×
                             </CloseButton>
@@ -169,75 +181,62 @@ export default class Plugin {
                 </ModalOverlay>
             );
 
-            console.log('⚛️ Modal component created');
-
-            // Import ReactDOM dynamically
-            import('react-dom').then((ReactDOM) => {
-                console.log('📚 ReactDOM imported');
-                
-                try {
-                    if ((ReactDOM as any).createRoot) {
-                        // React 18
-                        console.log('🚀 Using React 18 createRoot');
-                        this.rollCallModalRoot = (ReactDOM as any).createRoot(modalContainer);
-                        this.rollCallModalRoot.render(React.createElement(ModalComponent));
-                    } else {
-                        // React 17 and below
-                        console.log('🔧 Using React 17 render');
-                        ReactDOM.render(React.createElement(ModalComponent), modalContainer);
-                        this.rollCallModalRoot = modalContainer;
-                    }
-                    
-                    console.log('✅ Modal rendered successfully');
-                    
-                } catch (renderError) {
-                    console.error('❌ Failed to render modal:', renderError);
-                    this.closeRollCallModal();
-                    alert('Failed to open Roll Call interface. Error: ' + renderError.message);
-                }
-            }).catch((error) => {
-                console.error('❌ Failed to load ReactDOM:', error);
-                this.closeRollCallModal();
-                alert('Failed to load ReactDOM. Error: ' + error.message);
-            });
+            // Use React 18 createRoot if available, otherwise fall back to render
+            if (ReactDOM.createRoot) {
+                console.log('🚀 Using React 18 createRoot');
+                this.rollCallModalRoot = ReactDOM.createRoot(this.rollCallModalElement);
+                this.rollCallModalRoot.render(<ModalComponent />);
+            } else {
+                console.log('🔧 Using React 17 render');
+                ReactDOM.render(<ModalComponent />, this.rollCallModalElement);
+                this.rollCallModalRoot = this.rollCallModalElement;
+            }
+            
+            console.log('✅ Modal opened successfully with React component');
             
         } catch (error) {
             console.error('❌ Error in openRollCallModal:', error);
-            alert('Failed to open Roll Call interface. Error: ' + error.message);
+            this.closeRollCallModal();
+            
+            // Show error message
+            alert('Failed to open Roll Call interface: ' + error.message);
         }
     };
 
-    // Helper function to close Roll Call modal
     private closeRollCallModal = () => {
         console.log('🔄 Closing Roll Call modal...');
         
         try {
-            const modalContainer = document.getElementById('rollcall-modal-container');
-            
             if (this.rollCallModalRoot) {
                 if (typeof this.rollCallModalRoot.unmount === 'function') {
                     // React 18
                     this.rollCallModalRoot.unmount();
-                } else if (typeof this.rollCallModalRoot === 'object' && this.rollCallModalRoot.parentNode) {
-                    // React 17 fallback
-                    import('react-dom').then((ReactDOM) => {
-                        ReactDOM.unmountComponentAtNode(this.rollCallModalRoot);
-                    });
+                } else {
+                    // React 17
+                    ReactDOM.unmountComponentAtNode(this.rollCallModalElement);
                 }
                 this.rollCallModalRoot = null;
             }
             
-            if (modalContainer && modalContainer.parentNode) {
-                modalContainer.parentNode.removeChild(modalContainer);
-                console.log('✅ Modal closed successfully');
+            if (this.rollCallModalElement && this.rollCallModalElement.parentNode) {
+                this.rollCallModalElement.parentNode.removeChild(this.rollCallModalElement);
+                this.rollCallModalElement = null;
             }
+            
+            console.log('✅ Modal closed successfully');
         } catch (error) {
             console.error('❌ Error closing modal:', error);
+            
             // Force cleanup
-            const modalContainer = document.getElementById('rollcall-modal-container');
-            if (modalContainer && modalContainer.parentNode) {
-                modalContainer.parentNode.removeChild(modalContainer);
+            if (this.rollCallModalElement && this.rollCallModalElement.parentNode) {
+                try {
+                    this.rollCallModalElement.parentNode.removeChild(this.rollCallModalElement);
+                } catch (cleanupError) {
+                    console.error('❌ Error in force cleanup:', cleanupError);
+                }
+                this.rollCallModalElement = null;
             }
+            this.rollCallModalRoot = null;
         }
     };
 
@@ -291,8 +290,7 @@ export default class Plugin {
                     websocketRegister={this.postEventListener.registerPostUpdateListener}
                     websocketUnregister={this.postEventListener.unregisterPostUpdateListener}
                 />
-            )
-            ;
+            );
         };
 
         registry.registerWebSocketEventHandler('config_changed', () => {
@@ -304,19 +302,33 @@ export default class Plugin {
 
         registry.registerPostTypeComponent('custom_llmbot', LLMBotPostWithWebsockets);
         registry.registerPostTypeComponent('custom_llm_postback', PostbackPost);
+        
         if (registry.registerPostActionComponent) {
             registry.registerPostActionComponent(PostMenu);
         } else {
-            registry.registerPostDropdownMenuAction(<><span className='icon'><IconThreadSummarization/></span><FormattedMessage defaultMessage='Summarize Thread'/></>, (postId: string) => {
-                const state = store.getState();
-                const team = state.entities.teams.teams[state.entities.teams.currentTeamId];
-                window.WebappUtils.browserHistory.push('/' + team.name + '/messages/@ai');
-                doThreadAnalysis(postId, 'summarize_thread', '');
-                if (rhs) {
-                    store.dispatch(rhs.showRHSPlugin);
+            registry.registerPostDropdownMenuAction(
+                <>
+                    <span className='icon'><IconThreadSummarization/></span>
+                    <FormattedMessage defaultMessage='Summarize Thread'/>
+                </>, 
+                (postId: string) => {
+                    const state = store.getState();
+                    const team = state.entities.teams.teams[state.entities.teams.currentTeamId];
+                    window.WebappUtils.browserHistory.push('/' + team.name + '/messages/@ai');
+                    doThreadAnalysis(postId, 'summarize_thread', '');
+                    if (rhs) {
+                        store.dispatch(rhs.showRHSPlugin);
+                    }
                 }
-            });
-            registry.registerPostDropdownMenuAction(<><span className='icon'><IconReactForMe/></span><FormattedMessage defaultMessage='React for me'/></>, doReaction);
+            );
+            
+            registry.registerPostDropdownMenuAction(
+                <>
+                    <span className='icon'><IconReactForMe/></span>
+                    <FormattedMessage defaultMessage='React for me'/>
+                </>, 
+                doReaction
+            );
             
             // Add Roll Call to post dropdown menu
             registry.registerPostDropdownMenuAction(
@@ -335,11 +347,13 @@ export default class Plugin {
         
         // Register AI Copilot channel header button
         if (rhs) {
-            registry.registerChannelHeaderButtonAction(<IconAIContainer src={aiIcon}/>, () => {
-                store.dispatch(rhs.toggleRHSPlugin);
-            },
-            'Copilot',
-            'Copilot',
+            registry.registerChannelHeaderButtonAction(
+                <IconAIContainer src={aiIcon}/>, 
+                () => {
+                    store.dispatch(rhs.toggleRHSPlugin);
+                },
+                'Copilot',
+                'Copilot'
             );
         }
 

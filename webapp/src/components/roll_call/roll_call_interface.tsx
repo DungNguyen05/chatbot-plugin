@@ -1,82 +1,107 @@
 import React, {useState} from 'react';
 import styled from 'styled-components';
-import {FormattedMessage, useIntl} from 'react-intl';
 
 import {doCheckIn, doCheckOut, doAbsent} from '../../client';
 
 const Container = styled.div`
     display: flex;
     flex-direction: column;
-    padding: 24px;
-    gap: 16px;
+    padding: 32px;
+    gap: 24px;
     max-width: 500px;
     margin: 0 auto;
     background: white;
-    border-radius: 8px;
+    border-radius: 12px;
 `;
 
 const Title = styled.h2`
-    font-size: 20px;
-    font-weight: 600;
+    font-size: 24px;
+    font-weight: 700;
     margin-bottom: 8px;
     text-align: center;
-    color: var(--center-channel-color);
+    color: #1a1a1a;
+    letter-spacing: -0.025em;
 `;
 
-const ButtonRow = styled.div`
-    display: flex;
-    gap: 12px;
-    justify-content: center;
-    flex-wrap: wrap;
+const Subtitle = styled.p`
+    font-size: 14px;
+    color: #6b7280;
+    text-align: center;
+    margin: 0 0 16px 0;
+    font-weight: 400;
+`;
+
+const ButtonGrid = styled.div`
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 8px;
+    
+    @media (max-width: 480px) {
+        grid-template-columns: 1fr;
+    }
 `;
 
 const ActionButton = styled.button`
-    min-width: 120px;
-    padding: 12px 16px;
+    padding: 16px 20px;
     border: none;
-    border-radius: 4px;
+    border-radius: 8px;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 15px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    transition: all 0.2s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    min-height: 60px;
+    position: relative;
+    overflow: hidden;
     
     &:disabled {
         opacity: 0.6;
         cursor: not-allowed;
+        transform: none !important;
+    }
+    
+    &:not(:disabled):hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    }
+    
+    &:not(:disabled):active {
+        transform: translateY(0);
+        transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
     }
 `;
 
 const CheckInButton = styled(ActionButton)`
-    background-color: #28a745;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
     color: white;
     
     &:hover:not(:disabled) {
-        background-color: #218838;
-        transform: translateY(-1px);
+        background: linear-gradient(135deg, #059669 0%, #047857 100%);
     }
 `;
 
 const CheckOutButton = styled(ActionButton)`
-    background-color: #007bff;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
     color: white;
     
     &:hover:not(:disabled) {
-        background-color: #0056b3;
-        transform: translateY(-1px);
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
     }
 `;
 
 const AbsentButton = styled(ActionButton)`
-    background-color: #dc3545;
-    color: white;
+    background: transparent;
+    color: #dc2626;
+    border: 2px solid #dc2626;
+    grid-column: 1 / -1;
     
     &:hover:not(:disabled) {
-        background-color: #c82333;
-        transform: translateY(-1px);
+        background: #dc2626;
+        color: white;
     }
 `;
 
@@ -87,7 +112,8 @@ const AbsentModal = styled.div<{show: boolean}>`
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
     justify-content: center;
     align-items: center;
     z-index: 1000;
@@ -95,85 +121,110 @@ const AbsentModal = styled.div<{show: boolean}>`
 
 const ModalContent = styled.div`
     background: white;
-    padding: 24px;
-    border-radius: 8px;
+    padding: 32px;
+    border-radius: 16px;
     min-width: 400px;
     max-width: 90%;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+    transform: scale(1);
+    animation: modalAppear 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    
+    @keyframes modalAppear {
+        from {
+            transform: scale(0.95);
+            opacity: 0;
+        }
+        to {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
 `;
 
 const ModalTitle = styled.h3`
-    margin-bottom: 16px;
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--center-channel-color);
+    margin-bottom: 20px;
+    font-size: 20px;
+    font-weight: 700;
+    color: #1a1a1a;
+    letter-spacing: -0.025em;
 `;
 
 const ReasonInput = styled.textarea`
     width: 100%;
-    min-height: 80px;
-    padding: 8px 12px;
-    border: 1px solid rgba(var(--center-channel-color-rgb), 0.16);
-    border-radius: 4px;
+    min-height: 100px;
+    padding: 12px 16px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
     resize: vertical;
     font-family: inherit;
-    margin-bottom: 16px;
+    margin-bottom: 20px;
     font-size: 14px;
+    transition: border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     
     &:focus {
         outline: none;
-        border-color: var(--button-bg);
-        box-shadow: 0 0 0 2px rgba(var(--button-bg-rgb), 0.25);
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    
+    &::placeholder {
+        color: #9ca3af;
     }
 `;
 
 const ModalActions = styled.div`
     display: flex;
-    gap: 8px;
+    gap: 12px;
     justify-content: flex-end;
 `;
 
 const SecondaryButton = styled.button`
-    padding: 8px 16px;
-    border: 1px solid rgba(var(--center-channel-color-rgb), 0.24);
-    border-radius: 4px;
+    padding: 10px 20px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
     background: white;
-    color: var(--center-channel-color);
+    color: #374151;
     font-weight: 600;
     cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     
     &:hover {
-        background-color: rgba(var(--center-channel-color-rgb), 0.04);
+        border-color: #d1d5db;
+        background-color: #f9fafb;
     }
 `;
 
 const PrimaryButton = styled.button`
-    padding: 8px 16px;
+    padding: 10px 20px;
     border: none;
-    border-radius: 4px;
-    background-color: #dc3545;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
     color: white;
     font-weight: 600;
     cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     
     &:hover:not(:disabled) {
-        background-color: #c82333;
+        background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%);
+        transform: translateY(-1px);
     }
     
     &:disabled {
         opacity: 0.6;
         cursor: not-allowed;
+        transform: none !important;
     }
 `;
 
 const StatusMessage = styled.div<{type: 'success' | 'error'}>`
-    padding: 12px;
-    border-radius: 4px;
-    margin-bottom: 16px;
-    background-color: ${props => props.type === 'success' ? '#d4edda' : '#f8d7da'};
-    color: ${props => props.type === 'success' ? '#155724' : '#721c24'};
-    border: 1px solid ${props => props.type === 'success' ? '#c3e6cb' : '#f5c6cb'};
+    padding: 16px 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    background-color: ${props => props.type === 'success' ? '#ecfdf5' : '#fef2f2'};
+    color: ${props => props.type === 'success' ? '#065f46' : '#991b1b'};
+    border: 1px solid ${props => props.type === 'success' ? '#a7f3d0' : '#fca5a5'};
     font-size: 14px;
+    font-weight: 500;
 `;
 
 const LoadingSpinner = styled.div`
@@ -183,7 +234,7 @@ const LoadingSpinner = styled.div`
     border: 2px solid transparent;
     border-top: 2px solid currentColor;
     border-radius: 50%;
-    animation: spin 1s linear infinite;
+    animation: spin 0.8s linear infinite;
     
     @keyframes spin {
         0% { transform: rotate(0deg); }
@@ -196,7 +247,6 @@ interface RollCallInterfaceProps {
 }
 
 const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
-    const intl = useIntl();
     const [showAbsentModal, setShowAbsentModal] = useState(false);
     const [absentReason, setAbsentReason] = useState('');
     const [loading, setLoading] = useState(false);
@@ -209,13 +259,13 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
             const response = await doCheckIn();
             setStatusMessage({
                 type: 'success',
-                message: response.message || intl.formatMessage({defaultMessage: 'Successfully checked in!'})
+                message: response.message || 'Successfully checked in!'
             });
             setTimeout(() => {
                 onClose?.();
             }, 2000);
         } catch (error: any) {
-            const errorMessage = error?.message || intl.formatMessage({defaultMessage: 'Failed to check in. Please try again.'});
+            const errorMessage = error?.message || 'Failed to check in. Please try again.';
             setStatusMessage({
                 type: 'error',
                 message: errorMessage
@@ -232,13 +282,13 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
             const response = await doCheckOut();
             setStatusMessage({
                 type: 'success',
-                message: response.message || intl.formatMessage({defaultMessage: 'Successfully checked out!'})
+                message: response.message || 'Successfully checked out!'
             });
             setTimeout(() => {
                 onClose?.();
             }, 2000);
         } catch (error: any) {
-            const errorMessage = error?.message || intl.formatMessage({defaultMessage: 'Failed to check out. Please try again.'});
+            const errorMessage = error?.message || 'Failed to check out. Please try again.';
             setStatusMessage({
                 type: 'error',
                 message: errorMessage
@@ -252,7 +302,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
         if (!absentReason.trim()) {
             setStatusMessage({
                 type: 'error',
-                message: intl.formatMessage({defaultMessage: 'Please provide a reason for absence.'})
+                message: 'Please provide a reason for absence.'
             });
             return;
         }
@@ -263,7 +313,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
             const response = await doAbsent(absentReason.trim());
             setStatusMessage({
                 type: 'success',
-                message: response.message || intl.formatMessage({defaultMessage: 'Absence recorded successfully!'})
+                message: response.message || 'Absence recorded successfully!'
             });
             setShowAbsentModal(false);
             setAbsentReason('');
@@ -271,7 +321,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
                 onClose?.();
             }, 2000);
         } catch (error: any) {
-            const errorMessage = error?.message || intl.formatMessage({defaultMessage: 'Failed to record absence. Please try again.'});
+            const errorMessage = error?.message || 'Failed to record absence. Please try again.';
             setStatusMessage({
                 type: 'error',
                 message: errorMessage
@@ -284,9 +334,10 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
     return (
         <>
             <Container>
-                <Title>
-                    <FormattedMessage defaultMessage="Roll Call"/>
-                </Title>
+                <div>
+                    <Title>Roll Call</Title>
+                    <Subtitle>Record your attendance for today</Subtitle>
+                </div>
                 
                 {statusMessage && (
                     <StatusMessage type={statusMessage.type}>
@@ -294,41 +345,38 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
                     </StatusMessage>
                 )}
 
-                <ButtonRow>
+                <ButtonGrid>
                     <CheckInButton 
                         onClick={handleCheckIn}
                         disabled={loading}
                     >
-                        {loading ? <LoadingSpinner /> : '✓'}
-                        <FormattedMessage defaultMessage="Check In"/>
+                        {loading ? <LoadingSpinner /> : null}
+                        Check In
                     </CheckInButton>
                     
                     <CheckOutButton 
                         onClick={handleCheckOut}
                         disabled={loading}
                     >
-                        {loading ? <LoadingSpinner /> : '⏰'}
-                        <FormattedMessage defaultMessage="Check Out"/>
+                        {loading ? <LoadingSpinner /> : null}
+                        Check Out
                     </CheckOutButton>
                     
                     <AbsentButton 
                         onClick={() => setShowAbsentModal(true)}
                         disabled={loading}
                     >
-                        {loading ? <LoadingSpinner /> : '❌'}
-                        <FormattedMessage defaultMessage="Mark Absent"/>
+                        Report Absence
                     </AbsentButton>
-                </ButtonRow>
+                </ButtonGrid>
             </Container>
 
             <AbsentModal show={showAbsentModal}>
                 <ModalContent>
-                    <ModalTitle>
-                        <FormattedMessage defaultMessage="Mark as Absent"/>
-                    </ModalTitle>
+                    <ModalTitle>Report Absence</ModalTitle>
                     
                     <ReasonInput
-                        placeholder={intl.formatMessage({defaultMessage: 'Please provide a reason for your absence...'})}
+                        placeholder="Please provide a reason for your absence..."
                         value={absentReason}
                         onChange={(e) => setAbsentReason(e.target.value)}
                         maxLength={500}
@@ -341,7 +389,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
                                 setAbsentReason('');
                             }}
                         >
-                            <FormattedMessage defaultMessage="Cancel"/>
+                            Cancel
                         </SecondaryButton>
                         
                         <PrimaryButton 
@@ -349,7 +397,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
                             disabled={loading || !absentReason.trim()}
                         >
                             {loading ? <LoadingSpinner /> : null}
-                            <FormattedMessage defaultMessage="Submit"/>
+                            Submit
                         </PrimaryButton>
                     </ModalActions>
                 </ModalContent>
