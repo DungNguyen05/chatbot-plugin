@@ -1,4 +1,4 @@
-// webapp/src/index.tsx - Fixed version with proper React component structure
+// webapp/src/index.tsx - Enhanced version with proper Roll Call integration
 import React from 'react';
 import {Store, Action} from 'redux';
 import styled from 'styled-components';
@@ -30,7 +30,7 @@ import {doSelectPost} from './hooks';
 import {handleAskChannelCommand, handleSummarizeChannelCommand} from './commands';
 import SearchHints from './components/search_hints';
 
-// Import Roll Call components directly
+// Import Roll Call component
 import RollCallInterface from './components/roll_call/roll_call_interface';
 
 type WebappStore = Store<GlobalState, Action<Record<string, unknown>>>
@@ -50,41 +50,57 @@ const RHSTitleContainer = styled.span`
 	margin-left: 8px;
 `;
 
-// Roll Call Icon for the channel header
+// Enhanced Roll Call Icon for the channel header
 const RollCallIcon = styled.i`
     font-size: 16px;
-    color: #f5cf47;
+    color: var(--button-bg);
     cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.15s ease-out;
     
     &:hover {
-        color: #9e862f;
+        color: var(--button-color);
+        background: var(--button-bg);
+        transform: scale(1.1);
+    }
+    
+    &:active {
+        transform: scale(0.95);
     }
 `;
 
-// Modal overlay styles
+// Enhanced modal overlay styles
 const ModalOverlay = styled.div`
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(4px);
+    background-color: rgba(0, 0, 0, 0.64);
+    backdrop-filter: blur(8px);
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 9999;
+    z-index: var(--z-index-modal, 9999);
+    animation: overlayFadeIn 0.15s ease-out;
+    
+    @keyframes overlayFadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
 `;
 
 const ModalContainer = styled.div`
-    background: white;
-    border-radius: 12px;
+    background: var(--center-channel-bg);
+    border-radius: 8px;
     max-width: 90%;
     max-height: 90%;
     overflow: auto;
-    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--elevation-8, 0 25px 50px rgba(0, 0, 0, 0.25));
     transform: scale(1);
-    animation: modalAppear 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: modalAppear 0.2s ease-out;
+    border: 1px solid rgba(var(--center-channel-color-rgb), 0.16);
     
     @keyframes modalAppear {
         from {
@@ -103,14 +119,16 @@ const ModalHeader = styled.div`
     justify-content: space-between;
     align-items: center;
     padding: 20px 24px;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid rgba(var(--center-channel-color-rgb), 0.16);
+    background: var(--center-channel-bg);
 `;
 
 const ModalTitle = styled.h2`
     margin: 0;
-    font-size: 24px;
-    font-weight: 700;
-    color: #1a1a1a;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--center-channel-color);
+    font-family: var(--font-family, inherit);
     letter-spacing: -0.025em;
 `;
 
@@ -119,19 +137,23 @@ const CloseButton = styled.button`
     border: none;
     font-size: 24px;
     cursor: pointer;
-    color: #6b7280;
+    color: rgba(var(--center-channel-color-rgb), 0.56);
     padding: 4px;
     width: 32px;
     height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 6px;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 4px;
+    transition: all 0.15s ease-out;
     
     &:hover {
-        background-color: #f3f4f6;
-        color: #374151;
+        background-color: rgba(var(--center-channel-color-rgb), 0.08);
+        color: rgba(var(--center-channel-color-rgb), 0.72);
+    }
+    
+    &:active {
+        background-color: rgba(var(--center-channel-color-rgb), 0.16);
     }
 `;
 
@@ -144,23 +166,50 @@ const RHSTitle = () => {
     );
 };
 
-// Separate React component for the modal
+// Enhanced React component for the modal with better error handling
 const RollCallModal: React.FC<{
     onClose: () => void;
 }> = ({ onClose }) => {
     const [isShowHeader, setIsShowHeader] = React.useState(true);
 
+    const handleOverlayClick = React.useCallback((e: React.MouseEvent) => {
+        if (e.target === e.currentTarget) {
+            onClose();
+        }
+    }, [onClose]);
+
+    const handleKeyDown = React.useCallback((e: React.KeyboardEvent) => {
+        if (e.key === 'Escape') {
+            onClose();
+        }
+    }, [onClose]);
+
+    React.useEffect(() => {
+        // Prevent body scroll when modal is open
+        document.body.style.overflow = 'hidden';
+        
+        return () => {
+            document.body.style.overflow = 'auto';
+        };
+    }, []);
+
     return (
-        <ModalOverlay onClick={(e) => {
-            if (e.target === e.currentTarget) {
-                onClose();
-            }
-        }}>
+        <ModalOverlay 
+            onClick={handleOverlayClick}
+            onKeyDown={handleKeyDown}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-title"
+        >
             <ModalContainer>
                 {isShowHeader && (
                     <ModalHeader>
-                        <ModalTitle>Roll Call</ModalTitle>
-                        <CloseButton onClick={onClose}>
+                        <ModalTitle id="modal-title">Roll Call</ModalTitle>
+                        <CloseButton 
+                            onClick={onClose}
+                            aria-label="Close Roll Call modal"
+                        >
                             ×
                         </CloseButton>
                     </ModalHeader>
@@ -176,7 +225,7 @@ export default class Plugin {
     private rollCallModalElement: HTMLDivElement | null = null;
     private rollCallModalRoot: any = null;
 
-    // Fixed modal creation with proper React component
+    // Enhanced modal creation with better error handling and cleanup
     private openRollCallModal = () => {
         console.log('🔄 Opening Roll Call modal...');
         
@@ -187,6 +236,7 @@ export default class Plugin {
             // Create modal container
             this.rollCallModalElement = document.createElement('div');
             this.rollCallModalElement.id = 'rollcall-modal-root';
+            this.rollCallModalElement.setAttribute('data-testid', 'rollcall-modal');
             document.body.appendChild(this.rollCallModalElement);
 
             // Use React 18 createRoot if available, otherwise fall back to render
@@ -211,8 +261,9 @@ export default class Plugin {
             console.error('❌ Error in openRollCallModal:', error);
             this.closeRollCallModal();
             
-            // Show error message
-            alert('Failed to open Roll Call interface: ' + error.message);
+            // Show user-friendly error message
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            alert('Failed to open Roll Call interface: ' + errorMessage);
         }
     };
 
@@ -224,7 +275,7 @@ export default class Plugin {
                 if (typeof this.rollCallModalRoot.unmount === 'function') {
                     // React 18
                     this.rollCallModalRoot.unmount();
-                } else {
+                } else if (this.rollCallModalElement) {
                     // React 17
                     ReactDOM.unmountComponentAtNode(this.rollCallModalElement);
                 }
@@ -236,20 +287,26 @@ export default class Plugin {
                 this.rollCallModalElement = null;
             }
             
+            // Restore body scroll
+            document.body.style.overflow = 'auto';
+            
             console.log('✅ Modal closed successfully');
         } catch (error) {
             console.error('❌ Error closing modal:', error);
             
             // Force cleanup
-            if (this.rollCallModalElement && this.rollCallModalElement.parentNode) {
+            const existingModal = document.getElementById('rollcall-modal-root');
+            if (existingModal && existingModal.parentNode) {
                 try {
-                    this.rollCallModalElement.parentNode.removeChild(this.rollCallModalElement);
+                    existingModal.parentNode.removeChild(existingModal);
                 } catch (cleanupError) {
                     console.error('❌ Error in force cleanup:', cleanupError);
                 }
-                this.rollCallModalElement = null;
             }
+            
+            this.rollCallModalElement = null;
             this.rollCallModalRoot = null;
+            document.body.style.overflow = 'auto';
         }
     };
 
@@ -370,7 +427,7 @@ export default class Plugin {
             );
         }
 
-        // Register Roll Call channel header button
+        // Register Roll Call channel header button with enhanced styling
         console.log('📋 Registering Roll Call channel header button...');
         registry.registerChannelHeaderButtonAction(
             <RollCallIcon className="fa fa-calendar-check-o" />,
@@ -448,9 +505,11 @@ export default class Plugin {
         console.log('✅ Plugin initialized successfully');
     }
 
-    // Cleanup function
+    // Enhanced cleanup function
     public uninitialize() {
+        console.log('🔄 Plugin uninitializing...');
         this.closeRollCallModal();
+        console.log('✅ Plugin uninitialized successfully');
     }
 }
 
