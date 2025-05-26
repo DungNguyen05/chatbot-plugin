@@ -3,8 +3,8 @@ import styled from 'styled-components';
 
 import {doCheckIn, doCheckOut, doAbsent} from '../../client';
 
-const Container = styled.div`
-    display: flex;
+const Container = styled.div<{show: boolean}>`
+    display: ${props => props.show ? 'flex' : 'none'};
     flex-direction: column;
     padding: 32px;
     gap: 24px;
@@ -107,9 +107,6 @@ const AbsentButton = styled(ActionButton)`
 
 const AbsentModal = styled.div<{show: boolean}>`
     display: ${props => props.show ? 'flex' : 'none'};
-    position: fixed;
-    top: 0;
-    left: 0;
     width: 100%;
     height: 100%;
     background-color: rgba(0, 0, 0, 0.6);
@@ -244,9 +241,11 @@ const LoadingSpinner = styled.div`
 
 interface RollCallInterfaceProps {
     onClose?: () => void;
+    setIsShowHeader?: (show: boolean) => void;
 }
 
-const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
+const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose, setIsShowHeader}) => {
+    console.log('RollCallInterface: setIsShowHeader defined =', !!setIsShowHeader);
     const [showAbsentModal, setShowAbsentModal] = useState(false);
     const [absentReason, setAbsentReason] = useState('');
     const [loading, setLoading] = useState(false);
@@ -298,6 +297,18 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
         }
     };
 
+    const handleAbsentClick = () => {
+        setShowAbsentModal(true);
+        setIsShowHeader?.(false);
+    };
+
+    const handleAbsentCancel = () => {
+        setShowAbsentModal(false);
+        setAbsentReason('');
+        setStatusMessage(null);
+        setIsShowHeader?.(true);
+    };
+
     const handleAbsentSubmit = async () => {
         if (!absentReason.trim()) {
             setStatusMessage({
@@ -317,6 +328,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
             });
             setShowAbsentModal(false);
             setAbsentReason('');
+            setIsShowHeader?.(true); // Show header again when closing modal
             setTimeout(() => {
                 onClose?.();
             }, 2000);
@@ -333,7 +345,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
 
     return (
         <>
-            <Container>
+            <Container show={!showAbsentModal}> 
                 <div>
                     <Title>Roll Call</Title>
                     <Subtitle>Record your attendance for today</Subtitle>
@@ -363,7 +375,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
                     </CheckOutButton>
                     
                     <AbsentButton 
-                        onClick={() => setShowAbsentModal(true)}
+                        onClick={handleAbsentClick}
                         disabled={loading}
                     >
                         Report Absence
@@ -375,6 +387,12 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
                 <ModalContent>
                     <ModalTitle>Report Absence</ModalTitle>
                     
+                    {statusMessage && (
+                        <StatusMessage type={statusMessage.type}>
+                            {statusMessage.message}
+                        </StatusMessage>
+                    )}
+                    
                     <ReasonInput
                         placeholder="Please provide a reason for your absence..."
                         value={absentReason}
@@ -383,12 +401,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
                     />
                     
                     <ModalActions>
-                        <SecondaryButton 
-                            onClick={() => {
-                                setShowAbsentModal(false);
-                                setAbsentReason('');
-                            }}
-                        >
+                        <SecondaryButton onClick={handleAbsentCancel}>
                             Cancel
                         </SecondaryButton>
                         

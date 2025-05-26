@@ -1,4 +1,4 @@
-// webapp/src/index.tsx - Fixed version for React component
+// webapp/src/index.tsx - Fixed version with proper React component structure
 import React from 'react';
 import {Store, Action} from 'redux';
 import styled from 'styled-components';
@@ -144,12 +144,39 @@ const RHSTitle = () => {
     );
 };
 
+// Separate React component for the modal
+const RollCallModal: React.FC<{
+    onClose: () => void;
+}> = ({ onClose }) => {
+    const [isShowHeader, setIsShowHeader] = React.useState(true);
+
+    return (
+        <ModalOverlay onClick={(e) => {
+            if (e.target === e.currentTarget) {
+                onClose();
+            }
+        }}>
+            <ModalContainer>
+                {isShowHeader && (
+                    <ModalHeader>
+                        <ModalTitle>Roll Call</ModalTitle>
+                        <CloseButton onClick={onClose}>
+                            ×
+                        </CloseButton>
+                    </ModalHeader>
+                )}
+                <RollCallInterface onClose={onClose} setIsShowHeader={setIsShowHeader}/>
+            </ModalContainer>
+        </ModalOverlay>
+    );
+};
+
 export default class Plugin {
     postEventListener: PostEventListener = new PostEventListener();
     private rollCallModalElement: HTMLDivElement | null = null;
     private rollCallModalRoot: any = null;
 
-    // Modern modal creation with proper React rendering
+    // Fixed modal creation with proper React component
     private openRollCallModal = () => {
         console.log('🔄 Opening Roll Call modal...');
         
@@ -162,33 +189,19 @@ export default class Plugin {
             this.rollCallModalElement.id = 'rollcall-modal-root';
             document.body.appendChild(this.rollCallModalElement);
 
-            // Create the modal component using React
-            const ModalComponent = () => (
-                <ModalOverlay onClick={(e) => {
-                    if (e.target === e.currentTarget) {
-                        this.closeRollCallModal();
-                    }
-                }}>
-                    <ModalContainer>
-                        <ModalHeader>
-                            <ModalTitle>Roll Call</ModalTitle>
-                            <CloseButton onClick={this.closeRollCallModal}>
-                                ×
-                            </CloseButton>
-                        </ModalHeader>
-                        <RollCallInterface onClose={this.closeRollCallModal} />
-                    </ModalContainer>
-                </ModalOverlay>
-            );
-
             // Use React 18 createRoot if available, otherwise fall back to render
             if (ReactDOM.createRoot) {
                 console.log('🚀 Using React 18 createRoot');
                 this.rollCallModalRoot = ReactDOM.createRoot(this.rollCallModalElement);
-                this.rollCallModalRoot.render(<ModalComponent />);
+                this.rollCallModalRoot.render(
+                    <RollCallModal onClose={this.closeRollCallModal} />
+                );
             } else {
                 console.log('🔧 Using React 17 render');
-                ReactDOM.render(<ModalComponent />, this.rollCallModalElement);
+                ReactDOM.render(
+                    <RollCallModal onClose={this.closeRollCallModal} />, 
+                    this.rollCallModalElement
+                );
                 this.rollCallModalRoot = this.rollCallModalElement;
             }
             

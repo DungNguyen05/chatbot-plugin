@@ -10,6 +10,8 @@ interface RollCallModalManagerProps {
 }
 
 const RollCallModalManager: React.FC<RollCallModalManagerProps> = ({isOpen, onClose}) => {
+    const [isShowHeader, setIsShowHeader] = React.useState(true);
+    
     if (!isOpen) {
         return null;
     }
@@ -46,52 +48,54 @@ const RollCallModalManager: React.FC<RollCallModalManagerProps> = ({isOpen, onCl
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
                 }}
             >
-                <div
-                    style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '16px 24px',
-                        borderBottom: '1px solid rgba(var(--center-channel-color-rgb), 0.16)',
-                    }}
-                >
-                    <h2
+                {isShowHeader && (
+                    <div
                         style={{
-                            margin: 0,
-                            fontSize: '20px',
-                            fontWeight: 600,
-                            color: 'var(--center-channel-color)',
-                        }}
-                    >
-                        Roll Call
-                    </h2>
-                    <button
-                        onClick={onClose}
-                        style={{
-                            background: 'none',
-                            border: 'none',
-                            fontSize: '24px',
-                            cursor: 'pointer',
-                            color: 'var(--center-channel-color)',
-                            padding: 0,
-                            width: '32px',
-                            height: '32px',
                             display: 'flex',
+                            justifyContent: 'space-between',
                             alignItems: 'center',
-                            justifyContent: 'center',
-                            borderRadius: '4px',
-                        }}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = 'rgba(var(--center-channel-color-rgb), 0.08)';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = 'transparent';
+                            padding: '16px 24px',
+                            borderBottom: '1px solid rgba(var(--center-channel-color-rgb), 0.16)',
                         }}
                     >
-                        ×
-                    </button>
-                </div>
-                <RollCallInterface onClose={onClose} />
+                        <h2
+                            style={{
+                                margin: 0,
+                                fontSize: '20px',
+                                fontWeight: 600,
+                                color: 'var(--center-channel-color)',
+                            }}
+                        >
+                            Roll Call
+                        </h2>
+                        <button
+                            onClick={onClose}
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                fontSize: '24px',
+                                cursor: 'pointer',
+                                color: 'var(--center-channel-color)',
+                                padding: 0,
+                                width: '32px',
+                                height: '32px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderRadius: '4px',
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = 'rgba(var(--center-channel-color-rgb), 0.08)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                            }}
+                        >
+                            ×
+                        </button>
+                    </div>
+                )}
+                <RollCallInterface onClose={onClose} setIsShowHeader={setIsShowHeader} />
             </div>
         </div>,
         modalRoot
