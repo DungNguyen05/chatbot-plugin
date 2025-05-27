@@ -9,6 +9,8 @@ import {GlobalState} from '@mattermost/types/store';
 
 //@ts-ignore it exists
 import aiIcon from '../../assets/bot_icon.png';
+//@ts-ignore it exists
+import clipboardIcon from '../../assets/clipboard_icon.png';
 
 import manifest from '@/manifest';
 
@@ -36,6 +38,8 @@ import RollCallInterface from './components/roll_call/roll_call_interface';
 type WebappStore = Store<GlobalState, Action<Record<string, unknown>>>
 
 const StreamingPostWebsocketEvent = 'custom_mattermost-ai_postupdate';
+
+
 
 // Enhanced animations
 const float = keyframes`
@@ -190,6 +194,18 @@ const RollCallIcon = styled.div`
     /* If using FontAwesome */
     &.fa {
         font-size: 22px;
+    }
+    
+    /* NEW: If using image icon */
+    &.image {
+        img {
+            width: 24px;
+            height: 24px;
+            /* Remove the filter to preserve the original image details */
+            opacity: 0.95;
+            /* Optional: Add a subtle white glow to make it stand out on green background */
+            filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+        }
     }
 `;
 
@@ -380,7 +396,9 @@ const RollCallSidebarComponent: React.FC<{
             <PulseRing className="pulse-ring" />
             
             {/* You can choose between emoji or FontAwesome icon */}
-            <RollCallIcon className="emoji">📋</RollCallIcon>
+            <RollCallIcon className="image">
+                <img src={clipboardIcon} alt="Roll Call" />
+            </RollCallIcon>
             {/* Alternative FontAwesome icon (uncomment if preferred) */}
             {/* <RollCallIcon className="fa fa-calendar-check-o" /> */}
             
@@ -472,7 +490,9 @@ const EnhancedRollCallSidebarComponent: React.FC<{
                 }}
             >
                 <PulseRing className="pulse-ring" />
-                <RollCallIcon className="emoji">📋</RollCallIcon>
+                <RollCallIcon className="image">
+                    <img src={clipboardIcon} alt="Roll Call" />
+                </RollCallIcon>
                 
                 {hasNotification && (
                     <NotificationBadge title="Pending attendance action">
