@@ -249,7 +249,7 @@ type ToolBufferElement struct {
 	args strings.Builder
 }
 
-func (s *OpenAI) streamResultToChannels(request openaiClient.ChatCompletionRequest, llmContext *llm.Context, output chan<- string, errChan chan<- error) {
+func (s *OpenAI) streamResultToChannels(request openaiClient.ChatCompletionRequest, llmContext *llm.Context, output chan<- llm.TextStreamEvent) {
 	request.Stream = true
 
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -279,9 +279,15 @@ func (s *OpenAI) streamResultToChannels(request openaiClient.ChatCompletionReque
 	stream, err := s.client.CreateChatCompletionStream(ctx, request)
 	if err != nil {
 		if ctxErr := context.Cause(ctx); ctxErr != nil {
-			errChan <- ctxErr
+			output <- llm.TextStreamEvent{
+				Type:  llm.EventTypeError,
+				Value: ctxErr,
+			}
 		} else {
-			errChan <- err
+			output <- llm.TextStreamEvent{
+				Type:  llm.EventTypeError,
+				Value: err,
+			}
 		}
 		return
 	}
@@ -293,13 +299,23 @@ func (s *OpenAI) streamResultToChannels(request openaiClient.ChatCompletionReque
 	for {
 		response, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
+			output <- llm.TextStreamEvent{
+				Type:  llm.EventTypeEnd,
+				Value: nil,
+			}
 			return
 		}
 		if err != nil {
 			if ctxErr := context.Cause(ctx); ctxErr != nil {
-				errChan <- ctxErr
+				output <- llm.TextStreamEvent{
+					Type:  llm.EventTypeError,
+					Value: ctxErr,
+				}
 			} else {
-				errChan <- err
+				output <- llm.TextStreamEvent{
+					Type:  llm.EventTypeError,
+					Value: err,
+				}
 			}
 			return
 		}
@@ -316,6 +332,10 @@ func (s *OpenAI) streamResultToChannels(request openaiClient.ChatCompletionReque
 		case "":
 			// Not done yet, keep going
 		case openaiClient.FinishReasonStop:
+			output <- llm.TextStreamEvent{
+				Type:  llm.EventTypeEnd,
+				Value: nil,
+			}
 			return
 		case openaiClient.FinishReasonToolCalls:
 			// Verify OpenAI functions are not recursing too deep.
@@ -328,7 +348,10 @@ func (s *OpenAI) streamResultToChannels(request openaiClient.ChatCompletionReque
 				}
 			}
 			if numFunctionCalls > MaxFunctionCalls {
-				errChan <- errors.New("too many function calls")
+				output <- llm.TextStreamEvent{
+					Type:  llm.EventTypeError,
+					Value: errors.New("too many function calls"),
+				}
 				return
 			}
 
@@ -374,7 +397,7 @@ func (s *OpenAI) streamResultToChannels(request openaiClient.ChatCompletionReque
 			}
 
 			// Call ourselves again with the result of the function call
-			s.streamResultToChannels(request, llmContext, output, errChan)
+			s.streamResultToChannels(request, llmContext, output)
 			return
 		default:
 			fmt.Printf("Unknown finish reason: %s", response.Choices[0].FinishReason)
@@ -401,20 +424,23 @@ func (s *OpenAI) streamResultToChannels(request openaiClient.ChatCompletionReque
 			}
 		}
 
-		output <- response.Choices[0].Delta.Content
+		if response.Choices[0].Delta.Content != "" {
+			output <- llm.TextStreamEvent{
+				Type:  llm.EventTypeText,
+				Value: response.Choices[0].Delta.Content,
+			}
+		}
 	}
 }
 
 func (s *OpenAI) streamResult(request openaiClient.ChatCompletionRequest, llmContext *llm.Context) (*llm.TextStreamResult, error) {
-	output := make(chan string)
-	errChan := make(chan error)
+	eventStream := make(chan llm.TextStreamEvent)
 	go func() {
-		defer close(output)
-		defer close(errChan)
-		s.streamResultToChannels(request, llmContext, output, errChan)
+		defer close(eventStream)
+		s.streamResultToChannels(request, llmContext, eventStream)
 	}()
 
-	return &llm.TextStreamResult{Stream: output, Err: errChan}, nil
+	return &llm.TextStreamResult{Stream: eventStream}, nil
 }
 
 func (s *OpenAI) GetDefaultConfig() llm.LanguageModelConfig {
@@ -463,7 +489,7 @@ func (s *OpenAI) ChatCompletionNoStream(request llm.CompletionRequest, opts ...l
 	if err != nil {
 		return "", err
 	}
-	return result.ReadAll(), nil
+	return result.ReadAll()
 }
 
 func (s *OpenAI) Transcribe(file io.Reader) (*subtitles.Subtitles, error) {

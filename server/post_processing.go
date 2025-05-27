@@ -273,42 +273,58 @@ func (p *Plugin) streamResultToPost(ctx context.Context, stream *llm.TextStreamR
 
 	for {
 		select {
-		case next := <-stream.Stream:
-			post.Message += next
-			p.sendPostStreamingUpdateEvent(post, post.Message)
-		case err, ok := <-stream.Err:
-			// Stream has closed cleanly
+		case event, ok := <-stream.Stream:
 			if !ok {
+				// Stream closed
 				if strings.TrimSpace(post.Message) == "" {
 					p.API.LogError("LLM closed stream with no result")
 					post.Message = T("copilot.stream_to_post_llm_not_return", "Sorry! The LLM did not return a result.")
 					p.sendPostStreamingUpdateEvent(post, post.Message)
 				}
-				if err = p.pluginAPI.Post.UpdatePost(post); err != nil {
+				if err := p.pluginAPI.Post.UpdatePost(post); err != nil {
 					p.API.LogError("Streaming failed to update post", "error", err)
-					return
 				}
 				return
 			}
-			// Handle partial results
-			if strings.TrimSpace(post.Message) == "" {
-				post.Message = ""
-			} else {
-				post.Message += "\n\n"
-			}
-			p.API.LogError("Streaming result to post failed partway", "error", err)
-			post.Message = T("copilot.stream_to_post_access_llm_error", "Sorry! An error occurred while accessing the LLM. See server logs for details.")
 
-			if err := p.pluginAPI.Post.UpdatePost(post); err != nil {
-				p.API.LogError("Error recovering from streaming error", "error", err)
+			switch event.Type {
+			case llm.EventTypeText:
+				if textChunk, ok := event.Value.(string); ok {
+					post.Message += textChunk
+					p.sendPostStreamingUpdateEvent(post, post.Message)
+				}
+			case llm.EventTypeEnd:
+				if strings.TrimSpace(post.Message) == "" {
+					p.API.LogError("LLM closed stream with no result")
+					post.Message = T("copilot.stream_to_post_llm_not_return", "Sorry! The LLM did not return a result.")
+					p.sendPostStreamingUpdateEvent(post, post.Message)
+				}
+				if err := p.pluginAPI.Post.UpdatePost(post); err != nil {
+					p.API.LogError("Streaming failed to update post", "error", err)
+				}
 				return
+			case llm.EventTypeError:
+				if err, ok := event.Value.(error); ok {
+					p.API.LogError("Streaming result to post failed", "error", err)
+					if strings.TrimSpace(post.Message) == "" {
+						post.Message = ""
+					} else {
+						post.Message += "\n\n"
+					}
+					post.Message += T("copilot.stream_to_post_access_llm_error", "Sorry! An error occurred while accessing the LLM. See server logs for details.")
+					if err := p.pluginAPI.Post.UpdatePost(post); err != nil {
+						p.API.LogError("Error recovering from streaming error", "error", err)
+					}
+					p.sendPostStreamingUpdateEvent(post, post.Message)
+				}
+				return
+			case llm.EventTypeToolCalls:
+				// Handle tool calls if needed in the future
+				continue
 			}
-			p.sendPostStreamingUpdateEvent(post, post.Message)
-			return
 		case <-ctx.Done():
 			if err := p.pluginAPI.Post.UpdatePost(post); err != nil {
 				p.API.LogError("Error updating post on stop signaled", "error", err)
-				return
 			}
 			p.sendPostStreamingControlEvent(post, PostStreamingControlCancel)
 			return

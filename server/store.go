@@ -23,8 +23,17 @@ func (p *Plugin) SetupDB() error {
 	}
 	p.db = sqlx.NewDb(origDB, p.pluginAPI.Store.DriverName())
 
-	// Use the appropriate placeholder format - MySQL uses question marks
-	builder := sq.StatementBuilder.PlaceholderFormat(sq.Question)
+	// Use the appropriate placeholder format based on database driver
+	driverName := p.pluginAPI.Store.DriverName()
+	var builder sq.StatementBuilderType
+
+	if driverName == "postgres" {
+		builder = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+	} else {
+		// MySQL uses question marks
+		builder = sq.StatementBuilder.PlaceholderFormat(sq.Question)
+	}
+
 	p.builder = builder
 
 	return p.SetupTables()
@@ -53,14 +62,29 @@ func (p *Plugin) execBuilder(b builder) (sql.Result, error) {
 }
 
 func (p *Plugin) SetupTables() error {
-	// MySQL version of the table
-	query := `
-		CREATE TABLE IF NOT EXISTS LLM_PostMeta (
-			RootPostID VARCHAR(26) NOT NULL PRIMARY KEY,
-			Title TEXT NOT NULL,
-			CONSTRAINT FK_LLM_PostMeta_Posts FOREIGN KEY (RootPostID) REFERENCES Posts(Id) ON DELETE CASCADE
-		);
-	`
+	driverName := p.pluginAPI.Store.DriverName()
+
+	var query string
+
+	if driverName == "postgres" {
+		// PostgreSQL version
+		query = `
+			CREATE TABLE IF NOT EXISTS LLM_PostMeta (
+				RootPostID VARCHAR(26) NOT NULL PRIMARY KEY,
+				Title TEXT NOT NULL,
+				CONSTRAINT FK_LLM_PostMeta_Posts FOREIGN KEY (RootPostID) REFERENCES Posts(Id) ON DELETE CASCADE
+			);
+		`
+	} else {
+		// MySQL version
+		query = `
+			CREATE TABLE IF NOT EXISTS LLM_PostMeta (
+				RootPostID VARCHAR(26) NOT NULL PRIMARY KEY,
+				Title TEXT NOT NULL,
+				CONSTRAINT FK_LLM_PostMeta_Posts FOREIGN KEY (RootPostID) REFERENCES Posts(Id) ON DELETE CASCADE
+			);
+		`
+	}
 
 	if _, err := p.db.Exec(query); err != nil {
 		return fmt.Errorf("can't create llm titles table: %w", err)
@@ -78,10 +102,26 @@ func (p *Plugin) saveTitleAsync(threadID, title string) {
 }
 
 func (p *Plugin) saveTitle(threadID, title string) error {
-	_, err := p.execBuilder(p.builder.Insert("LLM_PostMeta").
-		Columns("RootPostID", "Title").
-		Values(threadID, title).
-		Suffix("ON DUPLICATE KEY UPDATE Title = ?", title))
+	// Detect database type
+	driverName := p.pluginAPI.Store.DriverName()
+
+	var query sq.InsertBuilder
+
+	if driverName == "postgres" {
+		// PostgreSQL syntax
+		query = p.builder.Insert("LLM_PostMeta").
+			Columns("RootPostID", "Title").
+			Values(threadID, title).
+			Suffix("ON CONFLICT (RootPostID) DO UPDATE SET Title = EXCLUDED.Title")
+	} else {
+		// MySQL syntax
+		query = p.builder.Insert("LLM_PostMeta").
+			Columns("RootPostID", "Title").
+			Values(threadID, title).
+			Suffix("ON DUPLICATE KEY UPDATE Title = ?", title)
+	}
+
+	_, err := p.execBuilder(query)
 	return err
 }
 

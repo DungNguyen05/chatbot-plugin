@@ -26,8 +26,7 @@ const (
 type messageState struct {
 	messages []anthropicSDK.MessageParam
 	system   string
-	output   chan<- string
-	errChan  chan<- error
+	output   chan<- llm.TextStreamEvent // Changed from chan<- string
 	depth    int
 	config   llm.LanguageModelConfig
 	tools    []llm.Tool
@@ -195,11 +194,14 @@ func (a *Anthropic) streamChatWithTools(state messageState) error {
 			return fmt.Errorf("error accumulating message: %w", err)
 		}
 
-		// Stream text content immediately
+		// Stream text content immediately using events
 		switch delta := event.Delta.(type) { // nolint: gocritic
 		case anthropicSDK.ContentBlockDeltaEventDelta:
 			if delta.Text != "" {
-				state.output <- delta.Text
+				state.output <- llm.TextStreamEvent{
+					Type:  llm.EventTypeText,
+					Value: delta.Text,
+				}
 			}
 		}
 	}
@@ -239,7 +241,6 @@ func (a *Anthropic) streamChatWithTools(state messageState) error {
 			messages: state.messages,
 			system:   state.system,
 			output:   state.output,
-			errChan:  state.errChan,
 			depth:    state.depth + 1,
 			config:   state.config,
 			tools:    state.tools,
@@ -259,18 +260,14 @@ func (a *Anthropic) streamChatWithTools(state messageState) error {
 func (a *Anthropic) ChatCompletion(request llm.CompletionRequest, opts ...llm.LanguageModelOption) (*llm.TextStreamResult, error) {
 	a.metricsService.IncrementLLMRequests()
 
-	output := make(chan string)
-	errChan := make(chan error)
-
+	eventStream := make(chan llm.TextStreamEvent)
 	cfg := a.createConfig(opts)
-
 	system, messages := conversationToMessages(request.Posts)
 
 	initialState := messageState{
 		messages: messages,
 		system:   system,
-		output:   output,
-		errChan:  errChan,
+		output:   eventStream, // Now using event stream
 		depth:    0,
 		config:   cfg,
 		context:  request.Context,
@@ -282,15 +279,21 @@ func (a *Anthropic) ChatCompletion(request llm.CompletionRequest, opts ...llm.La
 	}
 
 	go func() {
-		defer close(output)
-		defer close(errChan)
-
+		defer close(eventStream)
 		if err := a.streamChatWithTools(initialState); err != nil {
-			errChan <- err
+			eventStream <- llm.TextStreamEvent{
+				Type:  llm.EventTypeError,
+				Value: err,
+			}
+		} else {
+			eventStream <- llm.TextStreamEvent{
+				Type:  llm.EventTypeEnd,
+				Value: nil,
+			}
 		}
 	}()
 
-	return &llm.TextStreamResult{Stream: output, Err: errChan}, nil
+	return &llm.TextStreamResult{Stream: eventStream}, nil
 }
 
 func (a *Anthropic) ChatCompletionNoStream(request llm.CompletionRequest, opts ...llm.LanguageModelOption) (string, error) {
@@ -299,7 +302,8 @@ func (a *Anthropic) ChatCompletionNoStream(request llm.CompletionRequest, opts .
 	if err != nil {
 		return "", err
 	}
-	return result.ReadAll(), nil
+	text, readErr := result.ReadAll() // ReadAll() returns (string, error)
+	return text, readErr
 }
 
 func (a *Anthropic) CountTokens(text string) int {
