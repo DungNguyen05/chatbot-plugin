@@ -1,124 +1,230 @@
 import React, {useState} from 'react';
-import styled from 'styled-components';
+import styled, { keyframes } from 'styled-components';
 
 import {doCheckIn, doCheckOut, doAbsent} from '../../client';
+
+// Keyframes for animations
+const slideInUp = keyframes`
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+`;
+
+const pulseGlow = keyframes`
+    0%, 100% {
+        box-shadow: 0 0 5px rgba(76, 175, 80, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(76, 175, 80, 0.6), 0 0 30px rgba(76, 175, 80, 0.4);
+    }
+`;
+
+const shimmer = keyframes`
+    0% {
+        background-position: -200px 0;
+    }
+    100% {
+        background-position: calc(200px + 100%) 0;
+    }
+`;
 
 const Container = styled.div<{show: boolean}>`
     display: ${props => props.show ? 'flex' : 'none'};
     flex-direction: column;
-    padding: 32px;
-    gap: 24px;
-    max-width: 500px;
+    padding: 40px;
+    gap: 28px;
+    max-width: 550px;
+    width: 100%;
     margin: 0 auto;
-    background: var(--center-channel-bg);
-    border-radius: 8px;
+    background: linear-gradient(135deg, 
+        var(--center-channel-bg) 0%, 
+        rgba(var(--center-channel-color-rgb), 0.02) 100%);
+    border-radius: 16px;
     color: var(--center-channel-color);
+    position: relative;
+    animation: ${slideInUp} 0.3s ease-out;
+    box-shadow: 
+        0 20px 60px rgba(0, 0, 0, 0.1),
+        0 8px 24px rgba(0, 0, 0, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(var(--center-channel-color-rgb), 0.08);
+    backdrop-filter: blur(20px);
+`;
+
+const HeaderSection = styled.div`
+    text-align: center;
     position: relative;
 `;
 
 const Title = styled.h2`
-    font-size: 22px;
-    font-weight: 600;
-    margin-bottom: 8px;
-    text-align: center;
-    color: var(--center-channel-color);
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    background: linear-gradient(135deg, var(--center-channel-color), rgba(var(--center-channel-color-rgb), 0.7));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
     font-family: var(--font-family);
-    letter-spacing: -0.025em;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
 `;
 
 const Subtitle = styled.p`
-    font-size: 14px;
-    color: rgba(var(--center-channel-color-rgb), 0.72);
-    text-align: center;
-    margin: 0 0 16px 0;
+    font-size: 16px;
+    color: rgba(var(--center-channel-color-rgb), 0.65);
+    margin: 0 0 8px 0;
     font-weight: 400;
+    line-height: 1.4;
+`;
+
+const DateBadge = styled.div`
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: rgba(var(--center-channel-color-rgb), 0.06);
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 500;
+    color: rgba(var(--center-channel-color-rgb), 0.8);
+    border: 1px solid rgba(var(--center-channel-color-rgb), 0.1);
+    margin-top: 12px;
 `;
 
 const ButtonGrid = styled.div`
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-bottom: 8px;
+    gap: 20px;
+    margin-bottom: 12px;
     
     @media (max-width: 480px) {
         grid-template-columns: 1fr;
+        gap: 16px;
     }
 `;
 
 const ActionButton = styled.button`
-    padding: 12px 20px;
+    padding: 18px 24px;
     border: none;
-    border-radius: 4px;
+    border-radius: 12px;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 15px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    transition: all 0.15s ease-out;
-    min-height: 40px;
-    background: rgba(var(--center-channel-color-rgb), 0.08);
-    color: rgba(var(--center-channel-color-rgb), 0.72);
+    gap: 10px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    min-height: 56px;
+    background: rgba(var(--center-channel-color-rgb), 0.04);
+    color: rgba(var(--center-channel-color-rgb), 0.8);
     position: relative;
     overflow: hidden;
+    border: 1px solid rgba(var(--center-channel-color-rgb), 0.12);
+    
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(255, 255, 255, 0.1),
+            transparent
+        );
+        transition: left 0.5s;
+    }
     
     &:disabled {
-        opacity: 0.32;
+        opacity: 0.4;
         cursor: not-allowed;
         transform: none !important;
     }
     
     &:not(:disabled):hover {
-        background: rgba(var(--center-channel-color-rgb), 0.12);
-        color: rgba(var(--center-channel-color-rgb), 0.80);
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        border-color: rgba(var(--center-channel-color-rgb), 0.2);
+        
+        &::before {
+            left: 100%;
+        }
     }
     
     &:not(:disabled):active {
-        transform: translateY(0);
+        transform: translateY(-1px);
         transition: all 0.1s ease-out;
     }
 `;
 
 const CheckInButton = styled(ActionButton)`
-    background: var(--online-indicator);
-    color: var(--button-color);
+    background: linear-gradient(135deg, #4CAF50, #45a049);
+    color: white;
+    border: 1px solid #45a049;
     
     &:hover:not(:disabled) {
-        background: rgba(var(--online-indicator-rgb), 0.88);
-        color: var(--button-color);
+        background: linear-gradient(135deg, #45a049, #3d8b40);
+        box-shadow: 0 8px 25px rgba(76, 175, 80, 0.3);
+        animation: ${pulseGlow} 2s infinite;
     }
     
     &:active:not(:disabled) {
-        background: rgba(var(--online-indicator-rgb), 0.92);
+        background: linear-gradient(135deg, #3d8b40, #45a049);
     }
 `;
 
 const CheckOutButton = styled(ActionButton)`
-    background: var(--button-bg);
-    color: var(--button-color);
+    background: linear-gradient(135deg, #2196F3, #1976D2);
+    color: white;
+    border: 1px solid #1976D2;
     
     &:hover:not(:disabled) {
-        background: rgba(var(--button-bg-rgb), 0.88);
-        color: var(--button-color);
+        background: linear-gradient(135deg, #1976D2, #1565C0);
+        box-shadow: 0 8px 25px rgba(33, 150, 243, 0.3);
     }
     
     &:active:not(:disabled) {
-        background: rgba(var(--button-bg-rgb), 0.92);
+        background: linear-gradient(135deg, #1565C0, #1976D2);
     }
 `;
 
 const AbsentButton = styled(ActionButton)`
     background: transparent;
-    color: var(--error-text);
-    border: 2px solid var(--error-text);
+    color: #f44336;
+    border: 2px solid #f44336;
     grid-column: 1 / -1;
+    position: relative;
+    
+    &::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(135deg, #f44336, #d32f2f);
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        border-radius: 10px;
+        z-index: -1;
+    }
     
     &:hover:not(:disabled) {
-        background: var(--error-text);
-        color: var(--button-color);
+        color: white;
+        border-color: #d32f2f;
+        box-shadow: 0 8px 25px rgba(244, 67, 54, 0.3);
+        
+        &::after {
+            opacity: 1;
+        }
     }
 `;
 
@@ -126,62 +232,59 @@ const AbsentModal = styled.div<{show: boolean}>`
     display: ${props => props.show ? 'flex' : 'none'};
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.64);
-    backdrop-filter: blur(8px);
+    background-color: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(12px);
     justify-content: center;
     align-items: center;
     z-index: 1000;
+    animation: ${slideInUp} 0.2s ease-out;
 `;
 
 const ModalContent = styled.div`
     background: var(--center-channel-bg);
-    padding: 32px;
-    border-radius: 8px;
-    min-width: 400px;
+    padding: 40px;
+    border-radius: 16px;
+    min-width: 450px;
     max-width: 90%;
-    box-shadow: var(--elevation-8);
+    box-shadow: 
+        0 25px 60px rgba(0, 0, 0, 0.2),
+        0 8px 24px rgba(0, 0, 0, 0.1);
     transform: scale(1);
-    animation: modalAppear 0.2s ease-out;
-    
-    @keyframes modalAppear {
-        from {
-            transform: scale(0.95);
-            opacity: 0;
-        }
-        to {
-            transform: scale(1);
-            opacity: 1;
-        }
-    }
+    animation: ${slideInUp} 0.3s ease-out;
+    border: 1px solid rgba(var(--center-channel-color-rgb), 0.12);
+    position: relative;
 `;
 
 const ModalTitle = styled.h3`
-    margin-bottom: 20px;
-    font-size: 20px;
+    margin-bottom: 24px;
+    font-size: 24px;
     font-weight: 600;
     color: var(--center-channel-color);
     font-family: var(--font-family);
-    letter-spacing: -0.025em;
+    letter-spacing: -0.02em;
+    text-align: center;
 `;
 
 const ReasonInput = styled.textarea`
     width: 100%;
-    min-height: 100px;
-    padding: 10px 16px;
-    border: 1px solid rgba(var(--center-channel-color-rgb), 0.16);
-    border-radius: 4px;
+    min-height: 120px;
+    padding: 16px 20px;
+    border: 2px solid rgba(var(--center-channel-color-rgb), 0.12);
+    border-radius: 12px;
     resize: vertical;
     font-family: inherit;
-    margin-bottom: 20px;
-    font-size: 14px;
+    margin-bottom: 24px;
+    font-size: 15px;
+    line-height: 1.5;
     background: var(--center-channel-bg);
     color: var(--center-channel-color);
-    transition: border-color 0.15s ease-out;
+    transition: all 0.2s ease;
     
     &:focus {
         outline: none;
-        border-color: var(--button-bg);
-        box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075), 0 0 8px rgba(var(--button-bg-rgb), 0.3);
+        border-color: #f44336;
+        box-shadow: 0 0 0 3px rgba(244, 67, 54, 0.1);
+        background: rgba(var(--center-channel-color-rgb), 0.02);
     }
     
     &::placeholder {
@@ -191,43 +294,47 @@ const ReasonInput = styled.textarea`
 
 const ModalActions = styled.div`
     display: flex;
-    gap: 12px;
+    gap: 16px;
     justify-content: flex-end;
 `;
 
 const SecondaryButton = styled.button`
-    padding: 10px 20px;
-    border: 1px solid rgba(var(--center-channel-color-rgb), 0.24);
-    border-radius: 4px;
+    padding: 12px 24px;
+    border: 2px solid rgba(var(--center-channel-color-rgb), 0.2);
+    border-radius: 8px;
     background: var(--center-channel-bg);
     color: var(--center-channel-color);
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s ease-out;
+    transition: all 0.2s ease;
+    font-size: 14px;
     
     &:hover {
-        border-color: rgba(var(--center-channel-color-rgb), 0.32);
-        background: rgba(var(--center-channel-color-rgb), 0.08);
+        border-color: rgba(var(--center-channel-color-rgb), 0.3);
+        background: rgba(var(--center-channel-color-rgb), 0.04);
+        transform: translateY(-1px);
     }
 `;
 
 const PrimaryButton = styled.button`
-    padding: 10px 20px;
+    padding: 12px 24px;
     border: none;
-    border-radius: 4px;
-    background: var(--error-text);
-    color: var(--button-color);
+    border-radius: 8px;
+    background: linear-gradient(135deg, #f44336, #d32f2f);
+    color: white;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s ease-out;
+    transition: all 0.2s ease;
+    font-size: 14px;
     
     &:hover:not(:disabled) {
-        background: rgba(var(--error-text-color-rgb), 0.88);
+        background: linear-gradient(135deg, #d32f2f, #c62828);
         transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
     }
     
     &:disabled {
-        opacity: 0.32;
+        opacity: 0.4;
         cursor: not-allowed;
         transform: none !important;
     }
@@ -235,19 +342,30 @@ const PrimaryButton = styled.button`
 
 const StatusMessage = styled.div<{type: 'success' | 'error'}>`
     padding: 16px 20px;
-    border-radius: 4px;
-    margin-bottom: 20px;
-    background-color: ${props => props.type === 'success' ? 'rgba(var(--online-indicator-rgb), 0.12)' : 'rgba(var(--error-text-color-rgb), 0.12)'};
-    color: ${props => props.type === 'success' ? 'var(--online-indicator)' : 'var(--error-text)'};
-    border: 1px solid ${props => props.type === 'success' ? 'rgba(var(--online-indicator-rgb), 0.24)' : 'rgba(var(--error-text-color-rgb), 0.24)'};
+    border-radius: 12px;
+    margin-bottom: 24px;
+    background: ${props => props.type === 'success' 
+        ? 'linear-gradient(135deg, rgba(76, 175, 80, 0.1), rgba(76, 175, 80, 0.05))' 
+        : 'linear-gradient(135deg, rgba(244, 67, 54, 0.1), rgba(244, 67, 54, 0.05))'};
+    color: ${props => props.type === 'success' ? '#2e7d32' : '#c62828'};
+    border: 1px solid ${props => props.type === 'success' ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)'};
     font-size: 14px;
     font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    
+    &::before {
+        content: ${props => props.type === 'success' ? '"✓"' : '"⚠"'};
+        font-size: 16px;
+        font-weight: bold;
+    }
 `;
 
 const LoadingSpinner = styled.div`
     display: inline-block;
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     border: 2px solid transparent;
     border-top: 2px solid currentColor;
     border-radius: 50%;
@@ -261,31 +379,38 @@ const LoadingSpinner = styled.div`
 
 const CloseButton = styled.button`
     position: absolute;
-    top: 16px;
-    right: 16px;
-    background: none;
-    border: none;
-    font-size: 24px;
+    top: 20px;
+    right: 20px;
+    background: rgba(var(--center-channel-color-rgb), 0.05);
+    border: 1px solid rgba(var(--center-channel-color-rgb), 0.1);
+    font-size: 20px;
     cursor: pointer;
-    color: rgba(var(--center-channel-color-rgb), 0.56);
-    padding: 4px;
-    width: 32px;
-    height: 32px;
+    color: rgba(var(--center-channel-color-rgb), 0.6);
+    padding: 8px;
+    width: 36px;
+    height: 36px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
-    transition: all 0.15s ease-out;
+    border-radius: 8px;
+    transition: all 0.2s ease;
     z-index: 10;
     
     &:hover {
-        background-color: rgba(var(--center-channel-color-rgb), 0.08);
-        color: rgba(var(--center-channel-color-rgb), 0.72);
+        background: rgba(var(--center-channel-color-rgb), 0.1);
+        color: rgba(var(--center-channel-color-rgb), 0.8);
+        transform: scale(1.05);
     }
     
     &:active {
-        background-color: rgba(var(--center-channel-color-rgb), 0.16);
+        transform: scale(0.95);
     }
+`;
+
+const IconWrapper = styled.span`
+    font-size: 18px;
+    display: flex;
+    align-items: center;
 `;
 
 interface RollCallInterfaceProps {
@@ -298,6 +423,15 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
     const [loading, setLoading] = useState(false);
     const [statusMessage, setStatusMessage] = useState<{type: 'success' | 'error', message: string} | null>(null);
     const [requestTimeout, setRequestTimeout] = useState<NodeJS.Timeout | null>(null);
+
+    const getCurrentDate = () => {
+        return new Date().toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+    };
 
     const clearRequestTimeout = () => {
         if (requestTimeout) {
@@ -329,7 +463,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
             });
             setTimeout(() => {
                 onClose?.();
-            }, 1000);
+            }, 1500);
         } catch (error: any) {
             clearTimeout(timeout);
             const errorMessage = error?.message || 'An error occurred. Please try again.';
@@ -343,8 +477,8 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
         }
     };
 
-    const handleCheckIn = () => handleApiCall(doCheckIn, 'Successfully checked in!');
-    const handleCheckOut = () => handleApiCall(doCheckOut, 'Successfully checked out!');
+    const handleCheckIn = () => handleApiCall(doCheckIn, 'Welcome! You have successfully checked in.');
+    const handleCheckOut = () => handleApiCall(doCheckOut, 'Have a great day! You have successfully checked out.');
 
     const handleAbsentClick = () => {
         setShowAbsentModal(true);
@@ -361,14 +495,14 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
         if (!absentReason.trim()) {
             setStatusMessage({
                 type: 'error',
-                message: 'Please provide a reason for absence.'
+                message: 'Please provide a reason for your absence.'
             });
             return;
         }
 
         await handleApiCall(
             () => doAbsent(absentReason.trim()),
-            'Absence recorded successfully!'
+            'Your absence has been recorded. Take care!'
         );
         
         setShowAbsentModal(false);
@@ -387,7 +521,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
 
     const handleTextareaKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault(); // Prevent new line
+            event.preventDefault();
             if (absentReason.trim() && !loading) {
                 handleAbsentSubmit();
             }
@@ -407,14 +541,20 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
                 <CloseButton 
                     onClick={onClose}
                     aria-label="Close Roll Call modal"
+                    title="Close (Esc)"
                 >
-                    ×
+                    ✕
                 </CloseButton>
 
-                <div>
-                    <Title id="rollcall-title">Roll Call</Title>
-                    <Subtitle id="rollcall-description">Record your attendance for today</Subtitle>
-                </div>
+                <HeaderSection>
+                    <Title id="rollcall-title">📋 Roll Call</Title>
+                    <Subtitle id="rollcall-description">
+                        Track your attendance and manage your work schedule
+                    </Subtitle>
+                    <DateBadge>
+                        📅 {getCurrentDate()}
+                    </DateBadge>
+                </HeaderSection>
                 
                 {statusMessage && (
                     <StatusMessage type={statusMessage.type}>
@@ -427,6 +567,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
                         onClick={handleCheckIn}
                         disabled={loading}
                         aria-label="Check in for work today"
+                        title="Mark your arrival for today"
                     >
                         {loading ? <LoadingSpinner /> : null}
                         Check In
@@ -436,6 +577,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
                         onClick={handleCheckOut}
                         disabled={loading}
                         aria-label="Check out from work today"
+                        title="Mark your departure for today"
                     >
                         {loading ? <LoadingSpinner /> : null}
                         Check Out
@@ -445,6 +587,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
                         onClick={handleAbsentClick}
                         disabled={loading}
                         aria-label="Report absence with reason"
+                        title="Report that you'll be absent today"
                     >
                         Report Absence
                     </AbsentButton>
@@ -458,7 +601,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
                     role="dialog"
                     aria-labelledby="absent-modal-title"
                 >
-                    <ModalTitle id="absent-modal-title">Report Absence</ModalTitle>
+                    <ModalTitle id="absent-modal-title">📝 Report Absence</ModalTitle>
                     
                     {statusMessage && (
                         <StatusMessage type={statusMessage.type}>
@@ -467,7 +610,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
                     )}
                     
                     <ReasonInput
-                        placeholder="Please provide a reason for your absence... "
+                        placeholder="Please provide a detailed reason for your absence (e.g., sick leave, personal emergency, medical appointment)..."
                         value={absentReason}
                         onChange={(e) => setAbsentReason(e.target.value)}
                         onKeyDown={handleTextareaKeyDown}
@@ -490,7 +633,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
                             aria-label="Submit absence report"
                         >
                             {loading ? <LoadingSpinner /> : null}
-                            Submit
+                            Submit Report
                         </PrimaryButton>
                     </ModalActions>
                 </ModalContent>
