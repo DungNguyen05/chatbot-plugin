@@ -443,8 +443,8 @@ const translations = {
         'rollcall.checkin.title': 'Check In',
         'rollcall.checkout.title': 'Check Out',
         'rollcall.absent.title': 'Báo Vắng Mặt',
-        'rollcall.checkin.tooltip': 'Đánh dấu giờ đến hôm nay',
-        'rollcall.checkout.tooltip': 'Đánh dấu giờ về hôm nay',
+        'rollcall.checkin.tooltip': 'Đánh dấu check in hôm nay',
+        'rollcall.checkout.tooltip': 'Đánh dấu check out hôm nay',
         'rollcall.absent.tooltip': 'Báo cáo vắng mặt hôm nay',
         'rollcall.close': 'Đóng',
         'rollcall.close.tooltip': 'Đóng (Esc)',
@@ -454,8 +454,8 @@ const translations = {
         'rollcall.absent.reason.label': 'Lý Do Vắng Mặt',
         'rollcall.absent.reason.required': 'Vui lòng cung cấp lý do vắng mặt.',
         'rollcall.checkin.success': 'Chào mừng! Bạn đã check in thành công.',
-        'rollcall.checkout.success': 'Chúc bạn một ngày tốt lành! Bạn đã check out thành công.',
-        'rollcall.absent.success': 'Thông tin vắng mặt đã được ghi nhận. Hãy chăm sóc sức khỏe!',
+        'rollcall.checkout.success': 'Bạn đã check out thành công. Chúc bạn một ngày tốt lành!',
+        'rollcall.absent.success': 'Thông tin vắng mặt đã được ghi nhận.',
         'rollcall.error': 'Đã xảy ra lỗi. Vui lòng thử lại.',
         'rollcall.timeout': 'Yêu cầu đã hết thời gian chờ. Vui lòng thử lại.'
     }
