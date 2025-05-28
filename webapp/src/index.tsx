@@ -794,7 +794,7 @@ export default class Plugin {
 
         registry.registerAdminConsoleCustomSetting('Config', Config);
         
-        // Register AI Copilot channel header button
+        // Register AI Copilot channel header button (TOP OF INTERFACE)
         if (rhs) {
             registry.registerChannelHeaderButtonAction(
                 <IconAIContainer src={aiIcon}/>, 
@@ -806,18 +806,21 @@ export default class Plugin {
             );
         }
 
-        // Enhanced Roll Call sidebar component registration
-        console.log('📋 Registering enhanced Roll Call sidebar component...');
+        // IMPORTANT: Roll Call is NOT registered as a channel header button
+        // This ensures it doesn't appear at the top of the interface
+
+        // Enhanced Roll Call sidebar component registration (BOTTOM POSITIONING)
+        console.log('📋 Registering enhanced Roll Call sidebar component at bottom...');
         
         // Check if user needs to check in (this could be determined by checking last check-in time)
         const hasNotification = this.shouldShowNotification();
         
-        // Register as enhanced fixed positioning component with better styling
+        // Register as enhanced fixed positioning component with bottom positioning
         registry.registerGlobalComponent(() => (
             <div style={{
                 position: 'fixed',
                 left: '16px',
-                bottom: '100px',       // Moved up slightly for better visibility
+                bottom: '100px',       // This positions it at the bottom (adjust as needed)
                 zIndex: 999,           // High but not conflicting with modals
                 pointerEvents: 'auto'
             }}>
