@@ -34,5 +34,41 @@
   {
     "id": "copilot.summarize_transcription",
     "translation": "Claro, resumiré esta transcripción: %s/_redirect/pl/%s\n"
+  },
+  {
+    "id": "rollcall.checkin.success",
+    "translation": "✅ Su entrada ha sido registrada en el sistema ERP a las **%s**!"
+  },
+  {
+    "id": "rollcall.checkout.success",
+    "translation": "✅ Su salida ha sido registrada en el sistema ERP a las **%s**!"
+  },
+  {
+    "id": "rollcall.absent.success", 
+    "translation": "📝 Su ausencia ha been registrada para **%s** con razón: \"%s\""
+  },
+  {
+    "id": "rollcall.employee.not.found",
+    "translation": "❌ No se puede encontrar su registro de empleado en el sistema ERP. Póngase en contacto con su administrador."
+  },
+  {
+    "id": "rollcall.erp.error",
+    "translation": "⚠️ Hubo un problema al registrar en el sistema ERP. Se ha notificado a un administrador."
+  },
+  {
+    "id": "rollcall.absent.reason.required",
+    "translation": "Por favor proporcione una razón para su ausencia. Ejemplo: `/absent Licencia por enfermedad`"
+  },
+  {
+    "id": "rollcall.notification.checkin",
+    "translation": "**%s** ha marcado la entrada a las %s"
+  },
+  {
+    "id": "rollcall.notification.checkout",
+    "translation": "**%s** ha marcado la salida a las %s"
+  },
+  {
+    "id": "rollcall.notification.absent",
+    "translation": "**%s** ha reportado ausencia para hoy: \"%s\""
   }
 ]

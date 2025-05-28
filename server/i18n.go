@@ -5,6 +5,7 @@ package main
 
 import (
 	"embed"
+	"encoding/json"
 	"fmt"
 
 	"github.com/nicksnyder/go-i18n/v2/i18n"
@@ -18,6 +19,13 @@ type TranslationFunc func(translationId string, defaultMessage string, params ..
 
 func i18nInit() *i18n.Bundle {
 	bundle := i18n.NewBundle(language.English)
+	bundle.RegisterUnmarshalFunc("json", json.Unmarshal)
+
+	// Load Vietnamese translations
+	_, _ = bundle.LoadMessageFileFS(i18nFiles, "i18n/vi.json")
+	// Load English translations
+	_, _ = bundle.LoadMessageFileFS(i18nFiles, "i18n/en.json")
+	// Keep existing Spanish translations
 	_, _ = bundle.LoadMessageFileFS(i18nFiles, "i18n/es.json")
 
 	return bundle

@@ -463,7 +463,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
             });
             setTimeout(() => {
                 onClose?.();
-            }, 1500);
+            }, 2000);
         } catch (error: any) {
             clearTimeout(timeout);
             const errorMessage = error?.message || 'An error occurred. Please try again.';

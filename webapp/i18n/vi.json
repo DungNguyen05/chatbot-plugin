@@ -1,0 +1,16 @@
+{
+    "rollcall.checkin.button": "Check In",
+    "rollcall.checkout.button": "Check Out", 
+    "rollcall.absent.button": "Báo Vắng",
+    "rollcall.title": "Điểm Danh",
+    "rollcall.checkin.title": "Check In",
+    "rollcall.checkout.title": "Check Out",
+    "rollcall.absent.title": "Báo Vắng Mặt",
+    "rollcall.absent.reason.placeholder": "Nhập lý do vắng mặt...",
+    "rollcall.absent.reason.label": "Lý Do Vắng Mặt",
+    "rollcall.success": "Thành Công!",
+    "rollcall.error": "Lỗi",
+    "rollcall.processing": "Đang Xử Lý...",
+    "rollcall.cancel": "Hủy",
+    "rollcall.confirm": "Xác Nhận"
+  }

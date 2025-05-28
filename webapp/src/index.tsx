@@ -9,6 +9,9 @@ import {GlobalState} from '@mattermost/types/store';
 
 //@ts-ignore it exists
 import aiIcon from '../../assets/bot_icon.png';
+// ADD THIS: Import your Roll Call icon
+//@ts-ignore it exists
+import rollCallIcon from '../../assets/roll_call_icon.png';
 
 import manifest from '@/manifest';
 
@@ -43,24 +46,18 @@ const IconAIContainer = styled.img`
     height: 24px;
 `;
 
-const RHSTitleContainer = styled.span`
-    display: flex;
-	gap: 8px;
-    align-items: center;
-	margin-left: 8px;
-`;
-
-// Enhanced Roll Call Icon for the channel header
-const RollCallIcon = styled.i`
-    font-size: 16px;
-    color: #d0ed95;
+// MODIFY THIS: Replace the icon styling with image container (square shape)
+const RollCallIconContainer = styled.img`
+    width: 20px;
+    height: 20px;
     cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
+    padding: 2px;
+    border-radius: 0px; /* Square shape - no rounded corners */
     transition: all 0.15s ease-out;
+    opacity: 0.8;
     
     &:hover {
-        color: #94a86c;
+        opacity: 1;
         background: var(--button-bg);
         transform: scale(1.1);
     }
@@ -69,6 +66,33 @@ const RollCallIcon = styled.i`
         transform: scale(0.95);
     }
 `;
+
+const RHSTitleContainer = styled.span`
+    display: flex;
+	gap: 8px;
+    align-items: center;
+	margin-left: 8px;
+`;
+
+// REMOVE THIS: Old icon styling is no longer needed
+// const RollCallIcon = styled.i`
+//     font-size: 16px;
+//     color: #d0ed95;
+//     cursor: pointer;
+//     padding: 4px;
+//     border-radius: 4px;
+//     transition: all 0.15s ease-out;
+//     
+//     &:hover {
+//         color: #94a86c;
+//         background: var(--button-bg);
+//         transform: scale(1.1);
+//     }
+//     
+//     &:active {
+//         transform: scale(0.95);
+//     }
+// `;
 
 // Enhanced modal overlay styles
 const ModalOverlay = styled.div`
@@ -387,10 +411,12 @@ export default class Plugin {
                 doReaction
             );
             
-            // Add Roll Call to post dropdown menu
+            // MODIFY THIS: Update Roll Call post dropdown to use image
             registry.registerPostDropdownMenuAction(
                 <>
-                    <span className='icon'>📋</span>
+                    <span className='icon'>
+                        <img src={rollCallIcon} alt="Roll Call" style={{width: '16px', height: '16px'}} />
+                    </span>
                     <FormattedMessage defaultMessage='Roll Call'/>
                 </>, 
                 () => {
@@ -414,10 +440,10 @@ export default class Plugin {
             );
         }
 
-        // Register Roll Call channel header button with enhanced styling
+        // MODIFY THIS: Register Roll Call channel header button with image instead of icon
         console.log('📋 Registering Roll Call channel header button...');
         registry.registerChannelHeaderButtonAction(
-            <RollCallIcon className="fa fa-calendar-check-o" />,
+            <RollCallIconContainer src={rollCallIcon} alt="Roll Call" />,
             () => {
                 console.log('📋 Roll Call channel header button clicked!');
                 this.openRollCallModal();

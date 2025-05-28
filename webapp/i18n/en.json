@@ -1,1 +1,16 @@
-{}
+{
+    "rollcall.checkin.button": "Check In",
+    "rollcall.checkout.button": "Check Out", 
+    "rollcall.absent.button": "Mark Absent",
+    "rollcall.title": "Roll Call",
+    "rollcall.checkin.title": "Check In to Work",
+    "rollcall.checkout.title": "Check Out from Work",
+    "rollcall.absent.title": "Mark Absent",
+    "rollcall.absent.reason.placeholder": "Enter reason for absence...",
+    "rollcall.absent.reason.label": "Reason for Absence",
+    "rollcall.success": "Success!",
+    "rollcall.error": "Error",
+    "rollcall.processing": "Processing...",
+    "rollcall.cancel": "Cancel",
+    "rollcall.confirm": "Confirm"
+  }

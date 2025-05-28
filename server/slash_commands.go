@@ -72,46 +72,48 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 	case "rollcall":
 		return p.executeRollCallUICommand(args), nil
 	case "checkin":
-		// You can choose to either:
-		// 1. Process the command as before (current implementation)
-		// 2. Show a message suggesting to use the UI
 		return p.executeCheckInCommand(args), nil
 	case "checkout":
 		return p.executeCheckOutCommand(args), nil
 	case "absent":
 		return p.executeAbsentCommand(args), nil
 	default:
+		// Get user for localization
+		user, err := p.pluginAPI.User.Get(args.UserId)
+		if err != nil {
+			return &model.CommandResponse{
+				ResponseType: model.CommandResponseTypeEphemeral,
+				Text:         fmt.Sprintf("Unknown command: %s", command),
+			}, nil
+		}
+		T := i18nLocalizerFunc(p.i18n, user.Locale)
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         fmt.Sprintf("Unknown command: %s", command),
+			Text:         T("rollcall.unknown.command", "Unknown command: %s", command),
 		}, nil
 	}
 }
 
 // executeRollCallUICommand shows a message about the UI
 func (p *Plugin) executeRollCallUICommand(args *model.CommandArgs) *model.CommandResponse {
+	// Get user for localization
+	user, err := p.pluginAPI.User.Get(args.UserId)
+	if err != nil {
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         "Roll Call interface is opening...",
+		}
+	}
+
+	T := i18nLocalizerFunc(p.i18n, user.Locale)
 	return &model.CommandResponse{
 		ResponseType: model.CommandResponseTypeEphemeral,
-		Text:         "Roll Call interface is opening... You can also access it from the main menu or channel header button for a better experience with clickable buttons!",
+		Text:         T("rollcall.ui.opening", "Roll Call interface is opening... You can also access it from the main menu or channel header button for a better experience with clickable buttons!"),
 	}
 }
 
-// Keep your existing command implementations or modify them to suggest the UI:
-
-// executeCheckInCommand - you can modify this to suggest using the UI
+// executeCheckInCommand handles the /checkin command
 func (p *Plugin) executeCheckInCommand(args *model.CommandArgs) *model.CommandResponse {
-	// Option 1: Keep existing functionality (recommended for backward compatibility)
-	// [Your existing implementation here]
-
-	// Option 2: Suggest using the UI instead
-	/*
-		return &model.CommandResponse{
-			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         "💡 **Tip:** Use the Roll Call interface for a better experience! Type `/rollcall` or find it in the main menu for clickable buttons.",
-		}
-	*/
-
-	// For now, keeping the existing implementation:
 	user, err := p.pluginAPI.User.Get(args.UserId)
 	if err != nil {
 		return &model.CommandResponse{
@@ -120,10 +122,13 @@ func (p *Plugin) executeCheckInCommand(args *model.CommandArgs) *model.CommandRe
 		}
 	}
 
+	// Get user's locale for translations
+	T := i18nLocalizerFunc(p.i18n, user.Locale)
+
 	if len(strings.Fields(args.Command)) > 1 {
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         "The check-in command doesn't accept additional parameters. Please use `/checkin` without any notes.",
+			Text:         T("rollcall.checkin.no.params", "The check-in command doesn't accept additional parameters. Please use `/checkin` without any notes."),
 		}
 	}
 
@@ -132,7 +137,7 @@ func (p *Plugin) executeCheckInCommand(args *model.CommandArgs) *model.CommandRe
 		p.API.LogError("Failed to get employee ID for user", "user_id", user.Id, "error", err.Error())
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         "❌ Unable to find your employee record in the ERP system. Please contact your administrator to ensure your Mattermost account is linked to your employee profile.",
+			Text:         T("rollcall.employee.not.found", "❌ Unable to find your employee record in the ERP system. Please contact your administrator to ensure your Mattermost account is linked to your employee profile."),
 		}
 	}
 
@@ -141,11 +146,11 @@ func (p *Plugin) executeCheckInCommand(args *model.CommandArgs) *model.CommandRe
 		p.API.LogError("Failed to record employee check-in in ERP", "employee_id", employeeID, "error", erpErr.Error())
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         "⚠️ There was an issue recording your check-in in the ERP system. An administrator has been notified.",
+			Text:         T("rollcall.erp.error", "⚠️ There was an issue recording in the ERP system. An administrator has been notified."),
 		}
 	}
 
-	responseText := fmt.Sprintf("✅ Your check-in has been recorded in the ERP system at **%s**!", formattedTime)
+	responseText := T("rollcall.checkin.success", "✅ Your check-in has been recorded in the ERP system at **%s**!", formattedTime)
 
 	employeeName := user.Username
 	if user.FirstName != "" || user.LastName != "" {
@@ -179,10 +184,13 @@ func (p *Plugin) executeCheckOutCommand(args *model.CommandArgs) *model.CommandR
 		}
 	}
 
+	// Get user's locale for translations
+	T := i18nLocalizerFunc(p.i18n, user.Locale)
+
 	if len(strings.Fields(args.Command)) > 1 {
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         "The check-out command doesn't accept additional parameters. Please use `/checkout` without any notes.",
+			Text:         T("rollcall.checkout.no.params", "The check-out command doesn't accept additional parameters. Please use `/checkout` without any notes."),
 		}
 	}
 
@@ -191,7 +199,7 @@ func (p *Plugin) executeCheckOutCommand(args *model.CommandArgs) *model.CommandR
 		p.API.LogError("Failed to get employee ID for user", "user_id", user.Id, "error", err.Error())
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         "❌ Unable to find your employee record in the ERP system. Please contact your administrator to ensure your Mattermost account is linked to your employee profile.",
+			Text:         T("rollcall.employee.not.found", "❌ Unable to find your employee record in the ERP system. Please contact your administrator to ensure your Mattermost account is linked to your employee profile."),
 		}
 	}
 
@@ -200,11 +208,11 @@ func (p *Plugin) executeCheckOutCommand(args *model.CommandArgs) *model.CommandR
 		p.API.LogError("Failed to record employee check-out in ERP", "employee_id", employeeID, "error", erpErr.Error())
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         "⚠️ There was an issue recording your check-out in the ERP system. An administrator has been notified.",
+			Text:         T("rollcall.erp.error", "⚠️ There was an issue recording in the ERP system. An administrator has been notified."),
 		}
 	}
 
-	responseText := fmt.Sprintf("✅ Your check-out has been recorded in the ERP system at **%s**!", formattedTime)
+	responseText := T("rollcall.checkout.success", "✅ Your check-out has been recorded in the ERP system at **%s**!", formattedTime)
 
 	employeeName := user.Username
 	if user.FirstName != "" || user.LastName != "" {
@@ -238,11 +246,14 @@ func (p *Plugin) executeAbsentCommand(args *model.CommandArgs) *model.CommandRes
 		}
 	}
 
+	// Get user's locale for translations
+	T := i18nLocalizerFunc(p.i18n, user.Locale)
+
 	parts := strings.Fields(args.Command)
 	if len(parts) <= 1 {
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         "Please provide a reason for your absence. Example: `/absent Sick leave`",
+			Text:         T("rollcall.absent.reason.required", "Please provide a reason for your absence. Example: `/absent Sick leave`"),
 		}
 	}
 
@@ -253,7 +264,7 @@ func (p *Plugin) executeAbsentCommand(args *model.CommandArgs) *model.CommandRes
 		p.API.LogError("Failed to get employee ID for user", "user_id", user.Id, "error", err.Error())
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         "❌ Unable to find your employee record in the ERP system. Please contact your administrator to ensure your Mattermost account is linked to your employee profile.",
+			Text:         T("rollcall.employee.not.found", "❌ Unable to find your employee record in the ERP system. Please contact your administrator to ensure your Mattermost account is linked to your employee profile."),
 		}
 	}
 
@@ -276,11 +287,11 @@ func (p *Plugin) executeAbsentCommand(args *model.CommandArgs) *model.CommandRes
 		p.API.LogError("Failed to record employee absence in ERP", "employee_id", employeeID, "error", absenceErr.Error())
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         "⚠️ There was an issue recording your absence in the ERP system. An administrator has been notified.",
+			Text:         T("rollcall.erp.error", "⚠️ There was an issue recording in the ERP system. An administrator has been notified."),
 		}
 	}
 
-	responseText := fmt.Sprintf("📝 Your absence has been recorded for **%s** with reason: \"%s\"", recordedDate, reason)
+	responseText := T("rollcall.absent.success", "📝 Your absence has been recorded for **%s** with reason: \"%s\"", recordedDate, reason)
 
 	employeeName := user.Username
 	if user.FirstName != "" || user.LastName != "" {

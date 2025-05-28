@@ -1,0 +1,62 @@
+[
+    {
+      "id": "rollcall.checkin.success",
+      "translation": "✅ Check in của bạn đã được ghi nhận trong hệ thống ERP lúc **%s**!"
+    },
+    {
+      "id": "rollcall.checkout.success", 
+      "translation": "✅ Check out của bạn đã được ghi nhận trong hệ thống ERP lúc **%s**!"
+    },
+    {
+      "id": "rollcall.absent.success",
+      "translation": "📝 Vắng mặt của bạn đã được ghi nhận cho ngày **%s** với lý do: \"%s\""
+    },
+    {
+      "id": "rollcall.employee.not.found",
+      "translation": "❌ Không tìm thấy hồ sơ nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên để đảm bảo tài khoản Workdone của bạn được liên kết với hồ sơ nhân viên."
+    },
+    {
+      "id": "rollcall.erp.error",
+      "translation": "⚠️ Có vấn đề khi ghi nhận trong hệ thống ERP. Quản trị viên đã được thông báo."
+    },
+    {
+      "id": "rollcall.absent.reason.required",
+      "translation": "Vui lòng cung cấp lý do vắng mặt. Ví dụ: `/absent Nghỉ ốm`"
+    },
+    {
+      "id": "rollcall.checkin.no.params",
+      "translation": "Lệnh Check in không chấp nhận tham số bổ sung. Vui lòng sử dụng `/checkin` mà không có ghi chú nào."
+    },
+    {
+      "id": "rollcall.checkout.no.params",
+      "translation": "Lệnh Check out không chấp nhận tham số bổ sung. Vui lòng sử dụng `/checkout` mà không có ghi chú nào."
+    },
+    {
+      "id": "rollcall.ui.tip",
+      "translation": "💡 **Mẹo:** Sử dụng giao diện Điểm danh để có trải nghiệm tốt hơn! Gõ `/rollcall` hoặc tìm trong menu chính để có các nút bấm."
+    },
+    {
+      "id": "rollcall.ui.opening",
+      "translation": "Giao diện Điểm danh đang mở... Bạn cũng có thể truy cập từ menu chính hoặc nút header kênh để có trải nghiệm tốt hơn với các nút bấm!"
+    },
+    {
+      "id": "rollcall.error.user.info",
+      "translation": "Lỗi khi lấy thông tin người dùng. Vui lòng thử lại."
+    },
+    {
+      "id": "rollcall.unknown.command",
+      "translation": "Lệnh không xác định: %s"
+    },
+    {
+      "id": "rollcall.notification.checkin",
+      "translation": "**%s** đã check in lúc %s"
+    },
+    {
+      "id": "rollcall.notification.checkout",
+      "translation": "**%s** đã check out lúc %s"
+    },
+    {
+      "id": "rollcall.notification.absent",
+      "translation": "**%s** đã báo vắng mặt hôm nay: \"%s\""
+    }
+  ]

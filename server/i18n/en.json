@@ -34,5 +34,65 @@
   {
     "id": "copilot.summarize_transcription",
     "translation": "Sure, I will summarize this transcription: %s/_redirect/pl/%s\n"
+  },
+  {
+    "id": "rollcall.checkin.success",
+    "translation": "✅ Your check-in has been recorded in the ERP system at **%s**!"
+  },
+  {
+    "id": "rollcall.checkout.success",
+    "translation": "✅ Your check-out has been recorded in the ERP system at **%s**!"
+  },
+  {
+    "id": "rollcall.absent.success", 
+    "translation": "📝 Your absence has been recorded for **%s** with reason: \"%s\""
+  },
+  {
+    "id": "rollcall.employee.not.found",
+    "translation": "❌ Unable to find your employee record in the ERP system. Please contact your administrator to ensure your Mattermost account is linked to your employee profile."
+  },
+  {
+    "id": "rollcall.erp.error",
+    "translation": "⚠️ There was an issue recording in the ERP system. An administrator has been notified."
+  },
+  {
+    "id": "rollcall.absent.reason.required",
+    "translation": "Please provide a reason for your absence. Example: `/absent Sick leave`"
+  },
+  {
+    "id": "rollcall.checkin.no.params",
+    "translation": "The check-in command doesn't accept additional parameters. Please use `/checkin` without any notes."
+  },
+  {
+    "id": "rollcall.checkout.no.params",
+    "translation": "The check-out command doesn't accept additional parameters. Please use `/checkout` without any notes."
+  },
+  {
+    "id": "rollcall.ui.tip",
+    "translation": "💡 **Tip:** Use the Roll Call interface for a better experience! Type `/rollcall` or find it in the main menu for clickable buttons."
+  },
+  {
+    "id": "rollcall.ui.opening",
+    "translation": "Roll Call interface is opening... You can also access it from the main menu or channel header button for a better experience with clickable buttons!"
+  },
+  {
+    "id": "rollcall.error.user.info",
+    "translation": "Error getting user information. Please try again."
+  },
+  {
+    "id": "rollcall.unknown.command",
+    "translation": "Unknown command: %s"
+  },
+  {
+    "id": "rollcall.notification.checkin",
+    "translation": "**%s** has checked in at %s"
+  },
+  {
+    "id": "rollcall.notification.checkout",
+    "translation": "**%s** has checked out at %s"
+  },
+  {
+    "id": "rollcall.notification.absent",
+    "translation": "**%s** has reported absence for today: \"%s\""
   }
 ]

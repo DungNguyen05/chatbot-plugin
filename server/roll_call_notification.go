@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"strings"
 	"time"
 
 	"github.com/mattermost/mattermost-plugin-ai/server/llm"
@@ -65,16 +66,18 @@ func (p *Plugin) sendRollCallNotification(userID, employeeName string, eventType
 		return err
 	}
 
-	// Create notification message
+	// Create notification message based on user's locale
+	defaultLocale := *p.API.GetConfig().LocalizationSettings.DefaultServerLocale
+	T := i18nLocalizerFunc(p.i18n, defaultLocale)
 	var message string
 
 	switch eventType {
 	case RollCallEventCheckIn:
-		message = fmt.Sprintf("**%s** has checked in at %s", employeeName, eventTime)
+		message = T("rollcall.notification.checkin", "**%s** has checked in at %s", employeeName, eventTime)
 	case RollCallEventCheckOut:
-		message = fmt.Sprintf("**%s** has checked out at %s", employeeName, eventTime)
+		message = T("rollcall.notification.checkout", "**%s** has checked out at %s", employeeName, eventTime)
 	case RollCallEventAbsent:
-		message = fmt.Sprintf("**%s** has reported absence for today: \"%s\"", employeeName, reason)
+		message = T("rollcall.notification.absent", "**%s** has reported absence for today: \"%s\"", employeeName, reason)
 	}
 
 	// Send to configured notification channels only
@@ -120,32 +123,57 @@ func (p *Plugin) sendPersonalizedRollCallMessage(bot *Bot, user *model.User, eve
 	timeOfDay := getTimeOfDay(vietTime)
 	dayOfWeek := vietTime.Weekday().String()
 
-	// Build parameters for LLM
-	context.Parameters = map[string]any{
-		"EventType":  string(eventType),
-		"EventTime":  eventTime,
-		"TimeOfDay":  timeOfDay,
-		"DayOfWeek":  dayOfWeek,
-		"UserName":   user.FirstName,
-		"IsCheckIn":  eventType == RollCallEventCheckIn,
-		"IsCheckOut": eventType == RollCallEventCheckOut,
+	// Determine language for prompts based on user locale
+	isVietnamese := strings.HasPrefix(user.Locale, "vi")
+
+	// Get Vietnamese day of week if needed
+	vietnameseDayOfWeek := dayOfWeek
+	if isVietnamese {
+		vietnameseDayOfWeek = getVietnameseDayOfWeek(vietTime.Weekday())
 	}
 
-	// Define the prompt based on event type
+	// Build parameters for LLM
+	context.Parameters = map[string]any{
+		"EventType":           string(eventType),
+		"EventTime":           eventTime,
+		"TimeOfDay":           timeOfDay,
+		"DayOfWeek":           dayOfWeek,
+		"VietnameseDayOfWeek": vietnameseDayOfWeek,
+		"UserName":            getUserDisplayName(user),
+		"IsCheckIn":           eventType == RollCallEventCheckIn,
+		"IsCheckOut":          eventType == RollCallEventCheckOut,
+		"IsVietnamese":        isVietnamese,
+	}
+
+	// Define the prompt based on event type and language
 	var promptText string
 
 	switch eventType {
 	case RollCallEventCheckIn:
-		promptText = `You are a friendly workplace assistant. Generate a SHORT, MODERN, and ENERGETIC welcome message (1-2 sentences only) 
+		if isVietnamese {
+			promptText = `Bạn là trợ lý thân thiện tại nơi làm việc. Tạo một tin nhắn chào mừng NGẮN GỌN, HIỆN ĐẠI và TÍCH CỰC (chỉ 1-2 câu) 
+cho {{.UserName}} vừa điểm danh vào làm lúc {{.EventTime}}. 
+Hiện tại là {{.TimeOfDay}} vào {{.VietnameseDayOfWeek}}. 
+Làm cho nó nghe chuyên nghiệp nhưng thân thiện. KHÔNG SỬ DỤNG QUÁ 2 CÂU. Sử dụng tiếng Việt.`
+		} else {
+			promptText = `You are a friendly workplace assistant. Generate a SHORT, MODERN, and ENERGETIC welcome message (1-2 sentences only) 
 for {{.UserName}} who just checked in to work at {{.EventTime}}. 
 It's currently {{.TimeOfDay}} on {{.DayOfWeek}}. 
-Make it sound professional but friendly. DO NOT USE MORE THAN 2 SENTENCES.`
+Make it sound professional but friendly. DO NOT USE MORE THAN 2 SENTENCES. Use English.`
+		}
 
 	case RollCallEventCheckOut:
-		promptText = `You are a friendly workplace assistant. Generate a SHORT, MODERN, and FRIENDLY goodbye message (1-2 sentences only) 
+		if isVietnamese {
+			promptText = `Bạn là trợ lý thân thiện tại nơi làm việc. Tạo một tin nhắn tạm biệt NGẮN GỌN, HIỆN ĐẠI và THÂN THIỆN (chỉ 1-2 câu) 
+cho {{.UserName}} vừa điểm danh ra về lúc {{.EventTime}}. 
+Hiện tại là {{.TimeOfDay}} vào {{.VietnameseDayOfWeek}}. 
+Chúc họ có thời gian nghỉ ngơi vui vẻ. KHÔNG SỬ DỤNG QUÁ 2 CÂU. Sử dụng tiếng Việt.`
+		} else {
+			promptText = `You are a friendly workplace assistant. Generate a SHORT, MODERN, and FRIENDLY goodbye message (1-2 sentences only) 
 for {{.UserName}} who just checked out from work at {{.EventTime}}. 
 It's currently {{.TimeOfDay}} on {{.DayOfWeek}}. 
-Wish them a pleasant time off. DO NOT USE MORE THAN 2 SENTENCES.`
+Wish them a pleasant time off. DO NOT USE MORE THAN 2 SENTENCES. Use English.`
+		}
 
 	default:
 		return fmt.Errorf("unsupported event type for personalized message")
@@ -213,4 +241,37 @@ func getTimeOfDay(t time.Time) string {
 	default:
 		return "night"
 	}
+}
+
+// getVietnameseDayOfWeek returns Vietnamese day of week
+func getVietnameseDayOfWeek(weekday time.Weekday) string {
+	switch weekday {
+	case time.Sunday:
+		return "Chủ nhật"
+	case time.Monday:
+		return "Thứ hai"
+	case time.Tuesday:
+		return "Thứ ba"
+	case time.Wednesday:
+		return "Thứ tư"
+	case time.Thursday:
+		return "Thứ năm"
+	case time.Friday:
+		return "Thứ sáu"
+	case time.Saturday:
+		return "Thứ bảy"
+	default:
+		return "Chủ nhật"
+	}
+}
+
+// getUserDisplayName returns the best display name for a user
+func getUserDisplayName(user *model.User) string {
+	if user.FirstName != "" {
+		return user.FirstName
+	}
+	if user.Nickname != "" {
+		return user.Nickname
+	}
+	return user.Username
 }
