@@ -407,25 +407,100 @@ const CloseButton = styled.button`
     }
 `;
 
-const IconWrapper = styled.span`
-    font-size: 18px;
-    display: flex;
-    align-items: center;
-`;
+// Built-in translations
+const translations = {
+    en: {
+        'rollcall.title': 'Roll Call',
+        'rollcall.subtitle': 'Track your attendance and manage your work schedule',
+        'rollcall.checkin.button': 'Check In',
+        'rollcall.checkout.button': 'Check Out',
+        'rollcall.absent.button': 'Mark Absent',
+        'rollcall.checkin.title': 'Check In to Work',
+        'rollcall.checkout.title': 'Check Out from Work',
+        'rollcall.absent.title': 'Mark Absent',
+        'rollcall.checkin.tooltip': 'Mark your arrival for today',
+        'rollcall.checkout.tooltip': 'Mark your departure for today',
+        'rollcall.absent.tooltip': 'Report that you\'ll be absent today',
+        'rollcall.close': 'Close',
+        'rollcall.close.tooltip': 'Close (Esc)',
+        'rollcall.cancel': 'Cancel',
+        'rollcall.confirm': 'Confirm',
+        'rollcall.absent.reason.placeholder': 'Enter reason for absence...',
+        'rollcall.absent.reason.label': 'Reason for Absence',
+        'rollcall.absent.reason.required': 'Please provide a reason for your absence.',
+        'rollcall.checkin.success': 'Welcome! You have successfully checked in.',
+        'rollcall.checkout.success': 'Have a great day! You have successfully checked out.',
+        'rollcall.absent.success': 'Your absence has been recorded. Take care!',
+        'rollcall.error': 'An error occurred. Please try again.',
+        'rollcall.timeout': 'Request timed out. Please try again.'
+    },
+    vi: {
+        'rollcall.title': 'Điểm Danh',
+        'rollcall.subtitle': 'Theo dõi và quản lý lịch làm việc',
+        'rollcall.checkin.button': 'Check In',
+        'rollcall.checkout.button': 'Check Out',
+        'rollcall.absent.button': 'Báo Vắng',
+        'rollcall.checkin.title': 'Check In',
+        'rollcall.checkout.title': 'Check Out',
+        'rollcall.absent.title': 'Báo Vắng Mặt',
+        'rollcall.checkin.tooltip': 'Đánh dấu giờ đến hôm nay',
+        'rollcall.checkout.tooltip': 'Đánh dấu giờ về hôm nay',
+        'rollcall.absent.tooltip': 'Báo cáo vắng mặt hôm nay',
+        'rollcall.close': 'Đóng',
+        'rollcall.close.tooltip': 'Đóng (Esc)',
+        'rollcall.cancel': 'Hủy',
+        'rollcall.confirm': 'Xác Nhận',
+        'rollcall.absent.reason.placeholder': 'Nhập lý do vắng mặt...',
+        'rollcall.absent.reason.label': 'Lý Do Vắng Mặt',
+        'rollcall.absent.reason.required': 'Vui lòng cung cấp lý do vắng mặt.',
+        'rollcall.checkin.success': 'Chào mừng! Bạn đã check in thành công.',
+        'rollcall.checkout.success': 'Chúc bạn một ngày tốt lành! Bạn đã check out thành công.',
+        'rollcall.absent.success': 'Thông tin vắng mặt đã được ghi nhận. Hãy chăm sóc sức khỏe!',
+        'rollcall.error': 'Đã xảy ra lỗi. Vui lòng thử lại.',
+        'rollcall.timeout': 'Yêu cầu đã hết thời gian chờ. Vui lòng thử lại.'
+    }
+};
+
+// Text helper function with built-in translations
+const getText = (key: string, language: 'en' | 'vi' = 'en', t?: (key: string) => string): string => {
+    // If external translation function is provided, use it first
+    if (t) {
+        try {
+            return t(key);
+        } catch (error) {
+            console.warn(`Translation failed for key: ${key}`, error);
+        }
+    }
+    
+    // Use built-in translations
+    const langTranslations = translations[language] || translations.en;
+    return langTranslations[key] || translations.en[key] || key;
+};
 
 interface RollCallInterfaceProps {
     onClose?: () => void;
+    t?: (key: string) => string; // Your external i18n translation function (optional)
+    language?: 'en' | 'vi'; // Built-in language support
+    locale?: string; // For date formatting
 }
 
-const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
+const RollCallInterface: React.FC<RollCallInterfaceProps> = ({
+    onClose, 
+    t, 
+    language = 'vi',
+    locale
+}) => {
     const [showAbsentModal, setShowAbsentModal] = useState(false);
     const [absentReason, setAbsentReason] = useState('');
     const [loading, setLoading] = useState(false);
     const [statusMessage, setStatusMessage] = useState<{type: 'success' | 'error', message: string} | null>(null);
     const [requestTimeout, setRequestTimeout] = useState<NodeJS.Timeout | null>(null);
 
+    // Use the language for locale if not explicitly provided
+    const dateLocale = locale || (language === 'vi' ? 'vi-VN' : 'en-US');
+
     const getCurrentDate = () => {
-        return new Date().toLocaleDateString('en-US', {
+        return new Date().toLocaleDateString(dateLocale, {
             weekday: 'long',
             year: 'numeric',
             month: 'long',
@@ -440,14 +515,14 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
         }
     };
 
-    const handleApiCall = async (apiCall: () => Promise<any>, successMessage: string) => {
+    const handleApiCall = async (apiCall: () => Promise<any>, successMessageKey: string) => {
         setLoading(true);
         setStatusMessage(null);
         
         const timeout = setTimeout(() => {
             setStatusMessage({
                 type: 'error',
-                message: 'Request timed out. Please try again.'
+                message: getText('rollcall.timeout', language, t)
             });
             setLoading(false);
         }, 30000);
@@ -459,14 +534,14 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
             clearTimeout(timeout);
             setStatusMessage({
                 type: 'success',
-                message: response?.message || successMessage
+                message: response?.message || getText(successMessageKey, language, t)
             });
             setTimeout(() => {
                 onClose?.();
             }, 2000);
         } catch (error: any) {
             clearTimeout(timeout);
-            const errorMessage = error?.message || 'An error occurred. Please try again.';
+            const errorMessage = error?.message || getText('rollcall.error', language, t);
             setStatusMessage({
                 type: 'error',
                 message: errorMessage
@@ -477,8 +552,15 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
         }
     };
 
-    const handleCheckIn = () => handleApiCall(doCheckIn, 'Welcome! You have successfully checked in.');
-    const handleCheckOut = () => handleApiCall(doCheckOut, 'Have a great day! You have successfully checked out.');
+    const handleCheckIn = () => handleApiCall(
+        doCheckIn, 
+        'rollcall.checkin.success'
+    );
+    
+    const handleCheckOut = () => handleApiCall(
+        doCheckOut,
+        'rollcall.checkout.success'
+    );
 
     const handleAbsentClick = () => {
         setShowAbsentModal(true);
@@ -495,14 +577,14 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
         if (!absentReason.trim()) {
             setStatusMessage({
                 type: 'error',
-                message: 'Please provide a reason for your absence.'
+                message: getText('rollcall.absent.reason.required', language, t)
             });
             return;
         }
 
         await handleApiCall(
             () => doAbsent(absentReason.trim()),
-            'Your absence has been recorded. Take care!'
+            'rollcall.absent.success'
         );
         
         setShowAbsentModal(false);
@@ -540,16 +622,18 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
             > 
                 <CloseButton 
                     onClick={onClose}
-                    aria-label="Close Roll Call modal"
-                    title="Close (Esc)"
+                    aria-label={getText('rollcall.close', language, t)}
+                    title={getText('rollcall.close.tooltip', language, t)}
                 >
                     ✕
                 </CloseButton>
 
                 <HeaderSection>
-                    <Title id="rollcall-title">📋 Roll Call</Title>
+                    <Title id="rollcall-title">
+                        📋 {getText('rollcall.title', language, t)}
+                    </Title>
                     <Subtitle id="rollcall-description">
-                        Track your attendance and manage your work schedule
+                        {getText('rollcall.subtitle', language, t)}
                     </Subtitle>
                     <DateBadge>
                         📅 {getCurrentDate()}
@@ -566,30 +650,30 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
                     <CheckInButton 
                         onClick={handleCheckIn}
                         disabled={loading}
-                        aria-label="Check in for work today"
-                        title="Mark your arrival for today"
+                        aria-label={getText('rollcall.checkin.title', language, t)}
+                        title={getText('rollcall.checkin.tooltip', language, t)}
                     >
                         {loading ? <LoadingSpinner /> : null}
-                        Check In
+                        {getText('rollcall.checkin.button', language, t)}
                     </CheckInButton>
                     
                     <CheckOutButton 
                         onClick={handleCheckOut}
                         disabled={loading}
-                        aria-label="Check out from work today"
-                        title="Mark your departure for today"
+                        aria-label={getText('rollcall.checkout.title', language, t)}
+                        title={getText('rollcall.checkout.tooltip', language, t)}
                     >
                         {loading ? <LoadingSpinner /> : null}
-                        Check Out
+                        {getText('rollcall.checkout.button', language, t)}
                     </CheckOutButton>
                     
                     <AbsentButton 
                         onClick={handleAbsentClick}
                         disabled={loading}
-                        aria-label="Report absence with reason"
-                        title="Report that you'll be absent today"
+                        aria-label={getText('rollcall.absent.title', language, t)}
+                        title={getText('rollcall.absent.tooltip', language, t)}
                     >
-                        Report Absence
+                        {getText('rollcall.absent.button', language, t)}
                     </AbsentButton>
                 </ButtonGrid>
             </Container>
@@ -601,7 +685,9 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
                     role="dialog"
                     aria-labelledby="absent-modal-title"
                 >
-                    <ModalTitle id="absent-modal-title">📝 Report Absence</ModalTitle>
+                    <ModalTitle id="absent-modal-title">
+                        📝 {getText('rollcall.absent.title', language, t)}
+                    </ModalTitle>
                     
                     {statusMessage && (
                         <StatusMessage type={statusMessage.type}>
@@ -610,12 +696,12 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
                     )}
                     
                     <ReasonInput
-                        placeholder="Please provide a detailed reason for your absence (e.g., sick leave, personal emergency, medical appointment)..."
+                        placeholder={getText('rollcall.absent.reason.placeholder', language, t)}
                         value={absentReason}
                         onChange={(e) => setAbsentReason(e.target.value)}
                         onKeyDown={handleTextareaKeyDown}
                         maxLength={500}
-                        aria-label="Absence reason"
+                        aria-label={getText('rollcall.absent.reason.label', language, t)}
                         autoFocus
                     />
                     
@@ -624,16 +710,16 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({onClose}) => {
                             onClick={handleAbsentCancel}
                             disabled={loading}
                         >
-                            Cancel
+                            {getText('rollcall.cancel', language, t)}
                         </SecondaryButton>
                         
                         <PrimaryButton 
                             onClick={handleAbsentSubmit}
                             disabled={loading || !absentReason.trim()}
-                            aria-label="Submit absence report"
+                            aria-label={getText('rollcall.confirm', language, t)}
                         >
                             {loading ? <LoadingSpinner /> : null}
-                            Submit Report
+                            {getText('rollcall.confirm', language, t)}
                         </PrimaryButton>
                     </ModalActions>
                 </ModalContent>

@@ -1,16 +1,28 @@
+
 {
     "rollcall.checkin.button": "Check In",
     "rollcall.checkout.button": "Check Out", 
     "rollcall.absent.button": "Báo Vắng",
     "rollcall.title": "Điểm Danh",
+    "rollcall.subtitle": "Theo dõi và quản lý lịch làm việc",
     "rollcall.checkin.title": "Check In",
     "rollcall.checkout.title": "Check Out",
     "rollcall.absent.title": "Báo Vắng Mặt",
     "rollcall.absent.reason.placeholder": "Nhập lý do vắng mặt...",
     "rollcall.absent.reason.label": "Lý Do Vắng Mặt",
+    "rollcall.absent.reason.required": "Vui lòng cung cấp lý do vắng mặt.",
     "rollcall.success": "Thành Công!",
-    "rollcall.error": "Lỗi",
+    "rollcall.error": "Đã xảy ra lỗi. Vui lòng thử lại.",
+    "rollcall.timeout": "Yêu cầu đã hết thời gian chờ. Vui lòng thử lại.",
     "rollcall.processing": "Đang Xử Lý...",
     "rollcall.cancel": "Hủy",
-    "rollcall.confirm": "Xác Nhận"
-  }
+    "rollcall.confirm": "Xác Nhận",
+    "rollcall.close": "Đóng",
+    "rollcall.close.tooltip": "Đóng (Esc)",
+    "rollcall.checkin.tooltip": "Đánh dấu giờ đến hôm nay",
+    "rollcall.checkout.tooltip": "Đánh dấu giờ về hôm nay",
+    "rollcall.absent.tooltip": "Báo cáo vắng mặt hôm nay",
+    "rollcall.checkin.success": "Chào mừng! Bạn đã check in thành công.",
+    "rollcall.checkout.success": "Chúc bạn một ngày tốt lành! Bạn đã check out thành công.",
+    "rollcall.absent.success": "Thông tin vắng mặt đã được ghi nhận. Hãy chăm sóc sức khỏe!"
+}

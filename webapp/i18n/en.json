@@ -3,14 +3,25 @@
     "rollcall.checkout.button": "Check Out", 
     "rollcall.absent.button": "Mark Absent",
     "rollcall.title": "Roll Call",
+    "rollcall.subtitle": "Track your attendance and manage your work schedule",
     "rollcall.checkin.title": "Check In to Work",
     "rollcall.checkout.title": "Check Out from Work",
     "rollcall.absent.title": "Mark Absent",
     "rollcall.absent.reason.placeholder": "Enter reason for absence...",
     "rollcall.absent.reason.label": "Reason for Absence",
+    "rollcall.absent.reason.required": "Please provide a reason for your absence.",
     "rollcall.success": "Success!",
-    "rollcall.error": "Error",
+    "rollcall.error": "An error occurred. Please try again.",
+    "rollcall.timeout": "Request timed out. Please try again.",
     "rollcall.processing": "Processing...",
     "rollcall.cancel": "Cancel",
-    "rollcall.confirm": "Confirm"
-  }
+    "rollcall.confirm": "Confirm",
+    "rollcall.close": "Close",
+    "rollcall.close.tooltip": "Close (Esc)",
+    "rollcall.checkin.tooltip": "Mark your arrival for today",
+    "rollcall.checkout.tooltip": "Mark your departure for today",
+    "rollcall.absent.tooltip": "Report that you'll be absent today",
+    "rollcall.checkin.success": "Welcome! You have successfully checked in.",
+    "rollcall.checkout.success": "Have a great day! You have successfully checked out.",
+    "rollcall.absent.success": "Your absence has been recorded. Take care!"
+}

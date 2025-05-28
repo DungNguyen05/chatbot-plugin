@@ -417,7 +417,7 @@ export default class Plugin {
                     <span className='icon'>
                         <img src={rollCallIcon} alt="Roll Call" style={{width: '16px', height: '16px'}} />
                     </span>
-                    <FormattedMessage defaultMessage='Roll Call'/>
+                    <FormattedMessage id="rollcall.title" defaultMessage="Roll Call"/>
                 </>, 
                 () => {
                     console.log('📋 Roll Call clicked from post dropdown');
@@ -456,7 +456,7 @@ export default class Plugin {
         if (registry.registerMainMenuAction) {
             console.log('📋 Registering Roll Call main menu action...');
             registry.registerMainMenuAction(
-                'Roll Call',
+                <FormattedMessage id="rollcall.title" defaultMessage="Roll Call"/>,
                 () => {
                     console.log('📋 Roll Call main menu clicked!');
                     this.openRollCallModal();
