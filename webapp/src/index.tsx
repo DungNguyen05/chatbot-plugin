@@ -1,4 +1,4 @@
-// webapp/src/index.tsx - Enhanced version with proper Roll Call integration
+// webapp/src/index.tsx - Enhanced version with proper Roll Call integration and Floating Button
 import React from 'react';
 import {Store, Action} from 'redux';
 import styled from 'styled-components';
@@ -9,7 +9,6 @@ import {GlobalState} from '@mattermost/types/store';
 
 //@ts-ignore it exists
 import aiIcon from '../../assets/bot_icon.png';
-// ADD THIS: Import your Roll Call icon
 //@ts-ignore it exists
 import rollCallIcon from '../../assets/roll_call_icon.png';
 
@@ -46,53 +45,12 @@ const IconAIContainer = styled.img`
     height: 24px;
 `;
 
-// MODIFY THIS: Replace the icon styling with image container (square shape)
-const RollCallIconContainer = styled.img`
-    width: 20px;
-    height: 20px;
-    cursor: pointer;
-    padding: 2px;
-    border-radius: 0px; /* Square shape - no rounded corners */
-    transition: all 0.15s ease-out;
-    opacity: 0.8;
-    
-    &:hover {
-        opacity: 1;
-        background: var(--button-bg);
-        transform: scale(1.1);
-    }
-    
-    &:active {
-        transform: scale(0.95);
-    }
-`;
-
 const RHSTitleContainer = styled.span`
     display: flex;
 	gap: 8px;
     align-items: center;
 	margin-left: 8px;
 `;
-
-// REMOVE THIS: Old icon styling is no longer needed
-// const RollCallIcon = styled.i`
-//     font-size: 16px;
-//     color: #d0ed95;
-//     cursor: pointer;
-//     padding: 4px;
-//     border-radius: 4px;
-//     transition: all 0.15s ease-out;
-//     
-//     &:hover {
-//         color: #94a86c;
-//         background: var(--button-bg);
-//         transform: scale(1.1);
-//     }
-//     
-//     &:active {
-//         transform: scale(0.95);
-//     }
-// `;
 
 // Enhanced modal overlay styles
 const ModalOverlay = styled.div`
@@ -138,47 +96,82 @@ const ModalContainer = styled.div`
     }
 `;
 
-const ModalHeader = styled.div`
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 20px 24px;
-    border-bottom: 1px solid rgba(var(--center-channel-color-rgb), 0.16);
-    background: var(--center-channel-bg);
-`;
-
-const ModalTitle = styled.h2`
-    margin: 0;
-    font-size: 22px;
-    font-weight: 600;
-    color: var(--center-channel-color);
-    font-family: var(--font-family, inherit);
-    letter-spacing: -0.025em;
-`;
-
-const CloseButton = styled.button`
-    background: none;
+// Floating Roll Call Button Component
+const FloatingRollCallButton = styled.button`
+    position: fixed;
+    bottom: 70px;
+    right: 5px;
+    width: 30px;
+    height: 30px;
+    border-radius: 20%;
+    background: linear-gradient(135deg, #4CAF50, #45a049);
     border: none;
-    font-size: 24px;
     cursor: pointer;
-    color: rgba(var(--center-channel-color-rgb), 0.56);
-    padding: 4px;
-    width: 32px;
-    height: 32px;
+    box-shadow: 
+        0 8px 25px rgba(76, 175, 80, 0.3),
+        0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
-    transition: all 0.15s ease-out;
+    color: white;
+    font-size: 24px;
+    transform: scale(1);
     
     &:hover {
-        background-color: rgba(var(--center-channel-color-rgb), 0.08);
-        color: rgba(var(--center-channel-color-rgb), 0.72);
+        transform: scale(1.1);
+        box-shadow: 
+            0 12px 35px rgba(76, 175, 80, 0.4),
+            0 6px 16px rgba(0, 0, 0, 0.2);
+        background: linear-gradient(135deg, #45a049, #3d8b40);
     }
     
     &:active {
-        background-color: rgba(var(--center-channel-color-rgb), 0.16);
+        transform: scale(0.95);
+        transition: all 0.1s ease-out;
     }
+    
+    // Add pulse animation to make it more noticeable
+    animation: pulse 3s infinite;
+    
+    @keyframes pulse {
+        0%, 100% {
+            box-shadow: 
+                0 8px 25px rgba(76, 175, 80, 0.3),
+                0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        50% {
+            box-shadow: 
+                0 12px 35px rgba(76, 175, 80, 0.5),
+                0 6px 16px rgba(0, 0, 0, 0.2),
+                0 0 0 8px rgba(76, 175, 80, 0.1);
+        }
+    }
+    
+    // Responsive design
+    @media (max-width: 768px) {
+        bottom: 16px;
+        right: 16px;
+        width: 56px;
+        height: 56px;
+        font-size: 22px;
+    }
+    
+    // Hide on very small screens where it might interfere
+    @media (max-width: 480px) {
+        bottom: 80px; // Move up to avoid mobile keyboard
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
+    }
+`;
+
+const FloatingButtonIcon = styled.img`
+    width: 120%; // Flexible size based on button size
+    height: 120%; // Flexible size based on button size
+    object-fit: contain; // Maintain aspect ratio
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); // Smooth transitions
 `;
 
 const RHSTitle = () => {
@@ -224,10 +217,24 @@ const RollCallModal: React.FC<{
             aria-modal="true"
         >
             <ModalContainer>
-                {/* Header completely removed */}
                 <RollCallInterface onClose={onClose} />
             </ModalContainer>
         </ModalOverlay>
+    );
+};
+
+// Floating Roll Call Button React Component
+const FloatingRollCallButtonComponent: React.FC<{
+    onClick: () => void;
+}> = ({ onClick }) => {
+    return (
+        <FloatingRollCallButton
+            onClick={onClick}
+            title="Open Roll Call"
+            aria-label="Open Roll Call interface"
+        >
+            <FloatingButtonIcon src={rollCallIcon} alt="Roll Call" />
+        </FloatingRollCallButton>
     );
 };
 
@@ -235,6 +242,7 @@ export default class Plugin {
     postEventListener: PostEventListener = new PostEventListener();
     private rollCallModalElement: HTMLDivElement | null = null;
     private rollCallModalRoot: any = null;
+    private floatingButtonElement: HTMLElement | null = null;
 
     // Enhanced modal creation with better error handling and cleanup
     private openRollCallModal = () => {
@@ -319,6 +327,82 @@ export default class Plugin {
             this.rollCallModalRoot = null;
             document.body.style.overflow = 'auto';
         }
+    };
+
+    // Helper function to check if we're on the main chat interface
+    private isMainInterface = (): boolean => {
+        const currentPath = window.location.pathname;
+        // Show on team channels and direct messages, hide on system console and other admin pages
+        return !currentPath.includes('/admin_console') && 
+               !currentPath.includes('/system_console') && 
+               !currentPath.includes('/settings') &&
+               !currentPath.includes('/integrations') &&
+               !currentPath.includes('/user_settings');
+    };
+
+    // Create floating button method with interface detection
+    private createFloatingButton = () => {
+        // Check if we should show the button on current interface
+        if (!this.isMainInterface()) {
+            console.log('📋 Not on main interface, skipping floating button creation');
+            return;
+        }
+
+        // Remove any existing floating button
+        const existingButton = document.getElementById('rollcall-floating-button');
+        if (existingButton) {
+            existingButton.remove();
+        }
+
+        // Create new button container
+        const buttonContainer = document.createElement('div');
+        buttonContainer.id = 'rollcall-floating-button';
+        document.body.appendChild(buttonContainer);
+
+        // Render the floating button
+        try {
+            if (ReactDOM.createRoot) {
+                const root = ReactDOM.createRoot(buttonContainer);
+                root.render(
+                    <FloatingRollCallButtonComponent onClick={this.openRollCallModal} />
+                );
+            } else {
+                ReactDOM.render(
+                    <FloatingRollCallButtonComponent onClick={this.openRollCallModal} />,
+                    buttonContainer
+                );
+            }
+            
+            // Store reference for cleanup
+            this.floatingButtonElement = buttonContainer;
+            console.log('✅ Floating Roll Call button created successfully');
+        } catch (error) {
+            console.error('❌ Error creating floating button:', error);
+        }
+    };
+
+    // Enhanced cleanup function
+    private cleanupFloatingButton = () => {
+        if (this.floatingButtonElement && this.floatingButtonElement.parentNode) {
+            this.floatingButtonElement.parentNode.removeChild(this.floatingButtonElement);
+            this.floatingButtonElement = null;
+        }
+    };
+
+    // Method to handle route changes
+    private handleRouteChange = () => {
+        // Small delay to ensure DOM is ready
+        setTimeout(() => {
+            if (this.isMainInterface()) {
+                // Create button if we're on main interface and it doesn't exist
+                if (!document.getElementById('rollcall-floating-button')) {
+                    this.createFloatingButton();
+                }
+            } else {
+                // Remove button if we're not on main interface
+                this.cleanupFloatingButton();
+            }
+        }, 100);
     };
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
@@ -411,7 +495,6 @@ export default class Plugin {
                 doReaction
             );
             
-            // MODIFY THIS: Update Roll Call post dropdown to use image
             registry.registerPostDropdownMenuAction(
                 <>
                     <span className='icon'>
@@ -437,31 +520,6 @@ export default class Plugin {
                 },
                 'Copilot',
                 'Copilot'
-            );
-        }
-
-        // MODIFY THIS: Register Roll Call channel header button with image instead of icon
-        console.log('📋 Registering Roll Call channel header button...');
-        registry.registerChannelHeaderButtonAction(
-            <RollCallIconContainer src={rollCallIcon} alt="Roll Call" />,
-            () => {
-                console.log('📋 Roll Call channel header button clicked!');
-                this.openRollCallModal();
-            },
-            'Roll Call',
-            'Open Roll Call interface'
-        );
-
-        // Register main menu action for Roll Call
-        if (registry.registerMainMenuAction) {
-            console.log('📋 Registering Roll Call main menu action...');
-            registry.registerMainMenuAction(
-                <FormattedMessage id="rollcall.title" defaultMessage="Roll Call"/>,
-                () => {
-                    console.log('📋 Roll Call main menu clicked!');
-                    this.openRollCallModal();
-                },
-                null
             );
         }
 
@@ -515,6 +573,18 @@ export default class Plugin {
             });
         }
 
+        // Create floating Roll Call button only on main interface
+        console.log('📋 Creating floating Roll Call button...');
+        this.createFloatingButton();
+
+        // Listen for route changes to show/hide button appropriately
+        if (window.WebappUtils && window.WebappUtils.browserHistory) {
+            window.WebappUtils.browserHistory.listen(this.handleRouteChange);
+        }
+
+        // Also listen for popstate events (back/forward browser buttons)
+        window.addEventListener('popstate', this.handleRouteChange);
+
         console.log('✅ Plugin initialized successfully');
     }
 
@@ -522,6 +592,11 @@ export default class Plugin {
     public uninitialize() {
         console.log('🔄 Plugin uninitializing...');
         this.closeRollCallModal();
+        this.cleanupFloatingButton();
+        
+        // Remove event listeners
+        window.removeEventListener('popstate', this.handleRouteChange);
+        
         console.log('✅ Plugin uninitialized successfully');
     }
 }
