@@ -149,20 +149,21 @@ const FloatingRollCallButton = styled.button`
         }
     }
     
-    // Responsive design
+    // Responsive design - tablet
     @media (max-width: 768px) {
-        bottom: 16px;
-        right: 16px;
-        width: 56px;
-        height: 56px;
+        top: 10px;
+        right: 19%;
+        width: 33px;
+        height: 33px;
         font-size: 22px;
     }
     
-    // Hide on very small screens where it might interfere
+    // Even smaller on mobile
     @media (max-width: 480px) {
-        bottom: 80px; // Move up to avoid mobile keyboard
-        width: 50px;
-        height: 50px;
+        right: 38%;
+        top: 10px;
+        width: 33px;
+        height: 33px;
         font-size: 20px;
     }
 `;
