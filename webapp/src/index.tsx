@@ -132,23 +132,6 @@ const FloatingRollCallButton = styled.button`
         transition: all 0.1s ease-out;
     }
     
-    // Add pulse animation to make it more noticeable
-    animation: pulse 3s infinite;
-    
-    @keyframes pulse {
-        0%, 100% {
-            box-shadow: 
-                0 8px 25px rgba(76, 175, 80, 0.3),
-                0 4px 12px rgba(0, 0, 0, 0.15);
-        }
-        50% {
-            box-shadow: 
-                0 12px 35px rgba(76, 175, 80, 0.5),
-                0 6px 16px rgba(0, 0, 0, 0.2),
-                0 0 0 8px rgba(76, 175, 80, 0.1);
-        }
-    }
-    
     // Responsive design - tablet
     @media (max-width: 768px) {
         top: 10px;
@@ -259,10 +242,11 @@ export default class Plugin {
             this.rollCallModalElement.setAttribute('data-testid', 'rollcall-modal');
             document.body.appendChild(this.rollCallModalElement);
 
-            // Use React 18 createRoot if available, otherwise fall back to render
-            if (ReactDOM.createRoot) {
+            // Type-safe React 18 check
+            const ReactDOMWithCreateRoot = ReactDOM as any;
+            if (ReactDOMWithCreateRoot.createRoot && typeof ReactDOMWithCreateRoot.createRoot === 'function') {
                 console.log('🚀 Using React 18 createRoot');
-                this.rollCallModalRoot = ReactDOM.createRoot(this.rollCallModalElement);
+                this.rollCallModalRoot = ReactDOMWithCreateRoot.createRoot(this.rollCallModalElement);
                 this.rollCallModalRoot.render(
                     <RollCallModal onClose={this.closeRollCallModal} />
                 );
@@ -362,8 +346,10 @@ export default class Plugin {
 
         // Render the floating button
         try {
-            if (ReactDOM.createRoot) {
-                const root = ReactDOM.createRoot(buttonContainer);
+            // Type-safe React 18 check
+            const ReactDOMWithCreateRoot = ReactDOM as any;
+            if (ReactDOMWithCreateRoot.createRoot && typeof ReactDOMWithCreateRoot.createRoot === 'function') {
+                const root = ReactDOMWithCreateRoot.createRoot(buttonContainer);
                 root.render(
                     <FloatingRollCallButtonComponent onClick={this.openRollCallModal} />
                 );
