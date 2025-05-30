@@ -1,5 +1,5 @@
 {
-  "id": "ai-agent-plugin",
+  "id": "mattermost-ai",
   "name": "AI Agent Plugin",
   "description": "",
   "homepage_url": "https://github.com/mattermost/mattermost-plugin-ai",
