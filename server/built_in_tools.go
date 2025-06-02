@@ -38,9 +38,9 @@ func (p *Plugin) toolResolveLookupMattermostUser(context *llm.Context, argsGette
 	}
 
 	// Fail for guests.
-	if !p.pluginAPI.User.HasPermissionTo(context.RequestingUser.Id, model.PermissionViewMembers) {
-		return "user doesn't have permissions", errors.New("user doesn't have permission to lookup users")
-	}
+	// if !p.pluginAPI.User.HasPermissionTo(context.RequestingUser.Id, model.PermissionViewMembers) {
+	// 	return "user doesn't have permissions", errors.New("user doesn't have permission to lookup users")
+	// }
 
 	user, err := p.pluginAPI.User.GetByUsername(args.Username)
 	if err != nil {

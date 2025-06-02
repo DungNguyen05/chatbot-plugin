@@ -49,7 +49,7 @@
   },
   {
     "id": "rollcall.employee.not.found",
-    "translation": "❌ Unable to find your employee record in the ERP system. Please contact your administrator to ensure your Mattermost account is linked to your employee profile."
+    "translation": "❌ Unable to find your employee record in the ERP system. Please contact your administrator to ensure your Workdone account is linked to your employee profile."
   },
   {
     "id": "rollcall.erp.error",
