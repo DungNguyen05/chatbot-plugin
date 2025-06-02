@@ -4,9 +4,11 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
+	"github.com/mattermost/mattermost-plugin-ai/server/embeddings"
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
 )
@@ -25,9 +27,11 @@ var (
 )
 
 func (p *Plugin) MessageHasBeenPosted(c *plugin.Context, post *model.Post) {
-	// We're removing all vector search/indexing functionality since we're using MySQL
+	// Index the new message in the vector database
+	if err := p.indexPost(post); err != nil {
+		p.pluginAPI.Log.Error("Failed to index post in vector database", "error", err)
+	}
 
-	// Process the message for AI responses
 	if err := p.handleMessages(post); err != nil {
 		if errors.Is(err, ErrNoResponse) {
 			p.pluginAPI.Log.Debug(err.Error())
@@ -143,7 +147,56 @@ func (p *Plugin) handleDMs(bot *Bot, channel *model.Channel, postingUser *model.
 	return nil
 }
 
+// indexPost adds a post to the vector database for future searches
+func (p *Plugin) indexPost(post *model.Post) error {
+	// If search is not configured, skip indexing
+	if p.search == nil {
+		return nil
+	}
+
+	// Get channel to retrieve team ID
+	channel, err := p.pluginAPI.Channel.Get(post.ChannelId)
+	if err != nil {
+		return fmt.Errorf("failed to get channel for post: %w", err)
+	}
+
+	if !p.ShouldIndexPost(post, channel) {
+		return nil
+	}
+
+	// Create document for vector db
+	doc := embeddings.PostDocument{
+		PostID:    post.Id,
+		CreateAt:  post.CreateAt,
+		TeamID:    channel.TeamId,
+		ChannelID: post.ChannelId,
+		UserID:    post.UserId,
+		Content:   post.Message,
+	}
+
+	// Store in vector DB
+	if err := p.search.Store(context.Background(), []embeddings.PostDocument{doc}); err != nil {
+		return fmt.Errorf("failed to store post in vector database: %w", err)
+	}
+
+	return nil
+}
+
 // MessageHasBeenUpdated is called when a message is updated
+// For updated posts, we remove the old version and add the new version
 func (p *Plugin) MessageHasBeenUpdated(c *plugin.Context, newPost, oldPost *model.Post) {
-	// No action needed for MySQL as we don't have vector search capabilities
+	// If search is not configured, skip indexing
+	if p.search == nil {
+		return
+	}
+
+	if err := p.search.Delete(context.Background(), []string{oldPost.Id}); err != nil {
+		p.pluginAPI.Log.Error("Failed to delete post from vector database", "error", err)
+		return
+	}
+
+	if err := p.indexPost(newPost); err != nil {
+		p.pluginAPI.Log.Error("Failed to index updated post in vector database", "error", err)
+		return
+	}
 }
