@@ -185,7 +185,7 @@ func (p *Plugin) newEmbeddingProvider(config embeddings.UpstreamConfig) (embeddi
         if openaiConfig.APIURL == "" {
             openaiConfig.APIURL = "https://api.openai.com/v1"
         }
-        return openai.NewEmbeddings(openaiConfig, p.llmUpstreamHTTPClient), nil
+        return openai.NewCompatibleEmbeddings(openaiConfig, p.llmUpstreamHTTPClient), nil
     }
 
     return nil, fmt.Errorf("unsupported embedding provider type: %s", config.Type)

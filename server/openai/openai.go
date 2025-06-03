@@ -89,7 +89,7 @@ func New(llmService llm.ServiceConfig, httpClient *http.Client, metricsService m
 func NewCompatibleEmbeddings(config Config, httpClient *http.Client) *OpenAI {
 	if config.EmbeddingModel == "" {
 		config.EmbeddingModel = string(openaiClient.LargeEmbedding3)
-		config.EmbeddingDimentions = 3072
+		config.EmbeddingDimentions = 1024
 	}
 
 	return newOpenAI(config, httpClient, nil,
@@ -99,22 +99,6 @@ func NewCompatibleEmbeddings(config Config, httpClient *http.Client) *OpenAI {
 			return clientConfig
 		},
 	)
-}
-
-// Add this new function for OpenAI embeddings
-func NewEmbeddings(config Config, httpClient *http.Client) *OpenAI {
-    if config.EmbeddingModel == "" {
-        config.EmbeddingModel = string(openaiClient.AdaEmbeddingV2)
-        config.EmbeddingDimentions = 1536
-    }
-
-    return newOpenAI(config, httpClient, nil,
-        func(apiKey string) openaiClient.ClientConfig {
-            clientConfig := openaiClient.DefaultConfig(apiKey)
-            clientConfig.OrgID = config.OrgID
-            return clientConfig
-        },
-    )
 }
 
 func configFromLLMService(llmService llm.ServiceConfig) Config {
