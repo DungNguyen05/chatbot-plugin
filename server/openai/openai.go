@@ -101,6 +101,22 @@ func NewCompatibleEmbeddings(config Config, httpClient *http.Client) *OpenAI {
 	)
 }
 
+// Add this new function for OpenAI embeddings
+func NewEmbeddings(config Config, httpClient *http.Client) *OpenAI {
+    if config.EmbeddingModel == "" {
+        config.EmbeddingModel = string(openaiClient.AdaEmbeddingV2)
+        config.EmbeddingDimentions = 1536
+    }
+
+    return newOpenAI(config, httpClient, nil,
+        func(apiKey string) openaiClient.ClientConfig {
+            clientConfig := openaiClient.DefaultConfig(apiKey)
+            clientConfig.OrgID = config.OrgID
+            return clientConfig
+        },
+    )
+}
+
 func configFromLLMService(llmService llm.ServiceConfig) Config {
 	defaultModel := llmService.DefaultModel
 	if defaultModel == "" {

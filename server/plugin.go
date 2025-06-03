@@ -169,22 +169,26 @@ func (p *Plugin) newVectorStore(config embeddings.UpstreamConfig, dimensions int
 
 // NewEmbeddingProvider creates a new embedding provider based on the provided configuration
 func (p *Plugin) newEmbeddingProvider(config embeddings.UpstreamConfig) (embeddings.EmbeddingProvider, error) {
-	switch config.Type {
-	case "openai-compatible":
-		compatibleConfig := openai.Config{}
-		if err := json.Unmarshal(config.Parameters, &compatibleConfig); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal OpenAI-compatible config: %w", err)
-		}
-		return openai.NewCompatibleEmbeddings(compatibleConfig, p.llmUpstreamHTTPClient), nil
-	case "openai":
-		var openaiConfig openai.Config
-		if err := json.Unmarshal(config.Parameters, &openaiConfig); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal OpenAI config: %w", err)
-		}
-		return openai.NewCompatibleEmbeddings(openaiConfig, p.llmUpstreamHTTPClient), nil
-	}
+    switch config.Type {
+    case "openai-compatible":
+        compatibleConfig := openai.Config{}
+        if err := json.Unmarshal(config.Parameters, &compatibleConfig); err != nil {
+            return nil, fmt.Errorf("failed to unmarshal OpenAI-compatible config: %w", err)
+        }
+        return openai.NewCompatibleEmbeddings(compatibleConfig, p.llmUpstreamHTTPClient), nil
+    case "openai":
+        var openaiConfig openai.Config
+        if err := json.Unmarshal(config.Parameters, &openaiConfig); err != nil {
+            return nil, fmt.Errorf("failed to unmarshal OpenAI config: %w", err)
+        }
+        // Add the default OpenAI API URL
+        if openaiConfig.APIURL == "" {
+            openaiConfig.APIURL = "https://api.openai.com/v1"
+        }
+        return openai.NewEmbeddings(openaiConfig, p.llmUpstreamHTTPClient), nil
+    }
 
-	return nil, fmt.Errorf("unsupported embedding provider type: %s", config.Type)
+    return nil, fmt.Errorf("unsupported embedding provider type: %s", config.Type)
 }
 
 func (p *Plugin) initSearch() (embeddings.EmbeddingSearch, error) {
