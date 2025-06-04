@@ -376,7 +376,7 @@ func (p *Plugin) toolSearchServer(llmContext *llm.Context, argsGetter llm.ToolAr
 
 	ctx := context.Background()
 	searchResults, err := p.search.Search(ctx, args.Term, embeddings.SearchOptions{
-		Limit:  10,
+		Limit:  15,
 		UserID: llmContext.RequestingUser.Id,
 	})
 	if err != nil {

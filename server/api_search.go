@@ -122,7 +122,7 @@ func (p *Plugin) formatSearchResults(results []embeddings.SearchResult) (string,
 // performSearch searches for posts using the given query and returns enriched RAGResult objects
 func (p *Plugin) performSearch(ctx context.Context, req SearchRequest, userID string) ([]RAGResult, error) {
 	if req.MaxResults == 0 {
-		req.MaxResults = 5
+		req.MaxResults = 15
 	}
 
 	if p.search == nil {
