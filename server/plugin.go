@@ -177,15 +177,20 @@ func (p *Plugin) newEmbeddingProvider(config embeddings.UpstreamConfig) (embeddi
         }
         return openai.NewCompatibleEmbeddings(compatibleConfig, p.llmUpstreamHTTPClient), nil
     case "openai":
-        var openaiConfig openai.Config
-        if err := json.Unmarshal(config.Parameters, &openaiConfig); err != nil {
-            return nil, fmt.Errorf("failed to unmarshal OpenAI config: %w", err)
-        }
-        // Add the default OpenAI API URL
-        if openaiConfig.APIURL == "" {
-            openaiConfig.APIURL = "https://api.openai.com/v1"
-        }
-        return openai.NewCompatibleEmbeddings(openaiConfig, p.llmUpstreamHTTPClient), nil
+		var openaiConfig openai.Config
+		if err := json.Unmarshal(config.Parameters, &openaiConfig); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal OpenAI config: %w", err)
+		}
+		// Add the default OpenAI API URL
+		if openaiConfig.APIURL == "" {
+			openaiConfig.APIURL = "https://api.openai.com/v1"
+		}
+		// Set default embedding model and dimensions if not specified
+		// if openaiConfig.EmbeddingModel == "" {
+		// 	openaiConfig.EmbeddingModel = "text-embedding-3-small"
+		// 	openaiConfig.EmbeddingDimentions = 1536
+		// }
+		return openai.NewCompatibleEmbeddings(openaiConfig, p.llmUpstreamHTTPClient), nil
     }
 
     return nil, fmt.Errorf("unsupported embedding provider type: %s", config.Type)

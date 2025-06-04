@@ -118,19 +118,30 @@ func (p *Plugin) createExternalHTTPClient() *http.Client {
 	baseClient := httpservice.MakeHTTPServicePlugin(p.API).MakeClient(false)
 	config := p.getConfiguration()
 
+	// Start with user-configured hostnames
+	allowedHosts := parseAllowedHostnames(config.AllowedUpstreamHostnames)
+	
+	// Always add OpenAI API domain
+	allowedHosts = append(allowedHosts, "api.openai.com")
+
 	// Add ERP domain to allowed hostnames if configured
-	var allowedHosts []string
 	if config.RollCall.ERPDomain != "" {
 		// Extract hostname from ERP domain
 		erpHost := extractHostname(config.RollCall.ERPDomain)
-		// Add to allowed hostnames
+		// Add to allowed hostnames if it's not already there
 		if erpHost != "" {
-			allowedHosts = append([]string{erpHost}, parseAllowedHostnames(config.AllowedUpstreamHostnames)...)
-		} else {
-			allowedHosts = parseAllowedHostnames(config.AllowedUpstreamHostnames)
+			// Check if ERP host is already in the list
+			found := false
+			for _, host := range allowedHosts {
+				if host == erpHost {
+					found = true
+					break
+				}
+			}
+			if !found {
+				allowedHosts = append(allowedHosts, erpHost)
+			}
 		}
-	} else {
-		allowedHosts = parseAllowedHostnames(config.AllowedUpstreamHostnames)
 	}
 
 	return createRestrictedClient(baseClient, allowedHosts)

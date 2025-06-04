@@ -88,8 +88,8 @@ func New(llmService llm.ServiceConfig, httpClient *http.Client, metricsService m
 // NewCompatibleEmbeddings creates a new OpenAI client configured only for embeddings functionality
 func NewCompatibleEmbeddings(config Config, httpClient *http.Client) *OpenAI {
 	if config.EmbeddingModel == "" {
-		config.EmbeddingModel = string(openaiClient.LargeEmbedding3)
-		config.EmbeddingDimentions = 1024
+		config.EmbeddingModel = string(openaiClient.SmallEmbedding3) 
+		config.EmbeddingDimentions = 1536 
 	}
 
 	return newOpenAI(config, httpClient, nil,
