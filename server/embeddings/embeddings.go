@@ -69,6 +69,9 @@ type EmbeddingSearch interface {
 
 	// Clear removes all documents
 	Clear(ctx context.Context) error
+
+	// RecreateIndex drops and recreates the entire vector storage with new dimensions
+	RecreateIndex(ctx context.Context, newDimensions int) error
 }
 
 // VectorStore defines the interface for vector storage and search operations
@@ -84,6 +87,9 @@ type VectorStore interface {
 
 	// Clear removes all documents from the vector store
 	Clear(ctx context.Context) error
+
+	// RecreateIndex drops and recreates the vector storage with new dimensions
+	RecreateIndex(ctx context.Context, newDimensions int) error
 }
 
 // EmbeddingProvider defines the interface for embedding generation

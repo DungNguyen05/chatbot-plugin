@@ -23,6 +23,11 @@ func (p *Plugin) handleReindexPosts(c *gin.Context) {
 		return
 	}
 
+	// Log current configuration
+	cfg := p.getConfiguration()
+	p.pluginAPI.Log.Info("Reindex requested",
+		"configured_dimensions", cfg.EmbeddingSearchConfig.Dimensions)
+
 	// Check if a job is already running
 	data, appErr := p.API.KVGet(ReindexJobKey)
 	if appErr != nil {

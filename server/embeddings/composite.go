@@ -79,3 +79,8 @@ func (c *CompositeSearch) Delete(ctx context.Context, postIDs []string) error {
 func (c *CompositeSearch) Clear(ctx context.Context) error {
 	return c.store.Clear(ctx)
 }
+
+// RecreateIndex drops and recreates the vector storage with new dimensions
+func (c *CompositeSearch) RecreateIndex(ctx context.Context, newDimensions int) error {
+	return c.store.RecreateIndex(ctx, newDimensions)
+}

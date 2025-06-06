@@ -169,14 +169,14 @@ func (p *Plugin) newVectorStore(config embeddings.UpstreamConfig, dimensions int
 
 // NewEmbeddingProvider creates a new embedding provider based on the provided configuration
 func (p *Plugin) newEmbeddingProvider(config embeddings.UpstreamConfig) (embeddings.EmbeddingProvider, error) {
-    switch config.Type {
-    case "openai-compatible":
-        compatibleConfig := openai.Config{}
-        if err := json.Unmarshal(config.Parameters, &compatibleConfig); err != nil {
-            return nil, fmt.Errorf("failed to unmarshal OpenAI-compatible config: %w", err)
-        }
-        return openai.NewCompatibleEmbeddings(compatibleConfig, p.llmUpstreamHTTPClient), nil
-    case "openai":
+	switch config.Type {
+	case "openai-compatible":
+		compatibleConfig := openai.Config{}
+		if err := json.Unmarshal(config.Parameters, &compatibleConfig); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal OpenAI-compatible config: %w", err)
+		}
+		return openai.NewCompatibleEmbeddings(compatibleConfig, p.llmUpstreamHTTPClient), nil
+	case "openai":
 		var openaiConfig openai.Config
 		if err := json.Unmarshal(config.Parameters, &openaiConfig); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal OpenAI config: %w", err)
@@ -191,9 +191,9 @@ func (p *Plugin) newEmbeddingProvider(config embeddings.UpstreamConfig) (embeddi
 		// 	openaiConfig.EmbeddingDimentions = 1536
 		// }
 		return openai.NewCompatibleEmbeddings(openaiConfig, p.llmUpstreamHTTPClient), nil
-    }
+	}
 
-    return nil, fmt.Errorf("unsupported embedding provider type: %s", config.Type)
+	return nil, fmt.Errorf("unsupported embedding provider type: %s", config.Type)
 }
 
 func (p *Plugin) initSearch() (embeddings.EmbeddingSearch, error) {
@@ -207,8 +207,16 @@ func (p *Plugin) initSearch() (embeddings.EmbeddingSearch, error) {
 		return nil, fmt.Errorf("search is unavailable without a valid license")
 	}
 
-	switch cfg.EmbeddingSearchConfig.Type { //nolint:gocritic
+	switch cfg.EmbeddingSearchConfig.Type {
 	case "composite":
+		// Validate dimensions
+		if cfg.EmbeddingSearchConfig.Dimensions <= 0 {
+			return nil, fmt.Errorf("invalid embedding dimensions: %d", cfg.EmbeddingSearchConfig.Dimensions)
+		}
+
+		p.pluginAPI.Log.Info("Initializing search with dimensions",
+			"dimensions", cfg.EmbeddingSearchConfig.Dimensions)
+
 		vector, err := p.newVectorStore(cfg.EmbeddingSearchConfig.VectorStore, cfg.EmbeddingSearchConfig.Dimensions)
 		if err != nil {
 			return nil, err
@@ -216,6 +224,13 @@ func (p *Plugin) initSearch() (embeddings.EmbeddingSearch, error) {
 		embeddor, err := p.newEmbeddingProvider(cfg.EmbeddingSearchConfig.EmbeddingProvider)
 		if err != nil {
 			return nil, err
+		}
+
+		// Validate that embedding provider dimensions match configuration
+		if embeddor.Dimensions() != cfg.EmbeddingSearchConfig.Dimensions {
+			p.pluginAPI.Log.Warn("Dimension mismatch detected",
+				"config_dimensions", cfg.EmbeddingSearchConfig.Dimensions,
+				"provider_dimensions", embeddor.Dimensions())
 		}
 
 		// Check if we have specific chunking options configured

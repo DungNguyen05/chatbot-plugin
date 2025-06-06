@@ -62,14 +62,24 @@ func (p *Plugin) runReindexJob(jobStatus *JobStatus) {
 
 	ctx := context.Background()
 
-	// Clear the existing index
-	if err := p.search.Clear(ctx); err != nil {
+	// Get the current embedding dimensions from configuration
+	cfg := p.getConfiguration()
+	targetDimensions := cfg.EmbeddingSearchConfig.Dimensions
+
+	p.pluginAPI.Log.Info("Starting reindex with dimension recreation",
+		"target_dimensions", targetDimensions)
+
+	// Drop and recreate the vector table with current configuration dimensions
+	if err := p.search.RecreateIndex(ctx, targetDimensions); err != nil {
 		jobStatus.Status = JobStatusFailed
-		jobStatus.Error = fmt.Sprintf("Failed to clear search index: %s", err)
+		jobStatus.Error = fmt.Sprintf("Failed to recreate search index: %s", err)
 		jobStatus.CompletedAt = time.Now()
 		p.saveJobStatus(jobStatus)
 		return
 	}
+
+	p.pluginAPI.Log.Info("Vector table recreated successfully",
+		"dimensions", targetDimensions)
 
 	var posts []PostRecord
 	lastCreateAt := int64(0)

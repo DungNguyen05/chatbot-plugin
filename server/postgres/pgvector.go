@@ -28,42 +28,14 @@ func NewPGVector(db *sqlx.DB, config PGVectorConfig) (*PGVector, error) {
 		return nil, fmt.Errorf("failed to create vector extension: %w", err)
 	}
 
-	// Create the llm_posts_embeddings table if it doesn't exist
-	createTableQuery := `
-		CREATE TABLE IF NOT EXISTS llm_posts_embeddings (
-			id TEXT PRIMARY KEY,             								-- Post ID or chunk ID (post_id_chunk_N)
-			post_id TEXT NOT NULL REFERENCES Posts(Id) ON DELETE CASCADE,   -- Original post ID (same as id for non-chunks)
-			team_id TEXT NOT NULL,
-			channel_id TEXT NOT NULL,
-			user_id TEXT NOT NULL,
-			content TEXT NOT NULL,
-			embedding vector(` + strconv.Itoa(config.Dimensions) + `),
-			created_at BIGINT NOT NULL,
-			is_chunk BOOLEAN NOT NULL DEFAULT FALSE,
-			chunk_index INTEGER,              -- NULL for non-chunks
-			total_chunks INTEGER             -- NULL for non-chunks
-		)`
-	if _, err := db.Exec(createTableQuery); err != nil {
-		return nil, fmt.Errorf("failed to create llm_posts_embeddings table: %w", err)
+	pgVector := &PGVector{db: db}
+
+	// Create the table with specified dimensions
+	if err := pgVector.createTable(config.Dimensions); err != nil {
+		return nil, err
 	}
 
-	// Create indexes
-	queries := []string{
-		// Index for similarity search using HNSW
-		"CREATE INDEX IF NOT EXISTS llm_posts_embeddings_embedding_idx ON llm_posts_embeddings USING hnsw (embedding vector_l2_ops)",
-		// Index on post_id for efficient lookups and deletions
-		"CREATE INDEX IF NOT EXISTS llm_posts_embeddings_post_id_idx ON llm_posts_embeddings(post_id)",
-		// Index on is_chunk to filter by chunks
-		"CREATE INDEX IF NOT EXISTS llm_posts_embeddings_is_chunk_idx ON llm_posts_embeddings(is_chunk)",
-	}
-
-	for _, query := range queries {
-		if _, err := db.Exec(query); err != nil {
-			return nil, fmt.Errorf("failed to create index: %w", err)
-		}
-	}
-
-	return &PGVector{db: db}, nil
+	return pgVector, nil
 }
 
 func (pv *PGVector) Store(ctx context.Context, docs []embeddings.PostDocument, embeddings [][]float32) error {
@@ -264,5 +236,60 @@ func (pv *PGVector) Clear(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to clear vectors: %w", err)
 	}
+	return nil
+}
+
+// RecreateIndex drops and recreates the vector storage with new dimensions
+func (pv *PGVector) RecreateIndex(ctx context.Context, newDimensions int) error {
+	// Drop the existing table
+	if _, err := pv.db.ExecContext(ctx, "DROP TABLE IF EXISTS llm_posts_embeddings"); err != nil {
+		return fmt.Errorf("failed to drop vector table: %w", err)
+	}
+
+	// Recreate the table with new dimensions
+	if err := pv.createTable(newDimensions); err != nil {
+		return fmt.Errorf("failed to recreate vector table: %w", err)
+	}
+
+	return nil
+}
+
+// createTable creates the llm_posts_embeddings table with specified dimensions
+func (pv *PGVector) createTable(dimensions int) error {
+	// Create the llm_posts_embeddings table
+	createTableQuery := `
+		CREATE TABLE IF NOT EXISTS llm_posts_embeddings (
+			id TEXT PRIMARY KEY,             								-- Post ID or chunk ID (post_id_chunk_N)
+			post_id TEXT NOT NULL REFERENCES Posts(Id) ON DELETE CASCADE,   -- Original post ID (same as id for non-chunks)
+			team_id TEXT NOT NULL,
+			channel_id TEXT NOT NULL,
+			user_id TEXT NOT NULL,
+			content TEXT NOT NULL,
+			embedding vector(` + strconv.Itoa(dimensions) + `),
+			created_at BIGINT NOT NULL,
+			is_chunk BOOLEAN NOT NULL DEFAULT FALSE,
+			chunk_index INTEGER,              -- NULL for non-chunks
+			total_chunks INTEGER             -- NULL for non-chunks
+		)`
+	if _, err := pv.db.Exec(createTableQuery); err != nil {
+		return fmt.Errorf("failed to create llm_posts_embeddings table: %w", err)
+	}
+
+	// Create indexes
+	queries := []string{
+		// Index for similarity search using HNSW
+		"CREATE INDEX IF NOT EXISTS llm_posts_embeddings_embedding_idx ON llm_posts_embeddings USING hnsw (embedding vector_l2_ops)",
+		// Index on post_id for efficient lookups and deletions
+		"CREATE INDEX IF NOT EXISTS llm_posts_embeddings_post_id_idx ON llm_posts_embeddings(post_id)",
+		// Index on is_chunk to filter by chunks
+		"CREATE INDEX IF NOT EXISTS llm_posts_embeddings_is_chunk_idx ON llm_posts_embeddings(is_chunk)",
+	}
+
+	for _, query := range queries {
+		if _, err := pv.db.Exec(query); err != nil {
+			return fmt.Errorf("failed to create index: %w", err)
+		}
+	}
+
 	return nil
 }
