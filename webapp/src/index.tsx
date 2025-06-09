@@ -317,6 +317,18 @@ export default class Plugin {
     // Helper function to check if we're on the main chat interface
     private isMainInterface = (): boolean => {
         const currentPath = window.location.pathname;
+        
+        // Hide on authentication pages
+        if (currentPath.includes('/login') || 
+            currentPath.includes('/signup') || 
+            currentPath.includes('/reset_password') || 
+            currentPath.includes('/should_verify_email') || 
+            currentPath.includes('/do_verify_email') || 
+            currentPath.includes('/claim') || 
+            currentPath === '/' && !document.querySelector('[data-testid="team-sidebar"]')) {
+            return false;
+        }
+        
         // Show on team channels and direct messages, hide on system console and other admin pages
         return !currentPath.includes('/admin_console') && 
                !currentPath.includes('/system_console') && 
