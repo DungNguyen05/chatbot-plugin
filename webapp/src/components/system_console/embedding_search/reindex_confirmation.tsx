@@ -23,19 +23,29 @@ export const ReindexConfirmation = ({show, onConfirm, onCancel}: ReindexConfirma
             message={
                 <>
                     <p>
-                        <FormattedMessage defaultMessage='Are you sure you want to reindex all posts?'/>
+                        <FormattedMessage defaultMessage='Are you sure you want to start the reindexing process?'/>
                     </p>
                     <p>
-                        <FormattedMessage defaultMessage='This will clear the current index and rebuild it from scratch. The process will:'/>
+                        <FormattedMessage defaultMessage='This process will:'/>
                     </p>
                     <ul>
-                        <li><FormattedMessage defaultMessage='Index all existing posts in the database'/></li>
-                        <li><FormattedMessage defaultMessage='Take a significant amount of time for large installations'/></li>
+                        <li><FormattedMessage defaultMessage='Index the selected posts in the database'/></li>
+                        <li><FormattedMessage defaultMessage='Take time depending on the number of posts selected'/></li>
                         <li><FormattedMessage defaultMessage='Increase database load during the reindexing process'/></li>
                     </ul>
+                    <p>
+                        <strong>
+                            <FormattedMessage defaultMessage='For partial reindexing: Only the most recent posts will be processed and existing embeddings for those posts will be updated.'/>
+                        </strong>
+                    </p>
+                    <p>
+                        <strong>
+                            <FormattedMessage defaultMessage='For full reindexing: The entire search index will be cleared and rebuilt from scratch.'/>
+                        </strong>
+                    </p>
                 </>
             }
-            confirmButtonText={<FormattedMessage defaultMessage='Reindex'/>}
+            confirmButtonText={<FormattedMessage defaultMessage='Start Reindexing'/>}
             onConfirm={onConfirm}
             onCancel={onCancel}
         />

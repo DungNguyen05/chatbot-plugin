@@ -15,7 +15,13 @@ import (
 	"github.com/mattermost/mattermost/server/public/model"
 )
 
-// handleReindexPosts starts a background job to reindex all posts
+// ReindexRequest represents the request payload for reindexing
+type ReindexRequest struct {
+	LastKPosts  int  `json:"lastKPosts,omitempty"`  // If 0 or not provided, reindex all posts
+	FullReindex bool `json:"fullReindex,omitempty"` // Explicitly request full reindex
+}
+
+// handleReindexPosts starts a background job to reindex posts
 func (p *Plugin) handleReindexPosts(c *gin.Context) {
 	// Check if search is initialized
 	if p.search == nil {
@@ -23,10 +29,31 @@ func (p *Plugin) handleReindexPosts(c *gin.Context) {
 		return
 	}
 
+	// Parse request body
+	var req ReindexRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// If no body or invalid JSON, default to full reindex
+		req.FullReindex = true
+		req.LastKPosts = 0
+	}
+
+	// Validate lastKPosts
+	if req.LastKPosts < 0 {
+		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("lastKPosts must be non-negative"))
+		return
+	}
+
+	// If lastKPosts is 0, treat as full reindex
+	if req.LastKPosts == 0 {
+		req.FullReindex = true
+	}
+
 	// Log current configuration
 	cfg := p.getConfiguration()
 	p.pluginAPI.Log.Info("Reindex requested",
-		"configured_dimensions", cfg.EmbeddingSearchConfig.Dimensions)
+		"configured_dimensions", cfg.EmbeddingSearchConfig.Dimensions,
+		"last_k_posts", req.LastKPosts,
+		"full_reindex", req.FullReindex)
 
 	// Check if a job is already running
 	data, appErr := p.API.KVGet(ReindexJobKey)
@@ -47,7 +74,23 @@ func (p *Plugin) handleReindexPosts(c *gin.Context) {
 
 	// Get an estimate of total posts for progress tracking
 	var count int64
-	err := p.db.Get(&count, `SELECT COUNT(*) FROM Posts WHERE DeleteAt = 0 AND Message != '' AND Type = ''`)
+	var query string
+	var args []interface{}
+
+	if req.FullReindex {
+		query = `SELECT COUNT(*) FROM Posts WHERE DeleteAt = 0 AND Message != '' AND Type = ''`
+		args = []interface{}{}
+	} else {
+		query = `SELECT COUNT(*) FROM (
+			SELECT Id FROM Posts 
+			WHERE DeleteAt = 0 AND Message != '' AND Type = ''
+			ORDER BY CreateAt DESC, Id DESC
+			LIMIT $1
+		) AS subq`
+		args = []interface{}{req.LastKPosts}
+	}
+
+	err := p.db.Get(&count, query, args...)
 	if err != nil {
 		p.pluginAPI.Log.Warn("Failed to get post count for progress tracking", "error", err)
 		count = 0 // Continue with zero estimate
@@ -55,9 +98,11 @@ func (p *Plugin) handleReindexPosts(c *gin.Context) {
 
 	// Create initial job status
 	jobStatus := &JobStatus{
-		Status:    JobStatusRunning,
-		StartedAt: time.Now(),
-		TotalRows: count,
+		Status:      JobStatusRunning,
+		StartedAt:   time.Now(),
+		TotalRows:   count,
+		LastKPosts:  req.LastKPosts,
+		FullReindex: req.FullReindex,
 	}
 
 	// Save initial job status

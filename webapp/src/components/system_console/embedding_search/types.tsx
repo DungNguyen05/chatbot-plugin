@@ -30,9 +30,17 @@ export interface JobStatusType {
     completed_at?: string;
     processed_rows: number;
     total_rows: number;
+    last_k_posts?: number; // Number of recent posts to reindex (0 means all)
+    full_reindex?: boolean; // Whether this is a full reindex
 }
 
 export interface StatusMessageType {
     success?: boolean;
     message?: string;
+}
+
+// Request payload for reindexing
+export interface ReindexRequest {
+    lastKPosts?: number; // If 0 or not provided, reindex all posts
+    fullReindex?: boolean; // Explicitly request full reindex
 }

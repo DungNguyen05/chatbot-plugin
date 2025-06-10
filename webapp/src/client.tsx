@@ -4,6 +4,8 @@
 import {Client4 as Client4Class, ClientError} from '@mattermost/client';
 import {ChannelWithTeamData} from '@mattermost/types/channels';
 import {NotPagedTeamSearchOpts, Team} from '@mattermost/types/teams';
+import {ReindexRequest, JobStatusType} from './components/system_console/embedding_search/types';
+
 
 import manifest from './manifest';
 
@@ -23,43 +25,6 @@ function postRoute(postid: string): string {
 
 function channelRoute(channelid: string): string {
     return `${baseRoute()}/channel/${channelid}`;
-}
-
-export async function doCheckIn(): Promise<any> {
-    return Client4.doFetch(
-        `${getPluginRoute(manifest.id)}/api/v1/checkin`,
-        {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        }
-    );
-}
-
-export async function doCheckOut(): Promise<any> {
-    return Client4.doFetch(
-        `${getPluginRoute(manifest.id)}/api/v1/checkout`,
-        {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        }
-    );
-}
-
-export async function doAbsent(reason: string): Promise<any> {
-    return Client4.doFetch(
-        `${getPluginRoute(manifest.id)}/api/v1/absent`,
-        {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ reason }),
-        }
-    );
 }
 
 
@@ -343,56 +308,72 @@ export function getPost(postId: string) {
     return Client4.getPost(postId);
 }
 
-export async function doReindexPosts() {
-    const url = `${baseRoute()}/admin/reindex`;
-    const response = await fetch(url, Client4.getOptions({
-        method: 'POST',
-    }));
-
-    if (response.ok) {
-        return response.json();
+export const doReindexPosts = async (lastKPosts?: number, fullReindex?: boolean): Promise<JobStatusType> => {
+    const request: ReindexRequest = {};
+    
+    if (fullReindex) {
+        request.fullReindex = true;
+        request.lastKPosts = 0;
+    } else if (lastKPosts && lastKPosts > 0) {
+        request.lastKPosts = lastKPosts;
+        request.fullReindex = false;
+    } else {
+        // Default to full reindex if no parameters provided
+        request.fullReindex = true;
+        request.lastKPosts = 0;
     }
 
-    throw new ClientError(Client4.url, {
-        message: '',
-        status_code: response.status,
-        url,
+    const response = await fetch('/plugins/mattermost-ai/admin/reindex', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify(request),
     });
-}
 
-export async function getReindexStatus() {
-    const url = `${baseRoute()}/admin/reindex/status`;
-    const response = await fetch(url, Client4.getOptions({
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+    }
+
+    return response.json();
+};
+
+// Keep the existing getReindexStatus and cancelReindex functions as they are
+export const getReindexStatus = async (): Promise<JobStatusType> => {
+    const response = await fetch('/plugins/mattermost-ai/admin/reindex/status', {
         method: 'GET',
-    }));
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+    });
 
-    if (response.ok) {
-        return response.json();
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const error = new Error(`HTTP error! status: ${response.status}`);
+        (error as any).status_code = response.status;
+        (error as any).data = errorData;
+        throw error;
     }
 
-    throw new ClientError(Client4.url, {
-        message: '',
-        status_code: response.status,
-        url,
-    });
-}
+    return response.json();
+};
 
-export async function cancelReindex() {
-    const url = `${baseRoute()}/admin/reindex/cancel`;
-    const response = await fetch(url, Client4.getOptions({
+export const cancelReindex = async (): Promise<JobStatusType> => {
+    const response = await fetch('/plugins/mattermost-ai/admin/reindex/cancel', {
         method: 'POST',
-    }));
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+    });
 
-    if (response.ok) {
-        return response.json();
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    throw new ClientError(Client4.url, {
-        message: '',
-        status_code: response.status,
-        url,
-    });
-}
+    return response.json();
+};
 
 export async function getChannelInterval(
     channelID: string,
@@ -411,6 +392,67 @@ export async function getChannelInterval(
             preset_prompt: presetPrompt,
             prompt: prompt || '',
         }),
+    }));
+
+    if (response.ok) {
+        return response.json();
+    }
+
+    throw new ClientError(Client4.url, {
+        message: '',
+        status_code: response.status,
+        url,
+    });
+}
+
+export async function doCheckIn(): Promise<any> {
+    const url = `${getPluginRoute(manifest.id)}/api/v1/checkin`;
+    const response = await fetch(url, Client4.getOptions({
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    }));
+
+    if (response.ok) {
+        return response.json();
+    }
+
+    throw new ClientError(Client4.url, {
+        message: '',
+        status_code: response.status,
+        url,
+    });
+}
+
+export async function doCheckOut(): Promise<any> {
+    const url = `${getPluginRoute(manifest.id)}/api/v1/checkout`;
+    const response = await fetch(url, Client4.getOptions({
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    }));
+
+    if (response.ok) {
+        return response.json();
+    }
+
+    throw new ClientError(Client4.url, {
+        message: '',
+        status_code: response.status,
+        url,
+    });
+}
+
+export async function doAbsent(reason: string): Promise<any> {
+    const url = `${getPluginRoute(manifest.id)}/api/v1/absent`;
+    const response = await fetch(url, Client4.getOptions({
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reason }),
     }));
 
     if (response.ok) {

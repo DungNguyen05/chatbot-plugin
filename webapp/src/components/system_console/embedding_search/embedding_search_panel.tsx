@@ -40,6 +40,7 @@ const EmbeddingSearchPanel = ({value, onChange}: Props) => {
         jobStatus,
         statusMessage,
         showReindexConfirmation,
+        pendingReindexParams,
         handleReindexClick,
         handleConfirmReindex,
         handleCancelReindex,
@@ -207,6 +208,8 @@ const EmbeddingSearchPanel = ({value, onChange}: Props) => {
 
             <ReindexConfirmation
                 show={showReindexConfirmation}
+                isFullReindex={pendingReindexParams.fullReindex}
+                lastKPosts={pendingReindexParams.lastKPosts}
                 onConfirm={handleConfirmReindex}
                 onCancel={handleCancelReindex}
             />
