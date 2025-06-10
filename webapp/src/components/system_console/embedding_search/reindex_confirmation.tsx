@@ -28,7 +28,7 @@ export const ReindexConfirmation = ({show, isFullReindex, lastKPosts, onConfirm,
                         <FormattedMessage defaultMessage='Are you sure you want to create a fresh search index?'/>
                     </p>
                     <p style={{color: 'var(--error-text)', fontWeight: 'bold', padding: '8px', backgroundColor: 'rgba(var(--error-text-color), 0.08)', borderRadius: '4px', border: '1px solid rgba(var(--error-text-color), 0.16)'}}>
-                        ⚠️ <FormattedMessage defaultMessage='WARNING: All existing search data will be permanently deleted and cannot be recovered.'/>
+                        ⚠️ <FormattedMessage defaultMessage='Warning: Full reindex will recreate the vector storage and may take several hours for large installations.'/>
                     </p>
                     <p>
                         <FormattedMessage defaultMessage='This process will:'/>

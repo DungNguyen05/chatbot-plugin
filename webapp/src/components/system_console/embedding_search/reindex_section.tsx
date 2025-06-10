@@ -304,13 +304,6 @@ export const ReindexSection = ({
                                     </PartialReindexOptions>
                                 )}
 
-                                {reindexType === 'full' && (
-                                    <div style={{marginLeft: '20px', marginTop: '8px'}}>
-                                        <HelpText style={{fontSize: '11px', color: 'var(--error-text)'}}>
-                                            <FormattedMessage defaultMessage='⚠️ Warning: Full reindex will recreate the vector storage and may take several hours for large installations.'/>
-                                        </HelpText>
-                                    </div>
-                                )}
                             </ReindexOptionsContainer>
                         </>
                     )}
