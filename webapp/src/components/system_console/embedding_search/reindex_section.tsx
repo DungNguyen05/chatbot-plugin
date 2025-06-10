@@ -62,6 +62,35 @@ const ButtonGroup = styled.div`
     gap: 8px;
 `;
 
+const WarningContainer = styled.div`
+    padding: 12px;
+    backgroundColor: rgba(var(--error-text-color), 0.08);
+    border: 1px solid rgba(var(--error-text-color), 0.16);
+    border-radius: 4px;
+    margin-bottom: 16px;
+`;
+
+const WarningHeader = styled.div`
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+`;
+
+const WarningIcon = styled.span`
+    color: var(--error-text);
+    fontSize: 16px;
+`;
+
+const WarningTitle = styled.strong`
+    color: var(--error-text);
+`;
+
+const WarningText = styled.div`
+    fontSize: 12px;
+    color: rgba(var(--center-channel-color-rgb), 0.72);
+`;
+
 const ReindexOptionsContainer = styled.div`
     margin-bottom: 16px;
     padding: 16px;
@@ -198,78 +227,92 @@ export const ReindexSection = ({
 
                     {/* Show reindex options only when not running */}
                     {!isReindexing && (
-                        <ReindexOptionsContainer>
-                            <RadioGroup>
-                                <div>
-                                    <RadioOption>
-                                        <input
-                                            type="radio"
-                                            name="reindexType"
-                                            value="partial"
-                                            checked={reindexType === 'partial'}
-                                            onChange={() => setReindexType('partial')}
-                                        />
-                                        <RadioLabel>
-                                            <FormattedMessage defaultMessage='Reindex Recent Posts Only'/>
-                                        </RadioLabel>
-                                        <StatusBadge type="partial">Recommended</StatusBadge>
-                                    </RadioOption>
-                                    <RadioDescription>
-                                        <FormattedMessage defaultMessage='Faster option that reindexes only the most recent posts. Good for incremental updates and when you want to index new content without rebuilding everything.'/>
-                                    </RadioDescription>
-                                </div>
-                                
-                                <div>
-                                    <RadioOption>
-                                        <input
-                                            type="radio"
-                                            name="reindexType"
-                                            value="full"
-                                            checked={reindexType === 'full'}
-                                            onChange={() => setReindexType('full')}
-                                        />
-                                        <RadioLabel>
-                                            <FormattedMessage defaultMessage='Full Reindex (All Posts)'/>
-                                        </RadioLabel>
-                                        <StatusBadge type="full">Slower</StatusBadge>
-                                    </RadioOption>
-                                    <RadioDescription>
-                                        <FormattedMessage defaultMessage='Complete rebuild of the entire search index. This will clear all existing embeddings and recreate the vector storage. Use when changing dimensions or doing a fresh start.'/>
-                                    </RadioDescription>
-                                </div>
-                            </RadioGroup>
+                        <>
+                            <WarningContainer>
+                                <WarningHeader>
+                                    <WarningIcon>⚠️</WarningIcon>
+                                    <WarningTitle>
+                                        <FormattedMessage defaultMessage='Important: Reindexing always clears all existing search data'/>
+                                    </WarningTitle>
+                                </WarningHeader>
+                                <WarningText>
+                                    <FormattedMessage defaultMessage='Both options recreate the search index from scratch. Choose based on how much content you want searchable.'/>
+                                </WarningText>
+                            </WarningContainer>
 
-                            {reindexType === 'partial' && (
-                                <PartialReindexOptions>
-                                    <IntItem
-                                        label="Number of Recent Posts"
-                                        placeholder="1000"
-                                        value={lastKPosts}
-                                        onChange={setLastKPosts}
-                                        min={1}
-                                        max={100000}
-                                        helptext="Enter the number of most recent posts to reindex. Recommended values: 1000 for daily updates, 10000 for weekly updates, 50000+ for major updates."
-                                    />
-                                    <HelpText style={{marginTop: '8px', fontSize: '11px'}}>
-                                        <FormattedMessage 
-                                            defaultMessage='Estimated time: ~{time} minutes for {count} posts'
-                                            values={{
-                                                time: Math.ceil(lastKPosts / 1000 * 2), // Rough estimate: 2 minutes per 1000 posts
-                                                count: lastKPosts.toLocaleString()
-                                            }}
-                                        />
-                                    </HelpText>
-                                </PartialReindexOptions>
-                            )}
+                            <ReindexOptionsContainer>
+                                <RadioGroup>
+                                    <div>
+                                        <RadioOption>
+                                            <input
+                                                type="radio"
+                                                name="reindexType"
+                                                value="partial"
+                                                checked={reindexType === 'partial'}
+                                                onChange={() => setReindexType('partial')}
+                                            />
+                                            <RadioLabel>
+                                                <FormattedMessage defaultMessage='Index Recent Posts Only'/>
+                                            </RadioLabel>
+                                            <StatusBadge type="partial">Recommended</StatusBadge>
+                                        </RadioOption>
+                                        <RadioDescription>
+                                            <FormattedMessage defaultMessage='Creates a fresh search index using only the most recent posts. Faster than full reindex but only recent content will be searchable. All existing search data will be cleared.'/>
+                                        </RadioDescription>
+                                    </div>
+                                    
+                                    <div>
+                                        <RadioOption>
+                                            <input
+                                                type="radio"
+                                                name="reindexType"
+                                                value="full"
+                                                checked={reindexType === 'full'}
+                                                onChange={() => setReindexType('full')}
+                                            />
+                                            <RadioLabel>
+                                                <FormattedMessage defaultMessage='Index All Posts (Full Reindex)'/>
+                                            </RadioLabel>
+                                            <StatusBadge type="full">Slower</StatusBadge>
+                                        </RadioOption>
+                                        <RadioDescription>
+                                            <FormattedMessage defaultMessage='Creates a fresh search index using all posts in the database. This will clear all existing embeddings and recreate the vector storage with all historical content.'/>
+                                        </RadioDescription>
+                                    </div>
+                                </RadioGroup>
 
-                            {reindexType === 'full' && (
-                                <div style={{marginLeft: '20px', marginTop: '8px'}}>
-                                    <HelpText style={{fontSize: '11px', color: 'var(--error-text)'}}>
-                                        <FormattedMessage defaultMessage='⚠️ Warning: Full reindex will recreate the vector storage and may take several hours for large installations.'/>
-                                    </HelpText>
-                                </div>
-                            )}
-                        </ReindexOptionsContainer>
+                                {reindexType === 'partial' && (
+                                    <PartialReindexOptions>
+                                        <IntItem
+                                            label="Number of Recent Posts"
+                                            placeholder="1000"
+                                            value={lastKPosts}
+                                            onChange={setLastKPosts}
+                                            min={1}
+                                            max={100000}
+                                            helptext="Enter the number of most recent posts to include in the fresh search index. Higher numbers = more searchable content but longer processing time."
+                                        />
+                                        <HelpText style={{marginTop: '8px', fontSize: '11px'}}>
+                                            <FormattedMessage 
+                                                defaultMessage='Estimated time: ~{time} minutes for {count} posts'
+                                                values={{
+                                                    time: Math.ceil(lastKPosts / 1000 * 2), // Rough estimate: 2 minutes per 1000 posts
+                                                    count: lastKPosts.toLocaleString()
+                                                }}
+                                            />
+                                        </HelpText>
+                                    </PartialReindexOptions>
+                                )}
+
+                                {reindexType === 'full' && (
+                                    <div style={{marginLeft: '20px', marginTop: '8px'}}>
+                                        <HelpText style={{fontSize: '11px', color: 'var(--error-text)'}}>
+                                            <FormattedMessage defaultMessage='⚠️ Warning: Full reindex will recreate the vector storage and may take several hours for large installations.'/>
+                                        </HelpText>
+                                    </div>
+                                )}
+                            </ReindexOptionsContainer>
+                        </>
                     )}
 
                     {/* Show different UI based on job status */}
@@ -300,7 +343,7 @@ export const ReindexSection = ({
                                 <FormattedMessage defaultMessage='Start Full Reindex'/>
                             ) : (
                                 <FormattedMessage 
-                                    defaultMessage='Reindex Last {count} Posts'
+                                    defaultMessage='Index Last {count} Posts'
                                     values={{count: lastKPosts.toLocaleString()}}
                                 />
                             )}
@@ -320,7 +363,7 @@ export const ReindexSection = ({
                     )}
 
                     <HelpText>
-                        <FormattedMessage defaultMessage='Choose between reindexing recent posts only (faster, good for incremental updates) or all posts (slower, rebuilds entire index). Partial reindex only processes the most recent posts and is much more efficient for regular maintenance.'/>
+                        <FormattedMessage defaultMessage='Choose between indexing recent posts only (faster, smaller search scope) or all posts (slower, complete search coverage). Both options will recreate the search index from scratch - no existing data is preserved.'/>
                     </HelpText>
                 </div>
             </ActionContainer>

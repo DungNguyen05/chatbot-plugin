@@ -25,9 +25,9 @@ export const useJobStatus = () => {
             // Handle different status conditions
             if (status.status === 'completed') {
                 const jobTypeMessage = status.full_reindex ? 
-                    intl.formatMessage({defaultMessage: 'Full reindex completed successfully.'}) :
+                    intl.formatMessage({defaultMessage: 'Full search index created successfully with all posts.'}) :
                     intl.formatMessage(
-                        {defaultMessage: 'Reindex of last {count} posts completed successfully.'},
+                        {defaultMessage: 'Fresh search index created successfully with last {count} posts.'},
                         {count: status.last_k_posts?.toLocaleString() || '0'}
                     );
                 
@@ -40,7 +40,7 @@ export const useJobStatus = () => {
                 setStatusMessage({
                     success: false,
                     message: intl.formatMessage(
-                        {defaultMessage: 'Failed to reindex posts: {error}'},
+                        {defaultMessage: 'Failed to create search index: {error}'},
                         {error: status.error || intl.formatMessage({defaultMessage: 'Unknown error'})},
                     ),
                 });
@@ -48,7 +48,7 @@ export const useJobStatus = () => {
             } else if (status.status === 'canceled') {
                 setStatusMessage({
                     success: false,
-                    message: intl.formatMessage({defaultMessage: 'Reindexing was canceled.'}),
+                    message: intl.formatMessage({defaultMessage: 'Search index creation was canceled.'}),
                 });
                 setPolling(false);
             }
@@ -57,7 +57,7 @@ export const useJobStatus = () => {
             if (error && typeof error === 'object' && 'status_code' in error && error.status_code !== 404) {
                 setStatusMessage({
                     success: false,
-                    message: intl.formatMessage({defaultMessage: 'Failed to get reindexing status.'}),
+                    message: intl.formatMessage({defaultMessage: 'Failed to get search index status.'}),
                 });
             }
             setPolling(false);
@@ -104,9 +104,9 @@ export const useJobStatus = () => {
             setPolling(true);
             
             const startMessage = fullReindex ? 
-                intl.formatMessage({defaultMessage: 'Full reindex started successfully.'}) :
+                intl.formatMessage({defaultMessage: 'Creating fresh search index with all posts...'}) :
                 intl.formatMessage(
-                    {defaultMessage: 'Reindex of last {count} posts started successfully.'},
+                    {defaultMessage: 'Creating fresh search index with last {count} posts...'},
                     {count: lastKPosts?.toLocaleString() || '0'}
                 );
             
@@ -117,7 +117,7 @@ export const useJobStatus = () => {
         } catch (error) {
             setStatusMessage({
                 success: false,
-                message: intl.formatMessage({defaultMessage: 'Failed to start reindexing. Please try again.'}),
+                message: intl.formatMessage({defaultMessage: 'Failed to start search index creation. Please try again.'}),
             });
         }
     };
@@ -139,13 +139,13 @@ export const useJobStatus = () => {
             setJobStatus(response);
             setStatusMessage({
                 success: false,
-                message: intl.formatMessage({defaultMessage: 'Reindexing job canceled.'}),
+                message: intl.formatMessage({defaultMessage: 'Search index creation canceled.'}),
             });
             setPolling(false);
         } catch (error) {
             setStatusMessage({
                 success: false,
-                message: intl.formatMessage({defaultMessage: 'Failed to cancel reindexing job.'}),
+                message: intl.formatMessage({defaultMessage: 'Failed to cancel search index creation.'}),
             });
         }
     };
