@@ -27,6 +27,43 @@ function channelRoute(channelid: string): string {
     return `${baseRoute()}/channel/${channelid}`;
 }
 
+export async function doCheckIn(): Promise<any> {
+    return Client4.doFetch(
+        `${getPluginRoute(manifest.id)}/api/v1/checkin`,
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        }
+    );
+}
+
+export async function doCheckOut(): Promise<any> {
+    return Client4.doFetch(
+        `${getPluginRoute(manifest.id)}/api/v1/checkout`,
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        }
+    );
+}
+
+export async function doAbsent(reason: string): Promise<any> {
+    return Client4.doFetch(
+        `${getPluginRoute(manifest.id)}/api/v1/absent`,
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ reason }),
+        }
+    );
+}
+
 
 export async function doReaction(postid: string) {
     const url = `${postRoute(postid)}/react`;
@@ -392,67 +429,6 @@ export async function getChannelInterval(
             preset_prompt: presetPrompt,
             prompt: prompt || '',
         }),
-    }));
-
-    if (response.ok) {
-        return response.json();
-    }
-
-    throw new ClientError(Client4.url, {
-        message: '',
-        status_code: response.status,
-        url,
-    });
-}
-
-export async function doCheckIn(): Promise<any> {
-    const url = `${getPluginRoute(manifest.id)}/api/v1/checkin`;
-    const response = await fetch(url, Client4.getOptions({
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-    }));
-
-    if (response.ok) {
-        return response.json();
-    }
-
-    throw new ClientError(Client4.url, {
-        message: '',
-        status_code: response.status,
-        url,
-    });
-}
-
-export async function doCheckOut(): Promise<any> {
-    const url = `${getPluginRoute(manifest.id)}/api/v1/checkout`;
-    const response = await fetch(url, Client4.getOptions({
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-    }));
-
-    if (response.ok) {
-        return response.json();
-    }
-
-    throw new ClientError(Client4.url, {
-        message: '',
-        status_code: response.status,
-        url,
-    });
-}
-
-export async function doAbsent(reason: string): Promise<any> {
-    const url = `${getPluginRoute(manifest.id)}/api/v1/absent`;
-    const response = await fetch(url, Client4.getOptions({
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ reason }),
     }));
 
     if (response.ok) {
