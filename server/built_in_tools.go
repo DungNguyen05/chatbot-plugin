@@ -396,45 +396,42 @@ func (p *Plugin) toolSearchServer(llmContext *llm.Context, argsGetter llm.ToolAr
 func (p *Plugin) getBuiltInTools(isDM bool, bot *Bot) []llm.Tool {
 	builtInTools := []llm.Tool{}
 
-	if isDM {
-		// Only add the search tool if search is configured
-		if p.search != nil {
-			builtInTools = append(builtInTools, llm.Tool{
-				Name:        "SearchServer",
-				Description: "Search the Mattermost chat server the user is on for messages using semantic search. Use this tool whenever the user asks a question and you don't have the context to answer or you think your response would be more accurate with knowage from the Mattermost server",
-				Schema:      SearchServerArgs{},
-				Resolver:    p.toolSearchServer,
-			})
-		}
-
+	if p.search != nil {
 		builtInTools = append(builtInTools, llm.Tool{
-			Name:        "LookupMattermostUser",
-			Description: "Lookup a Mattermost user by their username. Available information includes: username, full name, email, nickname, position, locale, timezone, last activity, and status.",
-			Schema:      LookupMattermostUserArgs{},
-			Resolver:    p.toolResolveLookupMattermostUser,
-		})
-
-		// GitHub plugin tools
-		status, err := p.pluginAPI.Plugin.GetPluginStatus("github")
-		if err != nil && !errors.Is(err, pluginapi.ErrNotFound) {
-			p.API.LogError("failed to get github plugin status", "error", err.Error())
-		} else if status != nil && status.State == model.PluginStateRunning {
-			builtInTools = append(builtInTools, llm.Tool{
-				Name:        "GetGithubIssue",
-				Description: "Retrieve a single GitHub issue by owner, repo, and issue number.",
-				Schema:      GetGithubIssueArgs{},
-				Resolver:    p.toolGetGithubIssue,
-			})
-		}
-
-		// Jira plugin tools
-		builtInTools = append(builtInTools, llm.Tool{
-			Name:        "GetJiraIssue",
-			Description: "Retrieve a single Jira issue by issue key.",
-			Schema:      GetJiraIssueArgs{},
-			Resolver:    p.toolGetJiraIssue,
+			Name:        "SearchServer",
+			Description: "Search the Mattermost chat server the user is on for messages using semantic search. Use this tool whenever the user asks a question and you don't have the context to answer or you think your response would be more accurate with knowage from the Mattermost server",
+			Schema:      SearchServerArgs{},
+			Resolver:    p.toolSearchServer,
 		})
 	}
+
+	builtInTools = append(builtInTools, llm.Tool{
+		Name:        "LookupMattermostUser",
+		Description: "Lookup a Mattermost user by their username. Available information includes: username, full name, email, nickname, position, locale, timezone, last activity, and status.",
+		Schema:      LookupMattermostUserArgs{},
+		Resolver:    p.toolResolveLookupMattermostUser,
+	})
+
+	// GitHub plugin tools
+	status, err := p.pluginAPI.Plugin.GetPluginStatus("github")
+	if err != nil && !errors.Is(err, pluginapi.ErrNotFound) {
+		p.API.LogError("failed to get github plugin status", "error", err.Error())
+	} else if status != nil && status.State == model.PluginStateRunning {
+		builtInTools = append(builtInTools, llm.Tool{
+			Name:        "GetGithubIssue",
+			Description: "Retrieve a single GitHub issue by owner, repo, and issue number.",
+			Schema:      GetGithubIssueArgs{},
+			Resolver:    p.toolGetGithubIssue,
+		})
+	}
+
+	// Jira plugin tools
+	builtInTools = append(builtInTools, llm.Tool{
+		Name:        "GetJiraIssue",
+		Description: "Retrieve a single Jira issue by issue key.",
+		Schema:      GetJiraIssueArgs{},
+		Resolver:    p.toolGetJiraIssue,
+	})
 
 	return builtInTools
 }
