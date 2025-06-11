@@ -7,6 +7,7 @@ package llm
 const (
 	PromptDirectMessageQuestionSystem      = "direct_message_question_system"
 	PromptEmojiSelectSystem                = "emoji_select_system"
+	PromptErpIntentAnalysis                = "erp_intent_analysis"
 	PromptFindActionItemsSystem            = "find_action_items_system"
 	PromptFindActionItemsUser              = "find_action_items_user"
 	PromptFindOpenQuestionsSystem          = "find_open_questions_system"
