@@ -208,7 +208,7 @@ const EmbeddingSearchPanel = ({value, onChange}: Props) => {
 
             <ReindexConfirmation
                 show={showReindexConfirmation}
-                isFullReindex={pendingReindexParams.fullReindex}
+                isFullReindex={pendingReindexParams.fullReindex ?? false}
                 lastKPosts={pendingReindexParams.lastKPosts}
                 onConfirm={handleConfirmReindex}
                 onCancel={handleCancelReindex}
