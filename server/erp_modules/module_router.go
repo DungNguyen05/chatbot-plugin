@@ -33,7 +33,7 @@ func (r *ModuleRouter) RouteAndExecute(ctx *ModuleContext, userMessage string) (
 	}
 
 	// Check confidence threshold
-	if intent.Confidence < 0.6 {
+	if intent.Confidence < 0.95 {
 		return &ModuleResponse{
 			Success: false,
 			Message: "Tôi không hiểu rõ yêu cầu của bạn. Bạn có thể nói rõ hơn không?",

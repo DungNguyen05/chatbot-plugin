@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -19,10 +20,13 @@ import (
 	"github.com/mattermost/mattermost-plugin-ai/server/anthropic"
 	"github.com/mattermost/mattermost-plugin-ai/server/embeddings"
 	"github.com/mattermost/mattermost-plugin-ai/server/enterprise"
+	"github.com/mattermost/mattermost-plugin-ai/server/erp_modules"
+	"github.com/mattermost/mattermost-plugin-ai/server/erp_modules/attendance"
 	"github.com/mattermost/mattermost-plugin-ai/server/llm"
 	"github.com/mattermost/mattermost-plugin-ai/server/metrics"
 	"github.com/mattermost/mattermost-plugin-ai/server/openai"
 	"github.com/mattermost/mattermost-plugin-ai/server/postgres"
+	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
 	"github.com/mattermost/mattermost/server/public/pluginapi"
 	"github.com/mattermost/mattermost/server/public/shared/httpservice"
@@ -76,6 +80,8 @@ type Plugin struct {
 
 	llmUpstreamHTTPClient *http.Client
 	search                embeddings.EmbeddingSearch
+	moduleManager         *erp_modules.ModuleManager
+	moduleRegistry        *erp_modules.Registry
 }
 
 func resolveffmpegPath() string {
@@ -146,6 +152,12 @@ func (p *Plugin) OnActivate() error {
 	if err != nil {
 		// Only log the error but don't fail plugin activation
 		p.pluginAPI.Log.Error("Failed to initialize search, search features will be disabled", "error", err)
+	}
+
+	// Initialize ERP modules
+	if err := p.initializeERPModules(); err != nil {
+		p.pluginAPI.Log.Error("Failed to initialize ERP modules", "error", err)
+		// Continue activation even if ERP modules fail to initialize
 	}
 
 	return nil
@@ -299,4 +311,167 @@ func (p *Plugin) getTranscribe() Transcriber {
 		return openai.NewAzure(botConfig.Service, p.llmUpstreamHTTPClient, llmMetrics)
 	}
 	return nil
+}
+
+// initializeERPModules initializes all ERP modules
+func (p *Plugin) initializeERPModules() error {
+	// Create registry
+	p.moduleRegistry = erp_modules.NewRegistry()
+
+	// Create intent analyzer
+	analyzer := erp_modules.NewLLMIntentAnalyzer(
+		func() llm.LanguageModel { return p.getLLM(p.getDefaultBot().cfg) },
+		p.prompts,
+		p.moduleRegistry,
+	)
+
+	// Create module manager
+	p.moduleManager = erp_modules.NewModuleManager(p.moduleRegistry, analyzer)
+
+	// Initialize attendance module
+	if err := p.initializeAttendanceModule(); err != nil {
+		return fmt.Errorf("failed to initialize attendance module: %w", err)
+	}
+
+	return nil
+}
+
+// initializeAttendanceModule initializes the attendance module
+func (p *Plugin) initializeAttendanceModule() error {
+	config := p.getConfiguration()
+
+	// Create attendance config
+	attendanceConfig := attendance.AttendanceConfig{
+		ERPDomain:      config.RollCall.ERPDomain,
+		ERPAPIKey:      config.RollCall.ERPAPIKey,
+		ERPAPISecret:   config.RollCall.ERPAPISecret,
+		NotifyChannels: config.RollCall.NotifyChannels,
+		Enabled:        config.RollCall.Enabled,
+	}
+
+	// Create i18n adapter
+	i18nAdapter := &I18nAdapter{bundle: p.i18n}
+
+	// Create plugin API adapter
+	apiAdapter := &PluginAPIAdapter{plugin: p}
+
+	// Create attendance module
+	attendanceModule := attendance.NewAttendanceModule(
+		attendanceConfig,
+		p.llmUpstreamHTTPClient,
+		i18nAdapter,
+		p.prompts,
+		func() llm.LanguageModel { return p.getLLM(p.getDefaultBot().cfg) },
+		p.sendAttendanceNotification,
+		apiAdapter,
+	)
+
+	// Register the module
+	return p.moduleRegistry.RegisterModule(attendanceModule)
+}
+
+// getDefaultBot returns the default bot configuration
+func (p *Plugin) getDefaultBot() *Bot {
+	p.botsLock.RLock()
+	defer p.botsLock.RUnlock()
+
+	if len(p.bots) > 0 {
+		return p.bots[0]
+	}
+	return nil
+}
+
+// sendAttendanceNotification sends attendance notifications
+func (p *Plugin) sendAttendanceNotification(userID, employeeName string, eventType attendance.RollCallEventType, eventTime string, reason string) error {
+	// Get attendance module to send notification
+	if module, exists := p.moduleRegistry.GetModule("attendance"); exists {
+		if attendanceModule, ok := module.(*attendance.AttendanceModule); ok {
+			return attendanceModule.SendNotification(userID, employeeName, eventType, eventTime, reason)
+		}
+	}
+	return fmt.Errorf("attendance module not found")
+}
+
+// processERPRequest processes user requests that might be ERP-related
+func (p *Plugin) processERPRequest(bot *Bot, user *model.User, channel *model.Channel, post *model.Post, llmContext *llm.Context) (*erp_modules.ModuleResponse, error) {
+	if p.moduleManager == nil {
+		return nil, fmt.Errorf("module manager not initialized")
+	}
+
+	// Check if this is an ERP-related request by trying to process it
+	response, err := p.moduleManager.ProcessUserRequest(
+		context.Background(),
+		post.Message,
+		user,
+		channel,
+		post,
+		llmContext,
+	)
+
+	// If the confidence is too low, it's not an ERP request
+	if err != nil || (response != nil && !response.Success && response.Error == "Low confidence in intent analysis") {
+		return nil, nil // Not an ERP request
+	}
+
+	return response, err
+}
+
+// I18nAdapter adapts the i18n bundle to the interface needed by modules
+type I18nAdapter struct {
+	bundle *i18n.Bundle
+}
+
+func (a *I18nAdapter) Localize(messageID, defaultMessage, locale string, params ...interface{}) string {
+	localizer := i18n.NewLocalizer(a.bundle, locale)
+	if len(params) > 0 {
+		return fmt.Sprintf(localizer.MustLocalize(&i18n.LocalizeConfig{
+			DefaultMessage: &i18n.Message{
+				ID:    messageID,
+				Other: defaultMessage,
+			},
+		}), params...)
+	}
+	return localizer.MustLocalize(&i18n.LocalizeConfig{
+		DefaultMessage: &i18n.Message{
+			ID:    messageID,
+			Other: defaultMessage,
+		},
+	})
+}
+
+// PluginAPIAdapter adapts the plugin API to the interface needed by modules
+type PluginAPIAdapter struct {
+	plugin *Plugin
+}
+
+func (a *PluginAPIAdapter) LogDebug(message string, keyValuePairs ...interface{}) {
+	a.plugin.API.LogDebug(message, keyValuePairs...)
+}
+
+func (a *PluginAPIAdapter) LogError(message string, keyValuePairs ...interface{}) {
+	a.plugin.API.LogError(message, keyValuePairs...)
+}
+
+func (a *PluginAPIAdapter) LogInfo(message string, keyValuePairs ...interface{}) {
+	a.plugin.API.LogInfo(message, keyValuePairs...)
+}
+
+func (a *PluginAPIAdapter) LogWarn(message string, keyValuePairs ...interface{}) {
+	a.plugin.API.LogWarn(message, keyValuePairs...)
+}
+
+func (a *PluginAPIAdapter) GetUser(userID string) (*model.User, error) {
+	return a.plugin.pluginAPI.User.Get(userID)
+}
+
+func (a *PluginAPIAdapter) CreatePost(post *model.Post) error {
+	return a.plugin.pluginAPI.Post.CreatePost(post)
+}
+
+func (a *PluginAPIAdapter) GetConfig() *model.Config {
+	return a.plugin.API.GetConfig()
+}
+
+func (a *PluginAPIAdapter) BotDMNonResponse(botUserID, userID string, post *model.Post) error {
+	return a.plugin.botDMNonResponse(botUserID, userID, post)
 }

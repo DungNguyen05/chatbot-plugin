@@ -6,7 +6,6 @@ package main
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
@@ -132,45 +131,12 @@ func (p *Plugin) executeCheckInCommand(args *model.CommandArgs) *model.CommandRe
 		}
 	}
 
-	employeeID, err := p.GetEmployeeIDFromUser(user)
-	if err != nil {
-		p.API.LogError("Failed to get employee ID for user", "user_id", user.Id, "error", err.Error())
-		return &model.CommandResponse{
-			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         T("rollcall.employee.not.found", "❌ Unable to find your employee record in the ERP system. Please contact your administrator to ensure your Mattermost account is linked to your employee profile."),
-		}
-	}
-
-	formattedTime, erpErr := p.RecordEmployeeCheckin(employeeID)
-	if erpErr != nil {
-		p.API.LogError("Failed to record employee check-in in ERP", "employee_id", employeeID, "error", erpErr.Error())
-		return &model.CommandResponse{
-			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         T("rollcall.erp.error", "⚠️ There was an issue recording in the ERP system. An administrator has been notified."),
-		}
-	}
-
-	responseText := T("rollcall.checkin.success", "✅ Your check-in has been recorded in the ERP system at **%s**!", formattedTime)
-
-	employeeName := user.Username
-	if user.FirstName != "" || user.LastName != "" {
-		employeeName = strings.TrimSpace(user.FirstName + " " + user.LastName)
-	}
-
-	go func() {
-		if err := p.sendRollCallNotification(
-			user.Id,
-			employeeName,
-			RollCallEventCheckIn,
-			formattedTime,
-			""); err != nil {
-			p.API.LogError("Failed to send check-in notification", "error", err.Error())
-		}
-	}()
+	// Process through ERP module
+	response := p.processAttendanceRequest(user, "check_in", "")
 
 	return &model.CommandResponse{
 		ResponseType: model.CommandResponseTypeEphemeral,
-		Text:         responseText,
+		Text:         response.Message,
 	}
 }
 
@@ -194,45 +160,12 @@ func (p *Plugin) executeCheckOutCommand(args *model.CommandArgs) *model.CommandR
 		}
 	}
 
-	employeeID, err := p.GetEmployeeIDFromUser(user)
-	if err != nil {
-		p.API.LogError("Failed to get employee ID for user", "user_id", user.Id, "error", err.Error())
-		return &model.CommandResponse{
-			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         T("rollcall.employee.not.found", "❌ Unable to find your employee record in the ERP system. Please contact your administrator to ensure your Mattermost account is linked to your employee profile."),
-		}
-	}
-
-	formattedTime, erpErr := p.RecordEmployeeCheckout(employeeID)
-	if erpErr != nil {
-		p.API.LogError("Failed to record employee check-out in ERP", "employee_id", employeeID, "error", erpErr.Error())
-		return &model.CommandResponse{
-			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         T("rollcall.erp.error", "⚠️ There was an issue recording in the ERP system. An administrator has been notified."),
-		}
-	}
-
-	responseText := T("rollcall.checkout.success", "✅ Your check-out has been recorded in the ERP system at **%s**!", formattedTime)
-
-	employeeName := user.Username
-	if user.FirstName != "" || user.LastName != "" {
-		employeeName = strings.TrimSpace(user.FirstName + " " + user.LastName)
-	}
-
-	go func() {
-		if err := p.sendRollCallNotification(
-			user.Id,
-			employeeName,
-			RollCallEventCheckOut,
-			formattedTime,
-			""); err != nil {
-			p.API.LogError("Failed to send check-out notification", "error", err.Error())
-		}
-	}()
+	// Process through ERP module
+	response := p.processAttendanceRequest(user, "check_out", "")
 
 	return &model.CommandResponse{
 		ResponseType: model.CommandResponseTypeEphemeral,
-		Text:         responseText,
+		Text:         response.Message,
 	}
 }
 
@@ -259,58 +192,11 @@ func (p *Plugin) executeAbsentCommand(args *model.CommandArgs) *model.CommandRes
 
 	reason := strings.TrimSpace(strings.TrimPrefix(args.Command, "/absent"))
 
-	employeeID, err := p.GetEmployeeIDFromUser(user)
-	if err != nil {
-		p.API.LogError("Failed to get employee ID for user", "user_id", user.Id, "error", err.Error())
-		return &model.CommandResponse{
-			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         T("rollcall.employee.not.found", "❌ Unable to find your employee record in the ERP system. Please contact your administrator to ensure your Mattermost account is linked to your employee profile."),
-		}
-	}
-
-	vietTime, err := GetVietnamTime()
-	if err != nil {
-		p.API.LogError("Failed to get Vietnam time", "error", err.Error())
-		vietTime = time.Now()
-	}
-
-	dateStr := vietTime.Format("Monday, January 2, 2006")
-
-	p.API.LogInfo("User marked absent",
-		"user", user.Username,
-		"employee_id", employeeID,
-		"date", dateStr,
-		"reason", reason)
-
-	recordedDate, absenceErr := p.RecordEmployeeAbsent(employeeID, reason)
-	if absenceErr != nil {
-		p.API.LogError("Failed to record employee absence in ERP", "employee_id", employeeID, "error", absenceErr.Error())
-		return &model.CommandResponse{
-			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         T("rollcall.erp.error", "⚠️ There was an issue recording in the ERP system. An administrator has been notified."),
-		}
-	}
-
-	responseText := T("rollcall.absent.success", "📝 Your absence has been recorded for **%s** with reason: \"%s\"", recordedDate, reason)
-
-	employeeName := user.Username
-	if user.FirstName != "" || user.LastName != "" {
-		employeeName = strings.TrimSpace(user.FirstName + " " + user.LastName)
-	}
-
-	go func() {
-		if err := p.sendRollCallNotification(
-			user.Id,
-			employeeName,
-			RollCallEventAbsent,
-			recordedDate,
-			reason); err != nil {
-			p.API.LogError("Failed to send absence notification", "error", err.Error())
-		}
-	}()
+	// Process through ERP module
+	response := p.processAttendanceRequest(user, "absent", reason)
 
 	return &model.CommandResponse{
 		ResponseType: model.CommandResponseTypeEphemeral,
-		Text:         responseText,
+		Text:         response.Message,
 	}
 }

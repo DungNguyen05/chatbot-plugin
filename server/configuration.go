@@ -20,15 +20,15 @@ type RollCallConfig struct {
 }
 
 type Config struct {
-	Services                 []llm.ServiceConfig              `json:"services"`
-	Bots                     []llm.BotConfig                  `json:"bots"`
-	DefaultBotName           string                           `json:"defaultBotName"`
-	TranscriptGenerator      string                           `json:"transcriptBackend"`
-	EnableLLMTrace           bool                             `json:"enableLLMTrace"`
-	AllowedUpstreamHostnames string                           `json:"allowedUpstreamHostnames"`
+	Services                 []llm.ServiceConfig `json:"services"`
+	Bots                     []llm.BotConfig     `json:"bots"`
+	DefaultBotName           string              `json:"defaultBotName"`
+	TranscriptGenerator      string              `json:"transcriptBackend"`
+	EnableLLMTrace           bool                `json:"enableLLMTrace"`
+	AllowedUpstreamHostnames string              `json:"allowedUpstreamHostnames"`
 	RollCall                 RollCallConfig      `json:"rollCall"`
 
-	EmbeddingSearchConfig    embeddings.EmbeddingSearchConfig `json:"embeddingSearchConfig"`
+	EmbeddingSearchConfig embeddings.EmbeddingSearchConfig `json:"embeddingSearchConfig"`
 }
 
 // configuration captures the plugin's external configuration as exposed in the Mattermost server
@@ -124,6 +124,12 @@ func (p *Plugin) OnConfigurationChange() error {
 		p.search = nil
 	} else {
 		p.search = search
+	}
+
+	// Reinitialize ERP modules when configuration changes
+	if err := p.initializeERPModules(); err != nil {
+		// Only log the error but don't fail plugin configuration
+		p.pluginAPI.Log.Error("Failed to reinitialize ERP modules", "error", err)
 	}
 
 	return nil

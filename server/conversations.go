@@ -22,6 +22,19 @@ func (p *Plugin) processUserRequestToBot(bot *Bot, postingUser *model.User, chan
 		p.WithLLMContextDefaultTools(bot, mmapi.IsDMWith(bot.mmBot.UserId, channel)),
 	)
 
+	// First, try to process as an ERP request
+	if p.moduleManager != nil {
+		erpResponse, err := p.processERPRequest(bot, postingUser, channel, post, context)
+		if err != nil {
+			p.API.LogError("Error processing ERP request", "error", err.Error())
+			// Continue with normal processing if ERP fails
+		} else if erpResponse != nil && erpResponse.Success {
+			// ERP request was processed successfully, return a stream with the response
+			return llm.NewStreamFromString(erpResponse.Message), nil
+		}
+	}
+
+	// Continue with normal LLM processing if not an ERP request
 	var posts []llm.Post
 	if post.RootId == "" {
 		// A new conversation
