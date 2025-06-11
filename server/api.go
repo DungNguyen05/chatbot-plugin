@@ -41,6 +41,8 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 	apiV1.POST("/checkin", p.handleAPICheckIn)
 	apiV1.POST("/checkout", p.handleAPICheckOut)
 	apiV1.POST("/absent", p.handleAPIAbsent)
+	// Add database type endpoint
+	apiV1.GET("/database-type", p.handleGetDatabaseType)
 
 	botRequiredRouter := router.Group("")
 	botRequiredRouter.Use(p.aiBotRequired)
@@ -202,8 +204,8 @@ func (p *Plugin) handleGetAIBots(c *gin.Context) {
 		}
 	}
 
-	// Check if search is enabled
-	searchEnabled := p.search != nil && p.getConfiguration().EmbeddingSearchConfig.Type != ""
+	// Check if search is enabled - only available for PostgreSQL
+	searchEnabled := p.search != nil && p.getConfiguration().EmbeddingSearchConfig.Type != "" && p.IsPostgreSQLDatabase()
 
 	response := AIBotsResponse{
 		Bots:          bots,

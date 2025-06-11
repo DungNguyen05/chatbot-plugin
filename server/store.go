@@ -19,18 +19,21 @@ type builder interface {
 }
 
 func (p *Plugin) SetupDB() error {
-	if p.pluginAPI.Store.DriverName() != model.DatabaseDriverPostgres {
-		return errors.New("this plugin is only supported on postgres")
+	driverName := p.pluginAPI.Store.DriverName()
+	if driverName != model.DatabaseDriverPostgres && driverName != model.DatabaseDriverMysql {
+		return errors.New("this plugin is only supported on PostgreSQL and MySQL")
 	}
 
 	origDB, err := p.pluginAPI.Store.GetMasterDB()
 	if err != nil {
 		return err
 	}
-	p.db = sqlx.NewDb(origDB, p.pluginAPI.Store.DriverName())
+	p.db = sqlx.NewDb(origDB, driverName)
 
 	builder := sq.StatementBuilder.PlaceholderFormat(sq.Question)
-	builder = builder.PlaceholderFormat(sq.Dollar)
+	if driverName == model.DatabaseDriverPostgres {
+		builder = builder.PlaceholderFormat(sq.Dollar)
+	}
 	p.builder = builder
 
 	return p.SetupTables()
@@ -59,18 +62,38 @@ func (p *Plugin) execBuilder(b builder) (sql.Result, error) {
 }
 
 func (p *Plugin) SetupTables() error {
-	if _, err := p.db.Exec(`
-		CREATE TABLE IF NOT EXISTS LLM_PostMeta (
-			RootPostID TEXT NOT NULL REFERENCES Posts(ID) ON DELETE CASCADE PRIMARY KEY,
-			Title TEXT NOT NULL
-		);
-	`); err != nil {
+	driverName := p.pluginAPI.Store.DriverName()
+
+	var createTableSQL string
+	var alterTableSQL string
+
+	if driverName == model.DatabaseDriverPostgres {
+		createTableSQL = `
+			CREATE TABLE IF NOT EXISTS LLM_PostMeta (
+				RootPostID TEXT NOT NULL REFERENCES Posts(ID) ON DELETE CASCADE PRIMARY KEY,
+				Title TEXT NOT NULL
+			);
+		`
+		alterTableSQL = `ALTER TABLE IF EXISTS LLM_Threads DROP CONSTRAINT IF EXISTS llm_threads_rootpostid_fkey;`
+	} else {
+		// MySQL
+		createTableSQL = `
+			CREATE TABLE IF NOT EXISTS LLM_PostMeta (
+				RootPostID VARCHAR(26) NOT NULL PRIMARY KEY,
+				Title TEXT NOT NULL,
+				FOREIGN KEY (RootPostID) REFERENCES Posts(ID) ON DELETE CASCADE
+			);
+		`
+		alterTableSQL = `ALTER TABLE LLM_Threads DROP FOREIGN KEY IF EXISTS llm_threads_rootpostid_fkey;`
+	}
+
+	if _, err := p.db.Exec(createTableSQL); err != nil {
 		return fmt.Errorf("can't create llm titles table: %w", err)
 	}
 
 	// This fixes data retention issues when a post is deleted for an older version of the postmeta table.
 	// Migrate from the old table using `"INSERT INTO LLM_PostMeta(RootPostID, Title) SELECT RootPostID, Title from LLM_Threads"`
-	if _, err := p.db.Exec(`ALTER TABLE IF EXISTS LLM_Threads DROP CONSTRAINT IF EXISTS llm_threads_rootpostid_fkey;`); err != nil {
+	if _, err := p.db.Exec(alterTableSQL); err != nil {
 		return fmt.Errorf("failed to migrate constraint: %w", err)
 	}
 
@@ -86,11 +109,22 @@ func (p *Plugin) saveTitleAsync(threadID, title string) {
 }
 
 func (p *Plugin) saveTitle(threadID, title string) error {
-	_, err := p.execBuilder(p.builder.Insert("LLM_PostMeta").
-		Columns("RootPostID", "Title").
-		Values(threadID, title).
-		Suffix("ON CONFLICT (RootPostID) DO UPDATE SET Title = ?", title))
-	return err
+	driverName := p.pluginAPI.Store.DriverName()
+
+	if driverName == model.DatabaseDriverPostgres {
+		_, err := p.execBuilder(p.builder.Insert("LLM_PostMeta").
+			Columns("RootPostID", "Title").
+			Values(threadID, title).
+			Suffix("ON CONFLICT (RootPostID) DO UPDATE SET Title = ?", title))
+		return err
+	} else {
+		// MySQL
+		_, err := p.execBuilder(p.builder.Insert("LLM_PostMeta").
+			Columns("RootPostID", "Title").
+			Values(threadID, title).
+			Suffix("ON DUPLICATE KEY UPDATE Title = VALUES(Title)"))
+		return err
+	}
 }
 
 type AIThread struct {
@@ -149,4 +183,19 @@ func (p *Plugin) getFirstPostBeforeTimeRangeID(channelID string, startTime, endT
 	}
 
 	return result.ID, nil
+}
+
+// GetDatabaseType returns the database type being used
+func (p *Plugin) GetDatabaseType() string {
+	return p.pluginAPI.Store.DriverName()
+}
+
+// IsPostgreSQLDatabase returns true if using PostgreSQL
+func (p *Plugin) IsPostgreSQLDatabase() bool {
+	return p.pluginAPI.Store.DriverName() == model.DatabaseDriverPostgres
+}
+
+// IsMySQLDatabase returns true if using MySQL
+func (p *Plugin) IsMySQLDatabase() bool {
+	return p.pluginAPI.Store.DriverName() == model.DatabaseDriverMysql
 }

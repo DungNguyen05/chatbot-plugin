@@ -155,6 +155,11 @@ func (p *Plugin) OnActivate() error {
 func (p *Plugin) newVectorStore(config embeddings.UpstreamConfig, dimensions int) (embeddings.VectorStore, error) {
 	switch config.Type { //nolint:gocritic
 	case "pgvector":
+		// Only available for PostgreSQL
+		if !p.IsPostgreSQLDatabase() {
+			return nil, fmt.Errorf("pgvector is only available for PostgreSQL databases, current database: %s", p.GetDatabaseType())
+		}
+
 		pgVectorConfig := postgres.PGVectorConfig{
 			Dimensions: dimensions,
 		}
@@ -205,6 +210,11 @@ func (p *Plugin) initSearch() (embeddings.EmbeddingSearch, error) {
 
 	if !p.licenseChecker.IsBasicsLicensed() {
 		return nil, fmt.Errorf("search is unavailable without a valid license")
+	}
+
+	// Check database compatibility for vector search
+	if !p.IsPostgreSQLDatabase() {
+		return nil, fmt.Errorf("embedding search is only available with PostgreSQL database, current database: %s", p.GetDatabaseType())
 	}
 
 	switch cfg.EmbeddingSearchConfig.Type {

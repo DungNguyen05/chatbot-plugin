@@ -27,14 +27,33 @@ const Horizontal = styled.div`
     gap: 8px;
 `;
 
+const DatabaseWarning = styled.div`
+    padding: 12px;
+    margin-bottom: 16px;
+    background-color: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 4px;
+    color: #856404;
+    font-size: 14px;
+    line-height: 1.4;
+`;
+
+const WarningIcon = styled.span`
+    font-weight: bold;
+    margin-right: 8px;
+`;
+
 interface Props {
     value: EmbeddingSearchConfig;
     onChange: (config: EmbeddingSearchConfig) => void;
+    // Add database type prop to determine if PostgreSQL is being used
+    databaseType?: string;
 }
 
-const EmbeddingSearchPanel = ({value, onChange}: Props) => {
+const EmbeddingSearchPanel = ({value, onChange, databaseType = 'postgres'}: Props) => {
     const intl = useIntl();
     const isBasicsLicensed = useIsBasicsLicensed();
+    const isPostgreSQL = databaseType === 'postgres';
 
     const {
         jobStatus,
@@ -66,6 +85,23 @@ const EmbeddingSearchPanel = ({value, onChange}: Props) => {
         );
     }
 
+    const renderDatabaseWarning = () => {
+        if (isPostgreSQL) {
+            return null;
+        }
+
+        return (
+            <DatabaseWarning>
+                <WarningIcon>⚠️</WarningIcon>
+                <strong>Database Compatibility Notice:</strong> Embedding search requires PostgreSQL with the pgvector extension. 
+                Your current database ({databaseType === 'mysql' ? 'MySQL' : databaseType}) does not support vector operations. 
+                To use embedding search features, please migrate to PostgreSQL and install the pgvector extension.
+            </DatabaseWarning>
+        );
+    };
+
+    const isSearchDisabled = !isPostgreSQL;
+
     return (
         <Panel
             title={
@@ -76,11 +112,15 @@ const EmbeddingSearchPanel = ({value, onChange}: Props) => {
             }
             subtitle={intl.formatMessage({defaultMessage: 'Configure embedding search settings. Note: The current implementation is experimental and subject to breaking changes. This includes having to reindex all posts.'})}
         >
+            {renderDatabaseWarning()}
+            
             <ItemList>
                 <SelectionItem
                     label={intl.formatMessage({defaultMessage: 'Type'})}
-                    value={value.type}
+                    value={isSearchDisabled ? '' : value.type}
                     onChange={(e) => {
+                        if (isSearchDisabled) return;
+                        
                         const newType = e.target.value;
                         if (newType === '') {
                             onChange({
@@ -117,10 +157,13 @@ const EmbeddingSearchPanel = ({value, onChange}: Props) => {
                     }}
                 >
                     <SelectionItemOption value=''>{'Disabled'}</SelectionItemOption>
-                    <SelectionItemOption value='composite'>{'Composite'}</SelectionItemOption>
+                    <SelectionItemOption value='composite' disabled={isSearchDisabled}>
+                        {'Composite'}
+                        {isSearchDisabled && ' (PostgreSQL Required)'}
+                    </SelectionItemOption>
                 </SelectionItem>
 
-                {value.type && value.type !== '' &&
+                {!isSearchDisabled && value.type && value.type !== '' &&
                 <SelectionItem
                     label={intl.formatMessage({defaultMessage: 'Vector Store Type'})}
                     value={value.vectorStore.type}
@@ -133,7 +176,7 @@ const EmbeddingSearchPanel = ({value, onChange}: Props) => {
                 </SelectionItem>
                 }
 
-                {value.type && value.type !== '' &&
+                {!isSearchDisabled && value.type && value.type !== '' &&
                 <SelectionItem
                     label={intl.formatMessage({defaultMessage: 'Embedding Provider Type'})}
                     value={value.embeddingProvider.type}
@@ -159,21 +202,21 @@ const EmbeddingSearchPanel = ({value, onChange}: Props) => {
                 </SelectionItem>
                 }
 
-                {value.type && value.type !== '' && value.embeddingProvider.type === 'openai' && (
+                {!isSearchDisabled && value.type && value.type !== '' && value.embeddingProvider.type === 'openai' && (
                     <OpenAIProviderConfig
                         value={value.embeddingProvider}
                         onChange={(config) => onChange({...value, embeddingProvider: config})}
                     />
                 )}
 
-                {value.type && value.type !== '' && value.embeddingProvider.type === 'openai-compatible' && (
+                {!isSearchDisabled && value.type && value.type !== '' && value.embeddingProvider.type === 'openai-compatible' && (
                     <OpenAICompatibleProviderConfig
                         value={value.embeddingProvider}
                         onChange={(config) => onChange({...value, embeddingProvider: config})}
                     />
                 )}
 
-                {value.type === 'composite' && (
+                {!isSearchDisabled && value.type === 'composite' && (
                     <>
                         <IntItem
                             label={intl.formatMessage({defaultMessage: 'Dimensions'})}
@@ -196,7 +239,7 @@ const EmbeddingSearchPanel = ({value, onChange}: Props) => {
                     </>
                 )}
 
-                {value.type && value.type !== '' && (
+                {!isSearchDisabled && value.type && value.type !== '' && (
                     <ReindexSection
                         jobStatus={jobStatus}
                         statusMessage={statusMessage}

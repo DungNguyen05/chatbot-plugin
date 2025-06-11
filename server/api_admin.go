@@ -21,11 +21,30 @@ type ReindexRequest struct {
 	FullReindex bool `json:"fullReindex,omitempty"` // Explicitly request full reindex
 }
 
+// DatabaseTypeResponse represents the response for database type endpoint
+type DatabaseTypeResponse struct {
+	Type string `json:"type"`
+}
+
+// handleGetDatabaseType returns the database type being used
+func (p *Plugin) handleGetDatabaseType(c *gin.Context) {
+	databaseType := p.GetDatabaseType()
+	c.JSON(http.StatusOK, DatabaseTypeResponse{
+		Type: databaseType,
+	})
+}
+
 // handleReindexPosts starts a background job to reindex posts
 func (p *Plugin) handleReindexPosts(c *gin.Context) {
 	// Check if search is initialized
 	if p.search == nil {
 		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("search functionality is not configured"))
+		return
+	}
+
+	// Check database compatibility
+	if !p.IsPostgreSQLDatabase() {
+		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("search functionality requires PostgreSQL database, current database: %s", p.GetDatabaseType()))
 		return
 	}
 

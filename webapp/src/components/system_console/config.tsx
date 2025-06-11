@@ -118,7 +118,27 @@ const BetaMessage = () => (
 const Config = (props: Props) => {
     const value = props.value || defaultConfig;
     const [avatarUpdates, setAvatarUpdates] = useState<{ [key: string]: File }>({});
+    const [databaseType, setDatabaseType] = useState<string>('postgres');
     const intl = useIntl();
+
+    // Fetch database type from server
+    useEffect(() => {
+        const fetchDatabaseType = async () => {
+            try {
+                // This would need to be implemented as an API endpoint
+                const response = await fetch('/plugins/mattermost-ai/api/v1/database-type');
+                if (response.ok) {
+                    const data = await response.json();
+                    setDatabaseType(data.type || 'postgres');
+                }
+            } catch (error) {
+                console.warn('Failed to fetch database type, defaulting to postgres', error);
+                setDatabaseType('postgres');
+            }
+        };
+
+        fetchDatabaseType();
+    }, []);
 
     useEffect(() => {
         const save = async () => {
@@ -242,6 +262,7 @@ const Config = (props: Props) => {
                     props.onChange(props.id, {...value, embeddingSearchConfig: config});
                     props.setSaveNeeded();
                 }}
+                databaseType={databaseType}
             />
         </ConfigContainer>
     );
