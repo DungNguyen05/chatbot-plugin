@@ -355,6 +355,13 @@ func (p *Plugin) initializeAttendanceModule() error {
 	// Create plugin API adapter
 	apiAdapter := &PluginAPIAdapter{plugin: p}
 
+	// Get the default bot user ID
+	defaultBot := p.getDefaultBot()
+	var botUserID string
+	if defaultBot != nil && defaultBot.mmBot != nil {
+		botUserID = defaultBot.mmBot.UserId
+	}
+
 	// Create attendance module
 	attendanceModule := attendance.NewAttendanceModule(
 		attendanceConfig,
@@ -364,6 +371,7 @@ func (p *Plugin) initializeAttendanceModule() error {
 		func() llm.LanguageModel { return p.getLLM(p.getDefaultBot().cfg) },
 		p.sendAttendanceNotification,
 		apiAdapter,
+		botUserID,
 	)
 
 	// Register the module

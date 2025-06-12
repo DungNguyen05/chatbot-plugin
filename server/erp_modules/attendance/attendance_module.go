@@ -44,6 +44,7 @@ type AttendanceModule struct {
 	getLLM           func() llm.LanguageModel
 	notificationFunc func(userID, employeeName string, eventType RollCallEventType, eventTime string, reason string) error
 	api              PluginAPI
+	botUserID        string
 }
 
 // AttendanceConfig represents the configuration for attendance module
@@ -119,6 +120,7 @@ func NewAttendanceModule(
 	getLLM func() llm.LanguageModel,
 	notificationFunc func(userID, employeeName string, eventType RollCallEventType, eventTime string, reason string) error,
 	api PluginAPI,
+	botUserID string,
 ) *AttendanceModule {
 	return &AttendanceModule{
 		config:           config,
@@ -128,6 +130,7 @@ func NewAttendanceModule(
 		getLLM:           getLLM,
 		notificationFunc: notificationFunc,
 		api:              api,
+		botUserID:        botUserID,
 	}
 }
 
@@ -1021,7 +1024,7 @@ Wish them a pleasant time off. DO NOT USE MORE THAN 2 SENTENCES. Use English.`
 		Message: result,
 	}
 
-	if err := m.api.BotDMNonResponse("", user.Id, post); err != nil {
+	if err := m.api.BotDMNonResponse(m.botUserID, user.Id, post); err != nil {
 		return fmt.Errorf("failed to send personalized DM: %w", err)
 	}
 
