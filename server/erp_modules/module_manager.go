@@ -13,14 +13,23 @@ import (
 
 // ModuleManager manages all ERP modules and handles user requests
 type ModuleManager struct {
-	registry ModuleRegistry
-	analyzer IntentAnalyzer
-	router   *ModuleRouter
+	registry    ModuleRegistry
+	analyzer    IntentAnalyzer
+	router      *ModuleRouter
+	llmProvider func() llm.LanguageModel
+	prompts     *llm.Prompts
 }
 
 // NewModuleManager creates a new module manager
-func NewModuleManager(registry ModuleRegistry, analyzer IntentAnalyzer) *ModuleManager {
-	router := NewModuleRouter(registry, analyzer)
+func NewModuleManager(registry ModuleRegistry, analyzer IntentAnalyzer, llmProvider func() llm.LanguageModel, prompts *llm.Prompts) *ModuleManager {
+	// Cast analyzer to enhanced type
+	enhancedAnalyzer, ok := analyzer.(*LLMIntentAnalyzer)
+	if !ok {
+		// Handle fallback case if needed
+		panic("analyzer must be of type *LLMIntentAnalyzer")
+	}
+
+	router := NewModuleRouter(registry, enhancedAnalyzer, llmProvider, prompts)
 	return &ModuleManager{
 		registry: registry,
 		analyzer: analyzer,

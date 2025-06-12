@@ -5,13 +5,16 @@ package llm
 
 // Automatically generated convenience vars for the filenames in llm/prompts/
 const (
+	PromptConfirmationAnalysis             = "confirmation_analysis"
+	PromptConfirmationGeneration           = "confirmation_generation"
 	PromptDirectMessageQuestionSystem      = "direct_message_question_system"
 	PromptEmojiSelectSystem                = "emoji_select_system"
-	PromptErpIntentAnalysis                = "erp_intent_analysis"
+	PromptErpIntentAnalysisPrecise         = "erp_intent_analysis_precise"
 	PromptFindActionItemsSystem            = "find_action_items_system"
 	PromptFindActionItemsUser              = "find_action_items_user"
 	PromptFindOpenQuestionsSystem          = "find_open_questions_system"
 	PromptFindOpenQuestionsUser            = "find_open_questions_user"
+	PromptGeneralKnowledgeResponse         = "general_knowledge_response"
 	PromptLocale                           = "locale"
 	PromptMeetingSummaryGeneral            = "meeting_summary_general"
 	PromptMeetingSummarySystem             = "meeting_summary_system"

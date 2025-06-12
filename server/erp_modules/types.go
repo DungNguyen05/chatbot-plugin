@@ -61,6 +61,9 @@ type ERPModule interface {
 // IntentAnalyzer interface for analyzing user messages
 type IntentAnalyzer interface {
 	AnalyzeIntent(ctx context.Context, message string, user *model.User) (*Intent, error)
+	RequestConfirmation(ctx context.Context, intent *Intent, user *model.User) (string, error)
+	HasPendingConfirmation(userID string) bool
+	ClearPendingConfirmation(userID string)
 }
 
 // ModuleRegistry interface for managing modules

@@ -82,6 +82,7 @@ type Plugin struct {
 	search                embeddings.EmbeddingSearch
 	moduleManager         *erp_modules.ModuleManager
 	moduleRegistry        *erp_modules.Registry
+	intentAnalyzer        *erp_modules.LLMIntentAnalyzer
 }
 
 func resolveffmpegPath() string {
@@ -313,20 +314,25 @@ func (p *Plugin) getTranscribe() Transcriber {
 	return nil
 }
 
-// initializeERPModules initializes all ERP modules
+// initializeERPModules initializes all ERP modules with enhanced intent analysis
 func (p *Plugin) initializeERPModules() error {
 	// Create registry
 	p.moduleRegistry = erp_modules.NewRegistry()
 
-	// Create intent analyzer
-	analyzer := erp_modules.NewLLMIntentAnalyzer(
+	// Create enhanced intent analyzer with LLM provider
+	p.intentAnalyzer = erp_modules.NewLLMIntentAnalyzer(
 		func() llm.LanguageModel { return p.getLLM(p.getDefaultBot().cfg) },
 		p.prompts,
 		p.moduleRegistry,
 	)
 
-	// Create module manager
-	p.moduleManager = erp_modules.NewModuleManager(p.moduleRegistry, analyzer)
+	// Create module manager with enhanced dependencies
+	p.moduleManager = erp_modules.NewModuleManager(
+		p.moduleRegistry,
+		p.intentAnalyzer,
+		func() llm.LanguageModel { return p.getLLM(p.getDefaultBot().cfg) },
+		p.prompts,
+	)
 
 	// Initialize attendance module
 	if err := p.initializeAttendanceModule(); err != nil {
@@ -400,7 +406,7 @@ func (p *Plugin) sendAttendanceNotification(userID, employeeName string, eventTy
 	return fmt.Errorf("attendance module not found")
 }
 
-// processERPRequest processes user requests that might be ERP-related
+// processERPRequest processes user requests that might be ERP-related with enhanced confidence handling
 func (p *Plugin) processERPRequest(bot *Bot, user *model.User, channel *model.Channel, post *model.Post, llmContext *llm.Context) (*erp_modules.ModuleResponse, error) {
 	if p.moduleManager == nil {
 		return nil, fmt.Errorf("module manager not initialized")
@@ -416,12 +422,53 @@ func (p *Plugin) processERPRequest(bot *Bot, user *model.User, channel *model.Ch
 		llmContext,
 	)
 
-	// If the confidence is too low, it's not an ERP request
-	if err != nil || (response != nil && !response.Success && response.Error == "Low confidence in intent analysis") {
+	// Handle different response types based on confidence and confirmation state
+	if err != nil {
+		// Log error but don't treat as ERP request failure
+		p.API.LogError("Error processing ERP request", "error", err.Error())
 		return nil, nil // Not an ERP request
 	}
 
+	if response != nil {
+		// Check if this is a confirmation request
+		if data, ok := response.Data["awaiting_confirmation"]; ok && data.(bool) {
+			// This is a confirmation request, treat as successful ERP handling
+			return response, nil
+		}
+
+		// Check if this is a general response (low confidence)
+		if actionTaken, ok := response.Data["type"]; ok && actionTaken == "general_knowledge" {
+			// This was handled as general knowledge, not an ERP request
+			return nil, nil
+		}
+
+		// This is a successful ERP request
+		if response.Success {
+			return response, nil
+		}
+
+		// ERP request failed
+		if response.Error == "Low confidence in intent analysis" {
+			return nil, nil // Not an ERP request
+		}
+	}
+
 	return response, err
+}
+
+// Helper function to check if a user has pending confirmations
+func (p *Plugin) userHasPendingConfirmation(userID string) bool {
+	if p.intentAnalyzer == nil {
+		return false
+	}
+	return p.intentAnalyzer.HasPendingConfirmation(userID)
+}
+
+// Helper function to clear pending confirmations (useful for cleanup)
+func (p *Plugin) clearUserPendingConfirmation(userID string) {
+	if p.intentAnalyzer != nil {
+		p.intentAnalyzer.ClearPendingConfirmation(userID)
+	}
 }
 
 // I18nAdapter adapts the i18n bundle to the interface needed by modules
