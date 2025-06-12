@@ -42,21 +42,40 @@ func NewLLMIntentAnalyzer(llmProvider func() llm.LanguageModel, prompts *llm.Pro
 	}
 }
 
-// AnalyzeIntent analyzes user message and returns parsed intent with precise confidence
+// Add this logging to the AnalyzeIntent function in server/erp_modules/intent_analyzer.go
+
 func (a *LLMIntentAnalyzer) AnalyzeIntent(ctx context.Context, message string, user *model.User) (*Intent, error) {
+	// Log the incoming message
+	fmt.Printf("=== ANALYZING INTENT ===\n")
+	fmt.Printf("User: %s\n", user.Username)
+	fmt.Printf("Message: %s\n", message)
+
 	// Check if user has a pending confirmation
 	if pending, exists := a.pendingConfirmations[user.Id]; exists {
+		fmt.Printf("User has pending confirmation, handling confirmation response\n")
 		return a.handleConfirmationResponse(ctx, message, user, pending)
 	}
 
 	// Build context with available modules information
 	llmContext := a.buildAnalysisContext(message, user)
 
+	// Log available modules
+	fmt.Printf("Available modules:\n")
+	modules := a.registry.GetAllModules()
+	for _, module := range modules {
+		fmt.Printf("  - %s: %v\n", module.GetCategory(), module.GetSupportedActions())
+	}
+
 	// Create completion request with enhanced prompt for precise confidence scoring
 	systemPrompt, err := a.prompts.Format("erp_intent_analysis_precise", llmContext)
 	if err != nil {
+		fmt.Printf("Failed to format intent analysis prompt: %v\n", err)
 		return nil, fmt.Errorf("failed to format intent analysis prompt: %w", err)
 	}
+
+	fmt.Printf("System prompt length: %d characters\n", len(systemPrompt))
+	// Uncomment next line to see the full prompt (it's quite long)
+	// fmt.Printf("System prompt: %s\n", systemPrompt)
 
 	completionRequest := llm.CompletionRequest{
 		Posts: []llm.Post{
@@ -75,27 +94,41 @@ func (a *LLMIntentAnalyzer) AnalyzeIntent(ctx context.Context, message string, u
 	// Get LLM response
 	response, err := a.llmProvider().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(300))
 	if err != nil {
+		fmt.Printf("Failed to analyze intent with LLM: %v\n", err)
 		return nil, fmt.Errorf("failed to analyze intent with LLM: %w", err)
 	}
+
+	fmt.Printf("LLM Response: %s\n", response)
 
 	// Parse JSON response
 	intent, err := a.parseIntentResponse(response, message)
 	if err != nil {
+		fmt.Printf("Failed to parse intent response: %v\n", err)
 		return nil, fmt.Errorf("failed to parse intent response: %w", err)
 	}
+
+	fmt.Printf("Parsed Intent:\n")
+	fmt.Printf("  Category: %s\n", intent.Category)
+	fmt.Printf("  Action: %s\n", intent.Action)
+	fmt.Printf("  Confidence: %f\n", intent.Confidence)
+	fmt.Printf("  Parameters: %v\n", intent.Parameters)
+	fmt.Printf("=== END INTENT ANALYSIS ===\n")
 
 	return intent, nil
 }
 
-// handleConfirmationResponse processes user's response to a confirmation request
+// Replace the handleConfirmationResponse function in server/erp_modules/intent_analyzer.go
+
 func (a *LLMIntentAnalyzer) handleConfirmationResponse(ctx context.Context, message string, user *model.User, pending *ConfirmationRequest) (*Intent, error) {
 	// Use LLM to analyze confirmation response
 	confirmationContext := llm.NewContext()
 	confirmationContext.RequestingUser = user
+
+	// Use the stored context which has the properly formatted intent
 	confirmationContext.Parameters = map[string]interface{}{
 		"UserMessage":     message,
-		"OriginalIntent":  pending.OriginalIntent,
-		"ConfirmationMsg": pending.ConfirmationMsg,
+		"OriginalIntent":  pending.Context["OriginalIntent"], // Use the map version
+		"ConfirmationMsg": pending.Context["ConfirmationMsg"],
 	}
 
 	systemPrompt, err := a.prompts.Format("confirmation_analysis", confirmationContext)
@@ -174,13 +207,24 @@ func (a *LLMIntentAnalyzer) handleConfirmationResponse(ctx context.Context, mess
 	}
 }
 
-// RequestConfirmation generates a confirmation message and stores the pending request
+// Replace the RequestConfirmation function in server/erp_modules/intent_analyzer.go
+
 func (a *LLMIntentAnalyzer) RequestConfirmation(ctx context.Context, intent *Intent, user *model.User) (string, error) {
 	// Generate confirmation message using LLM
 	confirmationContext := llm.NewContext()
 	confirmationContext.RequestingUser = user
+
+	// Store the intent properly as a map for template access
+	intentMap := map[string]interface{}{
+		"Category":   intent.Category,
+		"Action":     intent.Action,
+		"Parameters": intent.Parameters,
+		"Confidence": intent.Confidence,
+		"RawMessage": intent.RawMessage,
+	}
+
 	confirmationContext.Parameters = map[string]interface{}{
-		"Intent":      intent,
+		"Intent":      intentMap, // Store as map for template
 		"Category":    intent.Category,
 		"Action":      intent.Action,
 		"Parameters":  intent.Parameters,
@@ -224,13 +268,17 @@ func (a *LLMIntentAnalyzer) RequestConfirmation(ctx context.Context, intent *Int
 
 	confirmationMsg = strings.TrimSpace(confirmationMsg)
 
-	// Store pending confirmation
+	// Store pending confirmation with the intent as a map
 	a.pendingConfirmations[user.Id] = &ConfirmationRequest{
-		OriginalIntent:  intent,
+		OriginalIntent:  intent, // Keep original intent object
 		ConfirmationMsg: confirmationMsg,
 		UserID:          user.Id,
 		CreatedAt:       model.GetMillis(),
-		Context:         confirmationContext.Parameters,
+		Context: map[string]interface{}{
+			"OriginalIntent":  intentMap, // Store as map for template access
+			"UserMessage":     intent.RawMessage,
+			"ConfirmationMsg": confirmationMsg,
+		},
 	}
 
 	return confirmationMsg, nil

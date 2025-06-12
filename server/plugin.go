@@ -409,8 +409,15 @@ func (p *Plugin) sendAttendanceNotification(userID, employeeName string, eventTy
 // processERPRequest processes user requests that might be ERP-related with enhanced confidence handling
 func (p *Plugin) processERPRequest(bot *Bot, user *model.User, channel *model.Channel, post *model.Post, llmContext *llm.Context) (*erp_modules.ModuleResponse, error) {
 	if p.moduleManager == nil {
+		p.API.LogError("Module manager not initialized")
 		return nil, fmt.Errorf("module manager not initialized")
 	}
+
+	p.API.LogInfo("Processing ERP request",
+		"user_id", user.Id,
+		"username", user.Username,
+		"message", post.Message,
+		"channel_id", channel.Id)
 
 	// Check if this is an ERP-related request by trying to process it
 	response, err := p.moduleManager.ProcessUserRequest(
@@ -430,27 +437,43 @@ func (p *Plugin) processERPRequest(bot *Bot, user *model.User, channel *model.Ch
 	}
 
 	if response != nil {
+		p.API.LogInfo("ERP response received",
+			"success", response.Success,
+			"message", response.Message,
+			"action_taken", response.ActionTaken)
+
+		// Log response data for debugging
+		if response.Data != nil {
+			for key, value := range response.Data {
+				p.API.LogInfo("ERP response data", "key", key, "value", fmt.Sprintf("%v", value))
+			}
+		}
+
 		// Check if this is a confirmation request
 		if data, ok := response.Data["awaiting_confirmation"]; ok && data.(bool) {
-			// This is a confirmation request, treat as successful ERP handling
+			p.API.LogInfo("This is a confirmation request")
 			return response, nil
 		}
 
 		// Check if this is a general response (low confidence)
 		if actionTaken, ok := response.Data["type"]; ok && actionTaken == "general_knowledge" {
-			// This was handled as general knowledge, not an ERP request
+			p.API.LogInfo("This was handled as general knowledge, not an ERP request")
 			return nil, nil
 		}
 
 		// This is a successful ERP request
 		if response.Success {
+			p.API.LogInfo("ERP request processed successfully")
 			return response, nil
 		}
 
 		// ERP request failed
 		if response.Error == "Low confidence in intent analysis" {
+			p.API.LogInfo("Low confidence in intent analysis, treating as non-ERP request")
 			return nil, nil // Not an ERP request
 		}
+	} else {
+		p.API.LogInfo("No response from ERP processing")
 	}
 
 	return response, err

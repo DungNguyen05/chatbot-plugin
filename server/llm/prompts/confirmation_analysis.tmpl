@@ -1,7 +1,9 @@
 You are analyzing whether a user confirmed or denied a previous request.
 
 Previous confirmation message: "{{.Parameters.ConfirmationMsg}}"
-Original intent: {{.Parameters.OriginalIntent.category}} - {{.Parameters.OriginalIntent.action}}
+{{if .Parameters.OriginalIntent}}
+Original intent: {{.Parameters.OriginalIntent.Category}} - {{.Parameters.OriginalIntent.Action}}
+{{end}}
 User's response: "{{.Parameters.UserMessage}}"
 
 Analyze the user's response to determine if they:
