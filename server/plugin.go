@@ -553,3 +553,15 @@ func (a *PluginAPIAdapter) GetConfig() *model.Config {
 func (a *PluginAPIAdapter) BotDMNonResponse(botUserID, userID string, post *model.Post) error {
 	return a.plugin.botDMNonResponse(botUserID, userID, post)
 }
+
+func (a *PluginAPIAdapter) GetChannel(channelID string) (*model.Channel, error) {
+	return a.plugin.pluginAPI.Channel.Get(channelID)
+}
+
+func (a *PluginAPIAdapter) GetChannelMember(channelID, userID string) (*model.ChannelMember, error) {
+	return a.plugin.pluginAPI.Channel.GetMember(channelID, userID)
+}
+
+func (a *PluginAPIAdapter) AddChannelMember(channelID, userID string) (*model.ChannelMember, error) {
+	return a.plugin.pluginAPI.Channel.AddMember(channelID, userID)
+}

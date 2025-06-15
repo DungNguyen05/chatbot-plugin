@@ -76,6 +76,9 @@ type PluginAPI interface {
 	CreatePost(post *model.Post) error
 	GetConfig() *model.Config
 	BotDMNonResponse(botUserID, userID string, post *model.Post) error
+	GetChannel(channelID string) (*model.Channel, error)
+	GetChannelMember(channelID, userID string) (*model.ChannelMember, error)
+	AddChannelMember(channelID, userID string) (*model.ChannelMember, error)
 }
 
 // EmployeeCheckin represents the data structure for ERPNEXT employee check-in
@@ -862,7 +865,7 @@ func GetVietnamTime() (time.Time, error) {
 	return time.Now().In(loc), nil
 }
 
-// SendNotification sends a notification about attendance events
+// SendNotification sends a notification about attendance events with enhanced error handling and bot permissions
 func (m *AttendanceModule) SendNotification(userID, employeeName string, eventType RollCallEventType, eventTime string, reason string) error {
 	m.api.LogDebug("Sending roll call notification",
 		"user_id", userID,
@@ -901,19 +904,72 @@ func (m *AttendanceModule) SendNotification(userID, employeeName string, eventTy
 		message = m.i18n.Localize("rollcall.notification.absent", "**%s** has reported absence for today: \"%s\"", defaultLocale, employeeName, reason)
 	}
 
-	// Send to configured notification channels only
+	// Send to configured notification channels with enhanced error handling
+	var successCount int
+	var errorCount int
+
 	for _, channelID := range notifyChannelIDs {
+		// Validate channel exists and bot has access
+		channel, err := m.api.GetChannel(channelID)
+		if err != nil {
+			m.api.LogError("Failed to get notification channel",
+				"channel_id", channelID,
+				"error", err.Error())
+			errorCount++
+			continue
+		}
+
+		// Check if bot is a member of the channel
+		_, err = m.api.GetChannelMember(channelID, m.botUserID)
+		if err != nil {
+			m.api.LogWarn("Bot is not a member of notification channel, attempting to add bot",
+				"channel_id", channelID,
+				"bot_id", m.botUserID,
+				"channel_name", channel.Name)
+
+			// Try to add the bot to the channel
+			_, addErr := m.api.AddChannelMember(channelID, m.botUserID)
+			if addErr != nil {
+				m.api.LogError("Failed to add bot to notification channel",
+					"channel_id", channelID,
+					"bot_id", m.botUserID,
+					"channel_name", channel.Name,
+					"error", addErr.Error())
+				errorCount++
+				continue
+			}
+
+			m.api.LogInfo("Successfully added bot to notification channel",
+				"channel_id", channelID,
+				"bot_id", m.botUserID,
+				"channel_name", channel.Name)
+		}
+
+		// Create and send the post
 		post := &model.Post{
 			ChannelId: channelID,
 			Message:   message,
+			UserId:    m.botUserID,
 		}
 
 		if err := m.api.CreatePost(post); err != nil {
 			m.api.LogError("Failed to send roll call notification",
 				"channel_id", channelID,
+				"channel_name", channel.Name,
 				"error", err.Error())
+			errorCount++
+		} else {
+			m.api.LogDebug("Successfully sent roll call notification",
+				"channel_id", channelID,
+				"channel_name", channel.Name)
+			successCount++
 		}
 	}
+
+	m.api.LogInfo("Roll call notification summary",
+		"total_channels", len(notifyChannelIDs),
+		"successful", successCount,
+		"failed", errorCount)
 
 	// Send personalized message to the user via LLM
 	if err := m.sendPersonalizedRollCallMessage(user, eventType, eventTime); err != nil {
