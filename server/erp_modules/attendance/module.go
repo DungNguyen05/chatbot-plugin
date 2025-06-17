@@ -289,7 +289,7 @@ func (m *AttendanceModule) handleGetStatusCount(employeeID string, ctx *erp_modu
 	response, err := m.generateQueryResponse(ctx, intent.RawMessage, queryRequest, count)
 	if err != nil {
 		// Fallback to simple response if LLM fails
-		response = fmt.Sprintf("📅 Bạn có %d ngày %s trong %s", count, queryRequest.Status, queryRequest.TimePeriod.Description)
+		response = fmt.Sprintf("Bạn có %d ngày %s trong %s", count, queryRequest.Status, queryRequest.TimePeriod.Description)
 	}
 
 	return &erp_modules.ModuleResponse{
