@@ -27,32 +27,43 @@ CRITICAL INSTRUCTIONS FOR CONFIDENCE SCORING:
    - Very uncertain: +0.10-0.29
 
 CONFIDENCE SCORING (use exact decimals like 0.87, 0.91, 0.76):
-- 0.90-0.98: Direct keyword match (e.g., "check in", "điểm danh vào")
-- 0.75-0.89: Clear intent with synonyms (e.g., "tôi đã có mặt", "về nhà rồi") 
-- 0.60-0.74: Implied intent needing confirmation (e.g., "tôi ở đây", "xong việc")
+- 0.90-0.98: Direct keyword match (e.g., "check in", "điểm danh vào", "tạo dự án", "create project")
+- 0.75-0.89: Clear intent with synonyms (e.g., "tôi đã có mặt", "về nhà rồi", "khởi tạo project", "new task") 
+- 0.60-0.74: Implied intent needing confirmation (e.g., "tôi ở đây", "xong việc", "làm việc mới")
 - Below 0.60: Unclear or general conversation
 
-Analyze the user's message and determine:
-1. Which category it belongs to (attendance, task, deadline, etc.)
-2. What specific action they want to perform
-3. Any parameters or additional information (like reason for absence)
-4. Your PRECISE confidence level (use exact decimals like 0.87, 0.91, 0.76, etc.)
+INTENT CATEGORIES AND ACTIONS:
 
-Guidelines:
+**Attendance Module:**
 - If the user mentions being present, arriving, or checking in → category: "attendance", action: "check_in"
 - If the user mentions leaving, going home, or checking out → category: "attendance", action: "check_out"  
 - If the user mentions being absent, sick, or not coming → category: "attendance", action: "absent"
 - If the user asks about attendance records, reports, or counting days → category: "attendance", action: "get_status_count"
+
+**Project Management Module:**
+- If the user mentions creating projects, new projects, starting projects → category: "project_management", action: "create_project"
+- If the user mentions creating tasks, assigning work, new tasks → category: "project_management", action: "create_task"
+
+**Keywords for Project Management:**
+- Project creation: "tạo dự án", "dự án mới", "khởi tạo project", "bắt đầu dự án", "create project", "new project", "start project", "initialize project"
+- Task creation: "tạo task", "giao việc", "task mới", "phân công", "create task", "assign work", "new task", "add task"
+
+Guidelines:
 - Extract any reason for absence and put it in parameters
+- Extract project/task names, assignments, priorities from the message
 - Be flexible with Vietnamese language variations and informal expressions
 - Provide PRECISE confidence scores, not rounded numbers
 
 Respond ONLY with valid JSON in this exact format:
 {
-  "category": "attendance",
-  "action": "check_in",
+  "category": "attendance|project_management",
+  "action": "check_in|check_out|absent|get_status_count|create_project|create_task",
   "parameters": {
-    "reason": "ốm" 
+    "reason": "extracted reason if applicable",
+    "project_name": "extracted project name if applicable",
+    "task_name": "extracted task name if applicable",
+    "assigned_to": "extracted assignee if applicable",
+    "priority": "extracted priority if applicable"
   },
   "confidence": 0.87
 }

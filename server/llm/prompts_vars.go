@@ -21,6 +21,7 @@ const (
 	PromptMeetingSummaryGeneral            = "meeting_summary_general"
 	PromptMeetingSummarySystem             = "meeting_summary_system"
 	PromptMeetingSummaryUser               = "meeting_summary_user"
+	PromptProjectCreationAnalysis          = "project_creation_analysis"
 	PromptSearchResults                    = "search_results"
 	PromptSearchSystem                     = "search_system"
 	PromptSearchUser                       = "search_user"
@@ -30,5 +31,6 @@ const (
 	PromptSummarizeChannelSinceSystem      = "summarize_channel_since_system"
 	PromptSummarizeChunkSystem             = "summarize_chunk_system"
 	PromptSummarizeThreadSystem            = "summarize_thread_system"
+	PromptTaskCreationAnalysis             = "task_creation_analysis"
 	PromptThreadUser                       = "thread_user"
 )
