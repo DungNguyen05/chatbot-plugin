@@ -5,6 +5,8 @@ package llm
 
 // Automatically generated convenience vars for the filenames in llm/prompts/
 const (
+	PromptAttendanceQueryAnalysis          = "attendance_query_analysis"
+	PromptAttendanceQueryResponse          = "attendance_query_response"
 	PromptConfirmationAnalysis             = "confirmation_analysis"
 	PromptConfirmationGeneration           = "confirmation_generation"
 	PromptDirectMessageQuestionSystem      = "direct_message_question_system"

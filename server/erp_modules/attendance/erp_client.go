@@ -220,6 +220,96 @@ func (c *ERPClient) RecordEmployeeAbsent(employeeID string, reason string) (stri
 	return formattedDate, nil
 }
 
+// QueryAttendanceCount queries ERPNext for attendance count with specific status and date range
+func (c *ERPClient) QueryAttendanceCount(employeeID, status, startDate, endDate string) (int, error) {
+	c.api.LogDebug("Querying attendance count",
+		"employee_id", employeeID,
+		"status", status,
+		"start_date", startDate,
+		"end_date", endDate)
+
+	// Validate configuration
+	if err := c.validateConfig(); err != nil {
+		return 0, err
+	}
+
+	// Combine API key and secret for token
+	erpToken := c.config.ERPAPIKey + ":" + c.config.ERPAPISecret
+
+	// Build the API endpoint for fetching attendance records
+	baseURL := strings.TrimSuffix(c.config.ERPDomain, "/") + "/api/resource/Attendance"
+
+	// Create filters for the query
+	filters := fmt.Sprintf(`[["employee","=","%s"],["attendance_date",">=","%s"],["attendance_date","<=","%s"],["status","=","%s"]]`,
+		employeeID, startDate, endDate, status)
+
+	// Parse the base URL
+	reqURL, err := url.Parse(baseURL)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse URL: %w", err)
+	}
+
+	// Add query parameters
+	query := reqURL.Query()
+	query.Add("filters", filters)
+	query.Add("fields", `["name","status","attendance_date"]`)
+	query.Add("limit_page_length", "1000") // Set a reasonable limit
+	reqURL.RawQuery = query.Encode()
+
+	c.api.LogDebug("Making attendance query request", "url", reqURL.String())
+
+	// Create the request
+	req, err := http.NewRequest("GET", reqURL.String(), nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Authorization", "token "+erpToken)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	// Make the request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read the response
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	c.api.LogDebug("ERPNext attendance query response",
+		"status", resp.Status,
+		"body", string(respBody))
+
+	// Check the response status
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("ERP API error: %s - %s", resp.Status, string(respBody))
+	}
+
+	// Parse the response
+	var apiResponse struct {
+		Data []struct {
+			Name           string `json:"name"`
+			Status         string `json:"status"`
+			AttendanceDate string `json:"attendance_date"`
+		} `json:"data"`
+	}
+
+	if err := json.Unmarshal(respBody, &apiResponse); err != nil {
+		return 0, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	count := len(apiResponse.Data)
+	c.api.LogDebug("Found attendance records", "count", count)
+
+	return count, nil
+}
+
 // validateConfig validates the ERP configuration
 func (c *ERPClient) validateConfig() error {
 	if c.config.ERPDomain == "" {

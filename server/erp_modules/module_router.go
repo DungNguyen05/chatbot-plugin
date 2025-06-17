@@ -44,7 +44,7 @@ func (r *ModuleRouter) RouteAndExecute(ctx *ModuleContext, userMessage string) (
 		// High confidence - execute directly
 		return r.executeModule(ctx, intent)
 
-	case intent.Confidence >= 0.60:
+	case intent.Confidence >= 0.75:
 		// Medium confidence - request confirmation
 		confirmationMsg, err := r.analyzer.RequestConfirmation(ctx.Context, intent, ctx.User)
 		if err != nil {

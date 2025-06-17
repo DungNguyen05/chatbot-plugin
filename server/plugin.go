@@ -361,6 +361,9 @@ func (p *Plugin) initializeAttendanceModule() error {
 	// Create plugin API adapter
 	apiAdapter := &PluginAPIAdapter{plugin: p}
 
+	// Create prompts adapter
+	promptsAdapter := &PromptsAdapter{prompts: p.prompts}
+
 	// Get the default bot user ID
 	defaultBot := p.getDefaultBot()
 	var botUserID string
@@ -373,7 +376,7 @@ func (p *Plugin) initializeAttendanceModule() error {
 		attendanceConfig,
 		p.llmUpstreamHTTPClient,
 		i18nAdapter,
-		p.prompts,
+		promptsAdapter,
 		func() llm.LanguageModel { return p.getLLM(p.getDefaultBot().cfg) },
 		p.sendAttendanceNotification,
 		apiAdapter,
@@ -564,4 +567,17 @@ func (a *PluginAPIAdapter) GetChannelMember(channelID, userID string) (*model.Ch
 
 func (a *PluginAPIAdapter) AddChannelMember(channelID, userID string) (*model.ChannelMember, error) {
 	return a.plugin.pluginAPI.Channel.AddMember(channelID, userID)
+}
+
+// PromptsAdapter adapts the plugin's prompts to the interface needed by modules
+type PromptsAdapter struct {
+	prompts *llm.Prompts
+}
+
+func (p *PromptsAdapter) FormatString(templateCode string, context *llm.Context) (string, error) {
+	return p.prompts.FormatString(templateCode, context)
+}
+
+func (p *PromptsAdapter) Format(templateName string, context *llm.Context) (string, error) {
+	return p.prompts.Format(templateName, context)
 }

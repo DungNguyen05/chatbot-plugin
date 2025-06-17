@@ -103,7 +103,7 @@ const FloatingRollCallButton = styled.button`
     right: 5px;
     width: 30px;
     height: 30px;
-    border-radius: 20%;
+    border-radius: 50%;
     background: linear-gradient(135deg, #4CAF50, #45a049);
     border: none;
     cursor: pointer;

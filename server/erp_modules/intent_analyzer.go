@@ -42,8 +42,6 @@ func NewLLMIntentAnalyzer(llmProvider func() llm.LanguageModel, prompts *llm.Pro
 	}
 }
 
-// Add this logging to the AnalyzeIntent function in server/erp_modules/intent_analyzer.go
-
 func (a *LLMIntentAnalyzer) AnalyzeIntent(ctx context.Context, message string, user *model.User) (*Intent, error) {
 	// Log the incoming message
 	fmt.Printf("=== ANALYZING INTENT ===\n")
@@ -206,8 +204,6 @@ func (a *LLMIntentAnalyzer) handleConfirmationResponse(ctx context.Context, mess
 		}, nil
 	}
 }
-
-// Replace the RequestConfirmation function in server/erp_modules/intent_analyzer.go
 
 func (a *LLMIntentAnalyzer) RequestConfirmation(ctx context.Context, intent *Intent, user *model.User) (string, error) {
 	// Generate confirmation message using LLM

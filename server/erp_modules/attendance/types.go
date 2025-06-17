@@ -40,6 +40,7 @@ type I18nBundle interface {
 // PromptsInterface interface for prompts
 type PromptsInterface interface {
 	FormatString(templateCode string, context *llm.Context) (string, error)
+	Format(templateName string, context *llm.Context) (string, error)
 }
 
 // PluginAPI interface for plugin API operations
