@@ -21,12 +21,11 @@
   },
   "settings_schema": {
         "header": "Configure Mattermost AI plugin settings",
-        "footer": "To report an issue, make a suggestion, or contribute, [check the repository](https://github.com/mattermost/mattermost-plugin-ai).",
         "settings": [
             {
               "key": "Config",
               "type": "custom"
             }
         ]
-    }
+  }
 }

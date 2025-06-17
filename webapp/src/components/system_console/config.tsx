@@ -94,26 +94,6 @@ const defaultConfig = {
     },
 };
 
-const BetaMessage = () => (
-    <MessageContainer>
-        <span>
-            <FormattedMessage
-                defaultMessage='To report a bug or to provide feedback, <link>create a new issue in the plugin repository</link>.'
-                values={{
-                    link: (chunks: any) => (
-                        <a
-                            target={'_blank'}
-                            rel={'noopener noreferrer'}
-                            href='http://github.com/mattermost/mattermost-plugin-ai/issues'
-                        >
-                            {chunks}
-                        </a>
-                    ),
-                }}
-            />
-        </span>
-    </MessageContainer>
-);
 
 const Config = (props: Props) => {
     const value = props.value || defaultConfig;
@@ -170,7 +150,6 @@ const Config = (props: Props) => {
     if (!props.value?.bots || props.value.bots.length === 0) {
         return (
             <ConfigContainer>
-                <BetaMessage/>
                 <NoBotsPage onAddBotPressed={addFirstBot}/>
             </ConfigContainer>
         );
@@ -178,7 +157,6 @@ const Config = (props: Props) => {
 
     return (
         <ConfigContainer>
-            <BetaMessage/>
             <Panel
                 title={intl.formatMessage({defaultMessage: 'AI Bots'})}
                 subtitle={intl.formatMessage({defaultMessage: 'Multiple AI services can be configured below.'})}

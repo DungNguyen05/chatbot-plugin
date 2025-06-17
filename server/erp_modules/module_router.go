@@ -40,7 +40,7 @@ func (r *ModuleRouter) RouteAndExecute(ctx *ModuleContext, userMessage string) (
 
 	// Handle based on confidence level
 	switch {
-	case intent.Confidence >= 0.85:
+	case intent.Confidence >= 0.9:
 		// High confidence - execute directly
 		return r.executeModule(ctx, intent)
 
