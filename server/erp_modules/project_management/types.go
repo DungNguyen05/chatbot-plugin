@@ -101,23 +101,23 @@ type Task struct {
 // ProjectCreationRequest represents parsed project creation intent
 type ProjectCreationRequest struct {
 	ProjectName       string `json:"project_name"`
-	Description       string `json:"description"`
-	Priority          string `json:"priority"`
-	ProjectType       string `json:"project_type"`
-	ExpectedStartDate string `json:"expected_start_date"`
-	ExpectedEndDate   string `json:"expected_end_date"`
-	Department        string `json:"department"`
-	Customer          string `json:"customer"`
+	Description       string `json:"description,omitempty"`
+	Priority          string `json:"priority,omitempty"`
+	ProjectType       string `json:"project_type,omitempty"`
+	ExpectedStartDate string `json:"expected_start_date,omitempty"`
+	ExpectedEndDate   string `json:"expected_end_date,omitempty"`
+	Department        string `json:"department,omitempty"`
+	Customer          string `json:"customer,omitempty"`
 }
 
 // TaskCreationRequest represents parsed task creation intent
 type TaskCreationRequest struct {
 	Subject      string `json:"subject"`
-	Description  string `json:"description"`
-	Priority     string `json:"priority"`
-	Project      string `json:"project"`
-	AssignedTo   string `json:"assigned_to"`
-	ExpStartDate string `json:"exp_start_date"`
-	ExpEndDate   string `json:"exp_end_date"`
-	Department   string `json:"department"`
+	Description  string `json:"description,omitempty"`
+	Priority     string `json:"priority,omitempty"`
+	Project      string `json:"project,omitempty"`
+	AssignedTo   string `json:"assigned_to,omitempty"`
+	ExpStartDate string `json:"exp_start_date,omitempty"`
+	ExpEndDate   string `json:"exp_end_date,omitempty"`
+	Department   string `json:"department,omitempty"`
 }

@@ -285,8 +285,8 @@ func (m *ProjectManagementModule) analyzeProjectCreation(ctx *erp_modules.Module
 		Context: llmContext,
 	}
 
-	// Get LLM response
-	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(400))
+	// Get LLM response with lower token limit to encourage concise responses
+	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(200))
 	if err != nil {
 		return nil, fmt.Errorf("failed to analyze project creation with LLM: %w", err)
 	}
@@ -343,8 +343,8 @@ func (m *ProjectManagementModule) analyzeTaskCreation(ctx *erp_modules.ModuleCon
 		Context: llmContext,
 	}
 
-	// Get LLM response
-	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(400))
+	// Get LLM response with lower token limit
+	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(200))
 	if err != nil {
 		return nil, fmt.Errorf("failed to analyze task creation with LLM: %w", err)
 	}

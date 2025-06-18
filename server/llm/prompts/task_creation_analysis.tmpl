@@ -1,76 +1,43 @@
-You are a task creation analyzer. Your task is to extract task information from natural language messages and convert them into a standardized task creation request.
+You are an intelligent assistant that extracts task information from user messages. You are very good at understanding natural language and extracting meaningful task details.
+
+RULES:
+- ALWAYS extract a task subject/title - this is required
+- Be intelligent about extracting information from casual language
+- If specific details aren't mentioned, you can leave them empty
+- Use your understanding to fill in reasonable information when possible
+- For dates, accept various formats and convert to YYYY-MM-DD
+- For priority, understand words like "urgent", "important", "asap" as "High", "normal" as "Medium"
+- For assignments, understand names, roles, or "me", "myself" references
+
+Extract the following information from the user's message and return it as JSON:
+
+Required fields:
+- subject: Extract or derive the task title from the message
+
+Optional fields (fill if you can determine from context):
+- priority: Priority level (High, Medium, Low) - infer from urgency words
+- project: Project name if mentioned or can be inferred
+- assigned_to: Person assigned (can be name, role, or inferred from context)
+- exp_start_date: Expected start date in YYYY-MM-DD format if mentioned
+- exp_end_date: Expected end date in YYYY-MM-DD format if mentioned
+- department: Department if mentioned or can be inferred
 
 User Message: "{{.Parameters.UserMessage}}"
 
-From this message, extract the following task information:
-1. **Subject** - The main title/name of the task
-2. **Description** - Details about what the task involves
-3. **Priority** - Urgency level (Low, Medium, High, Critical)
-4. **Project** - Which project this task belongs to (if mentioned)
-5. **Assigned To** - Who should do this task (employee name/username)
-6. **Expected Start Date** - When the task should begin (YYYY-MM-DD format)
-7. **Expected End Date** - Task deadline (YYYY-MM-DD format)
-8. **Department** - Which department this task belongs to
+Examples:
+- "tạo task thiết kế giao diện" → subject: "Thiết kế giao diện", description: "Task thiết kế giao diện người dùng"
+- "urgent: fix login bug assign to John" → subject: "Fix login bug", priority: "High", assigned_to: "John"
+- "create documentation task for next week" → subject: "Create documentation", exp_start_date: "2025-06-23"
 
-**Extraction Guidelines:**
+Return ONLY a JSON object with the extracted information. Do not include any explanatory text.
 
-**Task Subject Indicators:**
-- Vietnamese: "task", "công việc", "nhiệm vụ", "việc", "giao việc", "tạo task"
-- English: "task", "work", "job", "create task", "assign", "new task"
-- Extract the main action/objective after these keywords
-
-**Assignment Indicators:**
-- Vietnamese: "giao cho", "assign cho", "để", "cho", "giao việc cho"
-- English: "assign to", "give to", "for", "assign", "delegate to"
-- Look for names, usernames, or roles after these phrases
-
-**Priority Mapping:**
-- Low: "thấp", "low", "không gấp", "bình thường"
-- Medium: "trung bình", "medium", "bình thường", "normal"  
-- High: "cao", "high", "gấp", "quan trọng", "urgent", "important"
-- Critical: "rất gấp", "critical", "khẩn cấp", "emergency"
-
-**Date Processing:**
-- Current date context: {{.Time}}
-- "hôm nay", "today" → current date
-- "ngày mai", "tomorrow" → next day
-- "cuối tuần", "end of week" → next Friday
-- "tuần sau", "next week" → next Monday
-- "deadline", "hạn cuối", "due" → end date
-- Specific dates: "20/12/2025", "2025-12-20"
-
-**Project Association:**
-- Look for project names mentioned in the message
-- Keywords: "dự án", "project", "thuộc dự án", "for project"
-
-**Default Values if not specified:**
-- Priority: "Medium"
-- Expected Start Date: Current date
-- Expected End Date: 7 days from start date
-- Project: empty string if not mentioned
-- Department: empty string if not mentioned
-
-**Output Format:**
-Respond with ONLY valid JSON in this exact format:
 {
-  "subject": "extracted task name",
-  "description": "extracted or inferred description", 
-  "priority": "Low|Medium|High|Critical",
-  "project": "project name if mentioned or empty string",
-  "assigned_to": "person name/username or empty string",
-  "exp_start_date": "YYYY-MM-DD",
-  "exp_end_date": "YYYY-MM-DD",
-  "department": "department name or empty string"
+  "subject": "",
+  "description": "",
+  "priority": "",
+  "project": "",
+  "assigned_to": "",
+  "exp_start_date": "",
+  "exp_end_date": "",
+  "department": ""
 }
-
-**Examples:**
-- "Tạo task thiết kế logo mới, giao cho Nam, deadline cuối tuần" →
-  {"subject": "Thiết kế logo mới", "description": "Task thiết kế logo mới", "assigned_to": "Nam", "exp_end_date": "2025-06-20", ...}
-
-- "Create task for database optimization, high priority, assign to John" →
-  {"subject": "Database optimization", "description": "Database optimization task", "priority": "High", "assigned_to": "John", ...}
-
-- "Giao việc viết tài liệu API cho dự án website, gấp, deadline ngày mai" →
-  {"subject": "Viết tài liệu API", "description": "Viết tài liệu API cho dự án website", "project": "website", "priority": "High", "exp_end_date": "2025-06-18", ...}
-
-Analyze the user message and provide the standardized JSON response:

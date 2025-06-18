@@ -255,48 +255,84 @@ func (c *ERPClient) sendToERP(endpoint, token string, doc interface{}) error {
 func NewProject(data ProjectCreationRequest, creatorEmployeeID string) *Project {
 	uniqueName := fmt.Sprintf("new-project-%s", generateUniqueID())
 
-	return &Project{
-		Docstatus:         1,
-		Doctype:           "Project",
-		Name:              uniqueName,
-		IsLocal:           true,
-		Unsaved:           true,
-		Owner:             "demo@example.com",
-		ProjectName:       data.ProjectName,
-		Status:            "Open",
-		Priority:          data.Priority,
-		ProjectType:       data.ProjectType,
-		Description:       data.Description,
-		ExpectedStartDate: data.ExpectedStartDate,
-		ExpectedEndDate:   data.ExpectedEndDate,
-		Department:        data.Department,
-		Customer:          data.Customer,
-		Company:           "",
+	project := &Project{
+		Docstatus:   1,
+		Doctype:     "Project",
+		Name:        uniqueName,
+		IsLocal:     true,
+		Unsaved:     true,
+		Owner:       "demo@example.com",
+		ProjectName: data.ProjectName,
+		Status:      "Open",
+		Company:     "",
 	}
+
+	// Only set optional fields if they are not empty
+	if data.Priority != "" {
+		project.Priority = data.Priority
+	}
+	if data.ProjectType != "" {
+		project.ProjectType = data.ProjectType
+	}
+	if data.Description != "" {
+		project.Description = data.Description
+	}
+	if data.ExpectedStartDate != "" {
+		project.ExpectedStartDate = data.ExpectedStartDate
+	}
+	if data.ExpectedEndDate != "" {
+		project.ExpectedEndDate = data.ExpectedEndDate
+	}
+	if data.Department != "" {
+		project.Department = data.Department
+	}
+	if data.Customer != "" {
+		project.Customer = data.Customer
+	}
+
+	return project
 }
 
 // NewTask creates a new task document with default values
 func NewTask(data TaskCreationRequest, creatorEmployeeID string) *Task {
 	uniqueName := fmt.Sprintf("new-task-%s", generateUniqueID())
 
-	return &Task{
-		Docstatus:    1,
-		Doctype:      "Task",
-		Name:         uniqueName,
-		IsLocal:      true,
-		Unsaved:      true,
-		Owner:        "demo@example.com",
-		Subject:      data.Subject,
-		Status:       "Open",
-		Priority:     data.Priority,
-		Project:      data.Project,
-		AssignedTo:   data.AssignedTo,
-		Description:  data.Description,
-		ExpStartDate: data.ExpStartDate,
-		ExpEndDate:   data.ExpEndDate,
-		Department:   data.Department,
-		Company:      "",
+	task := &Task{
+		Docstatus: 1,
+		Doctype:   "Task",
+		Name:      uniqueName,
+		IsLocal:   true,
+		Unsaved:   true,
+		Owner:     "demo@example.com",
+		Subject:   data.Subject,
+		Status:    "Open",
+		Company:   "",
 	}
+
+	// Only set optional fields if they are not empty
+	if data.Priority != "" {
+		task.Priority = data.Priority
+	}
+	if data.Project != "" {
+		task.Project = data.Project
+	}
+	if data.AssignedTo != "" {
+		task.AssignedTo = data.AssignedTo
+	}
+	if data.Description != "" {
+		task.Description = data.Description
+	}
+	if data.ExpStartDate != "" {
+		task.ExpStartDate = data.ExpStartDate
+	}
+	if data.ExpEndDate != "" {
+		task.ExpEndDate = data.ExpEndDate
+	}
+	if data.Department != "" {
+		task.Department = data.Department
+	}
+
+	return task
 }
 
 // generateUniqueID creates a simple unique ID
