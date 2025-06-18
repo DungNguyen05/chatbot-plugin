@@ -17,38 +17,30 @@ import (
 
 // ProjectManagementModule handles project and task management operations
 type ProjectManagementModule struct {
-	config              ProjectManagementConfig
-	erpClient           *ERPClient
-	notificationManager *NotificationManager
-	api                 PluginAPI
-	prompts             PromptsInterface
-	getLLM              func() llm.LanguageModel
+	config    ProjectManagementConfig
+	erpClient *ERPClient
+	api       PluginAPI
+	prompts   PromptsInterface
+	getLLM    func() llm.LanguageModel
 }
 
 // NewProjectManagementModule creates a new project management module
 func NewProjectManagementModule(
 	config ProjectManagementConfig,
 	httpClient *http.Client,
-	i18n I18nBundle,
 	prompts PromptsInterface,
 	getLLM func() llm.LanguageModel,
-	notificationFunc func(userID, userName string, eventType ProjectManagementEventType, itemName string, details string) error,
 	api PluginAPI,
-	botUserID string,
 ) *ProjectManagementModule {
 	// Create ERP client
 	erpClient := NewERPClient(config, httpClient, api)
 
-	// Create notification manager
-	notificationManager := NewNotificationManager(config, i18n, prompts, getLLM, api, botUserID)
-
 	return &ProjectManagementModule{
-		config:              config,
-		erpClient:           erpClient,
-		notificationManager: notificationManager,
-		api:                 api,
-		prompts:             prompts,
-		getLLM:              getLLM,
+		config:    config,
+		erpClient: erpClient,
+		api:       api,
+		prompts:   prompts,
+		getLLM:    getLLM,
 	}
 }
 
@@ -90,18 +82,12 @@ func (m *ProjectManagementModule) Execute(ctx *erp_modules.ModuleContext, intent
 		}, nil
 	}
 
-	// Get user name for notifications
-	userName := ctx.User.Username
-	if ctx.User.FirstName != "" || ctx.User.LastName != "" {
-		userName = strings.TrimSpace(ctx.User.FirstName + " " + ctx.User.LastName)
-	}
-
 	// Execute specific action
 	switch intent.Action {
 	case "create_project":
-		return m.handleCreateProject(employeeID, userName, ctx.User.Id, ctx, intent)
+		return m.handleCreateProject(employeeID, ctx, intent)
 	case "create_task":
-		return m.handleCreateTask(employeeID, userName, ctx.User.Id, ctx, intent)
+		return m.handleCreateTask(employeeID, ctx, intent)
 	default:
 		return &erp_modules.ModuleResponse{
 			Success: false,
@@ -145,7 +131,7 @@ func (m *ProjectManagementModule) GetActionExamples() map[string][]string {
 }
 
 // handleCreateProject processes project creation request
-func (m *ProjectManagementModule) handleCreateProject(employeeID, userName, userID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
+func (m *ProjectManagementModule) handleCreateProject(employeeID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
 	// Use LLM to extract project details from user message
 	projectRequest, err := m.analyzeProjectCreation(ctx, intent.RawMessage)
 	if err != nil {
@@ -174,15 +160,6 @@ func (m *ProjectManagementModule) handleCreateProject(employeeID, userName, user
 		}, nil
 	}
 
-	// Send notification asynchronously
-	go func() {
-		details := fmt.Sprintf("Mô tả: %s", projectRequest.Description)
-		if projectRequest.Priority != "" {
-			details += fmt.Sprintf(", Mức độ: %s", projectRequest.Priority)
-		}
-		_ = m.notificationManager.SendNotification(userID, userName, ProjectManagementEventProjectCreated, projectName, details)
-	}()
-
 	return &erp_modules.ModuleResponse{
 		Success:     true,
 		Message:     fmt.Sprintf("✅ Đã tạo dự án mới thành công: **%s**!", projectName),
@@ -191,13 +168,12 @@ func (m *ProjectManagementModule) handleCreateProject(employeeID, userName, user
 			"project_name": projectName,
 			"description":  projectRequest.Description,
 			"priority":     projectRequest.Priority,
-			"creator":      userName,
 		},
 	}, nil
 }
 
 // handleCreateTask processes task creation request
-func (m *ProjectManagementModule) handleCreateTask(employeeID, userName, userID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
+func (m *ProjectManagementModule) handleCreateTask(employeeID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
 	// Use LLM to extract task details from user message
 	taskRequest, err := m.analyzeTaskCreation(ctx, intent.RawMessage)
 	if err != nil {
@@ -226,18 +202,6 @@ func (m *ProjectManagementModule) handleCreateTask(employeeID, userName, userID 
 		}, nil
 	}
 
-	// Send notification asynchronously
-	go func() {
-		details := fmt.Sprintf("Mô tả: %s", taskRequest.Description)
-		if taskRequest.AssignedTo != "" {
-			details += fmt.Sprintf(", Giao cho: %s", taskRequest.AssignedTo)
-		}
-		if taskRequest.Priority != "" {
-			details += fmt.Sprintf(", Mức độ: %s", taskRequest.Priority)
-		}
-		_ = m.notificationManager.SendNotification(userID, userName, ProjectManagementEventTaskCreated, taskName, details)
-	}()
-
 	return &erp_modules.ModuleResponse{
 		Success:     true,
 		Message:     fmt.Sprintf("✅ Đã tạo task mới thành công: **%s**!", taskName),
@@ -248,7 +212,6 @@ func (m *ProjectManagementModule) handleCreateTask(employeeID, userName, userID 
 			"assigned_to": taskRequest.AssignedTo,
 			"priority":    taskRequest.Priority,
 			"project":     taskRequest.Project,
-			"creator":     userName,
 		},
 	}, nil
 }
@@ -380,10 +343,4 @@ func (m *ProjectManagementModule) GetEmployeeIDFromUser(user *model.User) (strin
 	}
 
 	return employeeID, nil
-}
-
-// SendNotification is a legacy method that delegates to the notification manager
-// This method is kept for backward compatibility
-func (m *ProjectManagementModule) SendNotification(userID, userName string, eventType ProjectManagementEventType, itemName string, details string) error {
-	return m.notificationManager.SendNotification(userID, userName, eventType, itemName, details)
 }

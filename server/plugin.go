@@ -397,56 +397,30 @@ func (p *Plugin) initializeAttendanceModule() error {
 func (p *Plugin) initializeProjectManagementModule() error {
 	config := p.getConfiguration()
 
-	// Create project management config from roll call config (they use same ERP)
+	// Create project management config (simplified - no notification fields)
 	projectManagementConfig := project_management.ProjectManagementConfig{
-		ERPDomain:      config.RollCall.ERPDomain,
-		ERPAPIKey:      config.RollCall.ERPAPIKey,
-		ERPAPISecret:   config.RollCall.ERPAPISecret,
-		NotifyChannels: config.RollCall.NotifyChannels,
-		Enabled:        config.RollCall.Enabled,
+		ERPDomain:    config.RollCall.ERPDomain,
+		ERPAPIKey:    config.RollCall.ERPAPIKey,
+		ERPAPISecret: config.RollCall.ERPAPISecret,
 	}
 
-	// Create i18n adapter
-	i18nAdapter := &I18nAdapter{bundle: p.i18n}
-
-	// Create plugin API adapter
+	// Create plugin API adapter (still needed for ERP calls)
 	apiAdapter := &PluginAPIAdapter{plugin: p}
 
-	// Create prompts adapter
+	// Create prompts adapter (still needed for LLM analysis)
 	promptsAdapter := &PromptsAdapter{prompts: p.prompts}
 
-	// Get the default bot user ID
-	defaultBot := p.getDefaultBot()
-	var botUserID string
-	if defaultBot != nil && defaultBot.mmBot != nil {
-		botUserID = defaultBot.mmBot.UserId
-	}
-
-	// Create project management module
+	// Create project management module (simplified parameters)
 	projectManagementModule := project_management.NewProjectManagementModule(
 		projectManagementConfig,
 		p.llmUpstreamHTTPClient,
-		i18nAdapter,
 		promptsAdapter,
 		func() llm.LanguageModel { return p.getLLM(p.getDefaultBot().cfg) },
-		p.sendProjectManagementNotification,
 		apiAdapter,
-		botUserID,
 	)
 
 	// Register the module
 	return p.moduleRegistry.RegisterModule(projectManagementModule)
-}
-
-// Add this new method to send project management notifications
-func (p *Plugin) sendProjectManagementNotification(userID, userName string, eventType project_management.ProjectManagementEventType, itemName string, details string) error {
-	// Get project management module to send notification
-	if module, exists := p.moduleRegistry.GetModule("project_management"); exists {
-		if projectModule, ok := module.(*project_management.ProjectManagementModule); ok {
-			return projectModule.SendNotification(userID, userName, eventType, itemName, details)
-		}
-	}
-	return fmt.Errorf("project management module not found")
 }
 
 // getDefaultBot returns the default bot configuration

@@ -5,36 +5,16 @@ package project_management
 
 import (
 	"github.com/mattermost/mattermost-plugin-ai/server/llm"
-	"github.com/mattermost/mattermost/server/public/model"
 )
 
 // API endpoint for ERPNext
 const ERPEndpointSuffix = "/api/method/frappe.desk.form.save.savedocs"
 
-// ProjectManagementEventType defines the type of project management event
-type ProjectManagementEventType string
-
-const (
-	// ProjectManagementEventProjectCreated represents a project creation event
-	ProjectManagementEventProjectCreated ProjectManagementEventType = "project_created"
-	// ProjectManagementEventTaskCreated represents a task creation event
-	ProjectManagementEventTaskCreated ProjectManagementEventType = "task_created"
-	// ProjectManagementEventTaskAssigned represents a task assignment event
-	ProjectManagementEventTaskAssigned ProjectManagementEventType = "task_assigned"
-)
-
 // ProjectManagementConfig represents the configuration for project management module
 type ProjectManagementConfig struct {
-	ERPDomain      string   `json:"erpDomain"`
-	ERPAPIKey      string   `json:"erpAPIKey"`
-	ERPAPISecret   string   `json:"erpAPISecret"`
-	NotifyChannels []string `json:"notifyChannels"`
-	Enabled        bool     `json:"enabled"`
-}
-
-// I18nBundle interface for internationalization
-type I18nBundle interface {
-	Localize(messageID, defaultMessage, locale string, params ...interface{}) string
+	ERPDomain    string `json:"erpDomain"`
+	ERPAPIKey    string `json:"erpAPIKey"`
+	ERPAPISecret string `json:"erpAPISecret"`
 }
 
 // PromptsInterface interface for prompts
@@ -49,13 +29,6 @@ type PluginAPI interface {
 	LogError(message string, keyValuePairs ...interface{})
 	LogInfo(message string, keyValuePairs ...interface{})
 	LogWarn(message string, keyValuePairs ...interface{})
-	GetUser(userID string) (*model.User, error)
-	CreatePost(post *model.Post) error
-	GetConfig() *model.Config
-	BotDMNonResponse(botUserID, userID string, post *model.Post) error
-	GetChannel(channelID string) (*model.Channel, error)
-	GetChannelMember(channelID, userID string) (*model.ChannelMember, error)
-	AddChannelMember(channelID, userID string) (*model.ChannelMember, error)
 }
 
 // Project represents the data structure for ERPNext Project
