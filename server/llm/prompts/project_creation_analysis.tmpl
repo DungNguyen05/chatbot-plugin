@@ -6,7 +6,8 @@ CRITICAL RULES:
 - Be intelligent about extracting information from casual language
 - If specific details aren't mentioned, leave them as empty strings
 - Use your understanding to fill in reasonable information when possible
-- For dates, accept various formats and convert to YYYY-MM-DD
+- FOR DATES: ALWAYS use YYYY-MM-DD format (e.g., "2025-06-19", "2025-12-29")
+- If user mentions relative dates like "next week", calculate and convert to YYYY-MM-DD
 - DO NOT add any fields not specified in the schema
 
 FIELD DEFINITIONS AND VALID VALUES:
@@ -23,6 +24,10 @@ FIELD DEFINITIONS AND VALID VALUES:
 - "Other" (for other types, khác)
 - "" (empty if not specified)
 
+**DATE FORMATTING RULES:**
+- Current date context: {{.Time}}
+- ALWAYS format dates as YYYY-MM-DD
+
 Extract the following information from the user's message and return it as JSON:
 
 Required fields:
@@ -31,17 +36,19 @@ Required fields:
 Optional fields (fill if you can determine from context):
 - priority: Priority level
 - project_type: Type of project 
-- expected_start_date: Start date in YYYY-MM-DD format if mentioned
-- expected_end_date: End date in YYYY-MM-DD format if mentioned
+- expected_start_date: Start date in YYYY-MM-DD format ONLY
+- expected_end_date: End date in YYYY-MM-DD format ONLY
 - department: Department if mentioned or can be inferred
 - customer: Customer/client name if mentioned
 
 User Message: "{{.Parameters.UserMessage}}"
 
 Examples:
-- "tạo project tên code máy in" → project_name: "Code máy in", description: "Dự án phát triển code máy in"
-- "make urgent website project" → project_name: "Website Project", priority: "High"
+- "tạo project tên code máy in bắt đầu ngày 29/12/2026" → project_name: "Code máy in", expected_start_date: "2026-12-29"
+- "make urgent website project starting tomorrow" → project_name: "Website Project", priority: "High", expected_start_date: "2025-06-20"
 - "create marketing campaign for Q2" → project_name: "Marketing Campaign Q2"
+
+IMPORTANT: Always ensure dates are in YYYY-MM-DD format in the JSON response.
 
 Return ONLY a JSON object with the extracted information. Do not include any explanatory text.
 

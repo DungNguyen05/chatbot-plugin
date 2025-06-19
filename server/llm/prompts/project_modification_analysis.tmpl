@@ -27,11 +27,17 @@ Extract the specific modifications requested. CRITICAL: Always maintain the comp
 - Keep all other fields unchanged, including empty ones
 - Never remove fields from the schema
 
+**DATE FORMATTING RULES FOR MODIFICATIONS:**
+- ALWAYS convert dates to YYYY-MM-DD format
+- Examples: "29/12/2026" → "2026-12-29", "12/25/2025" → "2025-12-25"
+- If user says relative dates like "next week", calculate from current date
+
 **Examples:**
 - "add priority high" → modify priority to "High"
 - "change description to Development work" → modify description to "Development work"  
 - "set customer to ABC Company" → modify customer to "ABC Company"
-- "add start date tomorrow" → modify expected_start_date to appropriate date
+- "add start date 29/12/2026" → modify expected_start_date to "2026-12-29"
+- "change end date to tomorrow" → modify expected_end_date to calculated date in YYYY-MM-DD format
 
 Respond with ONLY valid JSON:
 {

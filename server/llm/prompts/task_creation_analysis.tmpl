@@ -6,7 +6,8 @@ CRITICAL RULES:
 - Be intelligent about extracting information from casual language
 - If specific details aren't mentioned, leave them as empty strings
 - Use your understanding to fill in reasonable information when possible
-- For dates, accept various formats and convert to YYYY-MM-DD
+- FOR DATES: ALWAYS use YYYY-MM-DD format (e.g., "2025-06-19", "2025-12-29")
+- If user mentions relative dates like "next week", calculate and convert to YYYY-MM-DD
 - DO NOT add any fields not specified in the schema
 
 FIELD DEFINITIONS AND VALID VALUES:
@@ -17,6 +18,11 @@ FIELD DEFINITIONS AND VALID VALUES:
 - "Low" (for not urgent, không khẩn cấp, thấp)
 - "" (empty if not specified)
 
+**DATE FORMATTING RULES:**
+- Current date context: {{.Time}}
+- ALWAYS format dates as YYYY-MM-DD
+- Examples of CORRECT date formats: "2025-06-19", "2025-12-01", "2026-03-15"
+
 Extract the following information from the user's message and return it as JSON:
 
 Required fields:
@@ -26,16 +32,18 @@ Optional fields (fill if you can determine from context):
 - priority: Priority level 
 - project: Project name if mentioned or can be inferred
 - assigned_to: Person assigned (can be name, role, or inferred from context)
-- exp_start_date: Expected start date in YYYY-MM-DD format if mentioned
-- exp_end_date: Expected end date in YYYY-MM-DD format if mentioned
+- exp_start_date: Expected start date in YYYY-MM-DD format ONLY
+- exp_end_date: Expected end date in YYYY-MM-DD format ONLY
 - department: Department if mentioned or can be inferred
 
 User Message: "{{.Parameters.UserMessage}}"
 
 Examples:
-- "tạo task thiết kế giao diện" → subject: "Thiết kế giao diện", description: "Task thiết kế giao diện người dùng"
-- "urgent: fix login bug assign to John" → subject: "Fix login bug", priority: "High", assigned_to: "John"
-- "create documentation task for next week" → subject: "Create documentation", exp_start_date: "2025-06-23"
+- "tạo task thiết kế giao diện deadline 25/12/2025" → subject: "Thiết kế giao diện", exp_end_date: "2025-12-25"
+- "urgent: fix login bug assign to John starting tomorrow" → subject: "Fix login bug", priority: "High", assigned_to: "John", exp_start_date: "2025-06-20"
+- "create documentation task for next week" → subject: "Create documentation", exp_start_date: "2025-06-26"
+
+IMPORTANT: Always ensure dates are in YYYY-MM-DD format in the JSON response.
 
 Return ONLY a JSON object with the extracted information. Do not include any explanatory text.
 
