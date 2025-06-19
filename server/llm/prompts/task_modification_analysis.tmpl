@@ -1,0 +1,45 @@
+You are analyzing user responses to task creation confirmations. The user can either confirm, request modifications, or cancel.
+
+Current pending task data:
+{{range $key, $value := .Parameters.PendingData}}
+{{if $value}}
+- {{$key}}: {{$value}}
+{{end}}
+{{end}}
+
+Original task schema (ALWAYS maintain these fields):
+{{range $key, $value := .Parameters.OriginalSchema}}
+- {{$key}}: (current: "{{index $.Parameters.PendingData $key}}")
+{{end}}
+
+User response: "{{.Parameters.UserMessage}}"
+
+Analyze the user's response and determine their intent:
+
+**Intent Categories:**
+- "confirm" - User wants to proceed with creation (yes, có, đúng, create it, làm đi, etc.)
+- "modify" - User wants to change some information (add, change, update, thêm, sửa, etc.)
+- "cancel" - User wants to cancel (no, không, cancel, hủy, stop, etc.)
+
+**For MODIFY intent:**
+Extract the specific modifications requested. CRITICAL: Always maintain the complete schema structure. If user wants to:
+- Add/change a field: Update that field value
+- Keep all other fields unchanged, including empty ones
+- Never remove fields from the schema
+
+**Examples:**
+- "assign to John" → modify assigned_to to "John"
+- "set priority to high" → modify priority to "High"
+- "add description: UI design work" → modify description to "UI design work"
+- "change project to Website" → modify project to "Website"
+
+Respond with ONLY valid JSON:
+{
+  "intent": "confirm|modify|cancel",
+  "modifications": {
+    "field_name": "new_value"
+  },
+  "reasoning": "Brief explanation of the analysis"
+}
+
+For confirm/cancel intent, modifications should be empty object {}.

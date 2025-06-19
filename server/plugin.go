@@ -468,7 +468,7 @@ func (p *Plugin) processERPRequest(bot *Bot, user *model.User, channel *model.Ch
 		llmContext,
 	)
 
-	// Handle different response types based on confidence and confirmation state
+	// Handle different response types
 	if err != nil {
 		// Log error but don't treat as ERP request failure
 		p.API.LogError("Error processing ERP request", "error", err.Error())
@@ -488,7 +488,7 @@ func (p *Plugin) processERPRequest(bot *Bot, user *model.User, channel *model.Ch
 			}
 		}
 
-		// Check if this is a confirmation request
+		// Check if this is a confirmation request (any type)
 		if data, ok := response.Data["awaiting_confirmation"]; ok && data.(bool) {
 			p.API.LogInfo("This is a confirmation request")
 			return response, nil
@@ -506,31 +506,16 @@ func (p *Plugin) processERPRequest(bot *Bot, user *model.User, channel *model.Ch
 			return response, nil
 		}
 
-		// ERP request failed
-		if response.Error == "Low confidence in intent analysis" {
-			p.API.LogInfo("Low confidence in intent analysis, treating as non-ERP request")
-			return nil, nil // Not an ERP request
+		// ERP request failed but was handled
+		if response.Error != "" {
+			p.API.LogInfo("ERP request failed but was handled", "error", response.Error)
+			return response, nil
 		}
 	} else {
 		p.API.LogInfo("No response from ERP processing")
 	}
 
 	return response, err
-}
-
-// Helper function to check if a user has pending confirmations
-func (p *Plugin) userHasPendingConfirmation(userID string) bool {
-	if p.intentAnalyzer == nil {
-		return false
-	}
-	return p.intentAnalyzer.HasPendingConfirmation(userID)
-}
-
-// Helper function to clear pending confirmations (useful for cleanup)
-func (p *Plugin) clearUserPendingConfirmation(userID string) {
-	if p.intentAnalyzer != nil {
-		p.intentAnalyzer.ClearPendingConfirmation(userID)
-	}
 }
 
 // I18nAdapter adapts the i18n bundle to the interface needed by modules

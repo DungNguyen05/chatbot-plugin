@@ -56,14 +56,14 @@ type ERPModule interface {
 
 	// GetActionExamples returns examples of user messages for each action (for LLM training)
 	GetActionExamples() map[string][]string
+
+	// ProcessUserMessage handles user messages including confirmations and modifications
+	ProcessUserMessage(ctx *ModuleContext, message string) (*ModuleResponse, error)
 }
 
 // IntentAnalyzer interface for analyzing user messages
 type IntentAnalyzer interface {
 	AnalyzeIntent(ctx context.Context, message string, user *model.User) (*Intent, error)
-	RequestConfirmation(ctx context.Context, intent *Intent, user *model.User) (string, error)
-	HasPendingConfirmation(userID string) bool
-	ClearPendingConfirmation(userID string)
 }
 
 // ModuleRegistry interface for managing modules

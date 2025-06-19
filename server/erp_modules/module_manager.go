@@ -31,9 +31,11 @@ func NewModuleManager(registry ModuleRegistry, analyzer IntentAnalyzer, llmProvi
 
 	router := NewModuleRouter(registry, enhancedAnalyzer, llmProvider, prompts)
 	return &ModuleManager{
-		registry: registry,
-		analyzer: analyzer,
-		router:   router,
+		registry:    registry,
+		analyzer:    analyzer,
+		router:      router,
+		llmProvider: llmProvider,
+		prompts:     prompts,
 	}
 }
 
@@ -48,7 +50,7 @@ func (m *ModuleManager) ProcessUserRequest(ctx context.Context, userMessage stri
 		OriginalPost: originalPost,
 	}
 
-	// Route and execute the request
+	// Route and execute the request (this will handle confirmations automatically)
 	response, err := m.router.RouteAndExecute(moduleContext, userMessage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to route and execute user request: %w", err)

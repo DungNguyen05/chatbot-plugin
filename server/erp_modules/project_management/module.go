@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mattermost/mattermost-plugin-ai/server/erp_modules"
@@ -17,11 +18,13 @@ import (
 
 // ProjectManagementModule handles project and task management operations
 type ProjectManagementModule struct {
-	config    ProjectManagementConfig
-	erpClient *ERPClient
-	api       PluginAPI
-	prompts   PromptsInterface
-	getLLM    func() llm.LanguageModel
+	config            ProjectManagementConfig
+	erpClient         *ERPClient
+	api               PluginAPI
+	prompts           PromptsInterface
+	getLLM            func() llm.LanguageModel
+	confirmationState *ConfirmationState
+	confirmationMutex sync.RWMutex
 }
 
 // NewProjectManagementModule creates a new project management module
@@ -41,6 +44,9 @@ func NewProjectManagementModule(
 		api:       api,
 		prompts:   prompts,
 		getLLM:    getLLM,
+		confirmationState: &ConfirmationState{
+			pendingConfirmations: make(map[string]*PendingConfirmation),
+		},
 	}
 }
 
@@ -70,6 +76,42 @@ func (m *ProjectManagementModule) CanHandle(intent *erp_modules.Intent) bool {
 	return false
 }
 
+// ProcessUserMessage handles user messages including confirmations and modifications
+func (m *ProjectManagementModule) ProcessUserMessage(ctx *erp_modules.ModuleContext, message string) (*erp_modules.ModuleResponse, error) {
+	m.confirmationMutex.RLock()
+	pending, hasPending := m.confirmationState.pendingConfirmations[ctx.User.Id]
+	m.confirmationMutex.RUnlock()
+
+	if !hasPending {
+		return nil, nil // Not handling this message
+	}
+
+	// Parse user response using LLM
+	userResponse, err := m.parseUserResponse(ctx, message, pending)
+	if err != nil {
+		m.api.LogError("Failed to parse user response", "error", err.Error())
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: "⚠️ Không thể hiểu phản hồi của bạn. Vui lòng thử lại.",
+			Error:   err.Error(),
+		}, nil
+	}
+
+	switch userResponse.Intent {
+	case "confirm":
+		return m.handleConfirmAction(ctx, pending)
+	case "modify":
+		return m.handleModifyAction(ctx, pending, userResponse.Modifications)
+	case "cancel":
+		return m.handleCancelAction(ctx.User.Id)
+	default:
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: "⚠️ Vui lòng xác nhận (có/yes), chỉnh sửa thông tin, hoặc hủy bỏ (không/cancel).",
+		}, nil
+	}
+}
+
 // Execute processes the project management intent
 func (m *ProjectManagementModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
 	// Get employee ID
@@ -85,9 +127,9 @@ func (m *ProjectManagementModule) Execute(ctx *erp_modules.ModuleContext, intent
 	// Execute specific action
 	switch intent.Action {
 	case "create_project":
-		return m.handleCreateProject(employeeID, ctx, intent)
+		return m.handleCreateProjectRequest(employeeID, ctx, intent)
 	case "create_task":
-		return m.handleCreateTask(employeeID, ctx, intent)
+		return m.handleCreateTaskRequest(employeeID, ctx, intent)
 	default:
 		return &erp_modules.ModuleResponse{
 			Success: false,
@@ -130,9 +172,9 @@ func (m *ProjectManagementModule) GetActionExamples() map[string][]string {
 	}
 }
 
-// handleCreateProject processes project creation request
-func (m *ProjectManagementModule) handleCreateProject(employeeID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
-	// Use LLM to extract project details from user message
+// handleCreateProjectRequest processes project creation request with confirmation
+func (m *ProjectManagementModule) handleCreateProjectRequest(employeeID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
+	// Extract project details using LLM with complete schema
 	projectRequest, err := m.analyzeProjectCreation(ctx, intent.RawMessage)
 	if err != nil {
 		return &erp_modules.ModuleResponse{
@@ -150,31 +192,33 @@ func (m *ProjectManagementModule) handleCreateProject(employeeID string, ctx *er
 		}, nil
 	}
 
-	// Create project in ERPNext
-	projectName, err := m.erpClient.CreateProject(*projectRequest, employeeID)
+	// Store pending confirmation with complete schema
+	m.storePendingConfirmation(ctx.User.Id, "project", projectRequest, employeeID)
+
+	// Generate confirmation message
+	confirmationMsg, err := m.generateConfirmationMessage(ctx, "project", projectRequest)
 	if err != nil {
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "⚠️ Có lỗi xảy ra khi tạo dự án trong hệ thống. Vui lòng thử lại.",
+			Message: "⚠️ Có lỗi xảy ra khi tạo tin nhắn xác nhận.",
 			Error:   err.Error(),
 		}, nil
 	}
 
 	return &erp_modules.ModuleResponse{
 		Success:     true,
-		Message:     fmt.Sprintf("✅ Đã tạo dự án mới thành công: **%s**!", projectName),
-		ActionTaken: "create_project",
+		Message:     confirmationMsg,
+		ActionTaken: "request_project_confirmation",
 		Data: map[string]interface{}{
-			"project_name": projectName,
-			"description":  projectRequest.Description,
-			"priority":     projectRequest.Priority,
+			"awaiting_confirmation": true,
+			"type":                  "project",
 		},
 	}, nil
 }
 
-// handleCreateTask processes task creation request
-func (m *ProjectManagementModule) handleCreateTask(employeeID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
-	// Use LLM to extract task details from user message
+// handleCreateTaskRequest processes task creation request with confirmation
+func (m *ProjectManagementModule) handleCreateTaskRequest(employeeID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
+	// Extract task details using LLM with complete schema
 	taskRequest, err := m.analyzeTaskCreation(ctx, intent.RawMessage)
 	if err != nil {
 		return &erp_modules.ModuleResponse{
@@ -192,31 +236,315 @@ func (m *ProjectManagementModule) handleCreateTask(employeeID string, ctx *erp_m
 		}, nil
 	}
 
-	// Create task in ERPNext
-	taskName, err := m.erpClient.CreateTask(*taskRequest, employeeID)
+	// Store pending confirmation with complete schema
+	m.storePendingConfirmation(ctx.User.Id, "task", taskRequest, employeeID)
+
+	// Generate confirmation message
+	confirmationMsg, err := m.generateConfirmationMessage(ctx, "task", taskRequest)
 	if err != nil {
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "⚠️ Có lỗi xảy ra khi tạo task trong hệ thống. Vui lòng thử lại.",
+			Message: "⚠️ Có lỗi xảy ra khi tạo tin nhắn xác nhận.",
 			Error:   err.Error(),
 		}, nil
 	}
 
 	return &erp_modules.ModuleResponse{
 		Success:     true,
-		Message:     fmt.Sprintf("✅ Đã tạo task mới thành công: **%s**!", taskName),
-		ActionTaken: "create_task",
+		Message:     confirmationMsg,
+		ActionTaken: "request_task_confirmation",
 		Data: map[string]interface{}{
-			"task_name":   taskName,
-			"description": taskRequest.Description,
-			"assigned_to": taskRequest.AssignedTo,
-			"priority":    taskRequest.Priority,
-			"project":     taskRequest.Project,
+			"awaiting_confirmation": true,
+			"type":                  "task",
 		},
 	}, nil
 }
 
-// analyzeProjectCreation uses LLM to extract project details from user message
+// storePendingConfirmation stores a pending confirmation
+func (m *ProjectManagementModule) storePendingConfirmation(userID, confirmationType string, data interface{}, employeeID string) {
+	m.confirmationMutex.Lock()
+	defer m.confirmationMutex.Unlock()
+
+	// Convert data to map for consistent storage
+	dataMap := make(map[string]interface{})
+	dataBytes, _ := json.Marshal(data)
+	json.Unmarshal(dataBytes, &dataMap)
+
+	m.confirmationState.pendingConfirmations[userID] = &PendingConfirmation{
+		UserID:     userID,
+		Type:       confirmationType,
+		Data:       dataMap,
+		CreatedAt:  time.Now().UnixMilli(),
+		EmployeeID: employeeID,
+	}
+}
+
+// generateConfirmationMessage generates confirmation message using LLM
+func (m *ProjectManagementModule) generateConfirmationMessage(ctx *erp_modules.ModuleContext, confirmationType string, data interface{}) (string, error) {
+	// Create LLM context
+	llmContext := &llm.Context{
+		RequestingUser: ctx.User,
+		Time:           time.Now().Format(time.RFC1123),
+	}
+
+	// Convert data to map for template access
+	dataMap := make(map[string]interface{})
+	dataBytes, _ := json.Marshal(data)
+	json.Unmarshal(dataBytes, &dataMap)
+
+	llmContext.Parameters = map[string]interface{}{
+		"Type": confirmationType,
+		"Data": dataMap,
+	}
+
+	// Use appropriate template based on type
+	templateName := "project_confirmation_generation"
+	if confirmationType == "task" {
+		templateName = "task_confirmation_generation"
+	}
+
+	// Format the confirmation prompt
+	systemPrompt, err := m.prompts.Format(templateName, llmContext)
+	if err != nil {
+		return "", fmt.Errorf("failed to format confirmation prompt: %w", err)
+	}
+
+	// Create completion request
+	completionRequest := llm.CompletionRequest{
+		Posts: []llm.Post{
+			{
+				Role:    llm.PostRoleSystem,
+				Message: systemPrompt,
+			},
+			{
+				Role:    llm.PostRoleUser,
+				Message: fmt.Sprintf("Generate confirmation message for %s creation", confirmationType),
+			},
+		},
+		Context: llmContext,
+	}
+
+	// Get LLM response
+	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(300))
+	if err != nil {
+		return "", fmt.Errorf("failed to generate confirmation with LLM: %w", err)
+	}
+
+	return strings.TrimSpace(response), nil
+}
+
+// parseUserResponse parses user response using LLM
+func (m *ProjectManagementModule) parseUserResponse(ctx *erp_modules.ModuleContext, message string, pending *PendingConfirmation) (*UserResponse, error) {
+	// Create LLM context
+	llmContext := &llm.Context{
+		RequestingUser: ctx.User,
+		Time:           time.Now().Format(time.RFC1123),
+	}
+
+	llmContext.Parameters = map[string]interface{}{
+		"UserMessage":    message,
+		"PendingType":    pending.Type,
+		"PendingData":    pending.Data,
+		"OriginalSchema": m.getOriginalSchema(pending.Type),
+	}
+
+	// Use appropriate template based on type
+	templateName := "project_modification_analysis"
+	if pending.Type == "task" {
+		templateName = "task_modification_analysis"
+	}
+
+	// Format the analysis prompt
+	systemPrompt, err := m.prompts.Format(templateName, llmContext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to format modification analysis prompt: %w", err)
+	}
+
+	// Create completion request
+	completionRequest := llm.CompletionRequest{
+		Posts: []llm.Post{
+			{
+				Role:    llm.PostRoleSystem,
+				Message: systemPrompt,
+			},
+			{
+				Role:    llm.PostRoleUser,
+				Message: message,
+			},
+		},
+		Context: llmContext,
+	}
+
+	// Get LLM response
+	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(300))
+	if err != nil {
+		return nil, fmt.Errorf("failed to analyze user response with LLM: %w", err)
+	}
+
+	// Parse JSON response
+	var userResponse UserResponse
+	response = strings.TrimSpace(response)
+	start := strings.Index(response, "{")
+	end := strings.LastIndex(response, "}") + 1
+
+	if start == -1 || end <= start {
+		return nil, fmt.Errorf("no valid JSON found in LLM response: %s", response)
+	}
+
+	jsonStr := response[start:end]
+	if err := json.Unmarshal([]byte(jsonStr), &userResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse LLM response as JSON: %w", err)
+	}
+
+	return &userResponse, nil
+}
+
+// handleConfirmAction handles user confirmation
+func (m *ProjectManagementModule) handleConfirmAction(ctx *erp_modules.ModuleContext, pending *PendingConfirmation) (*erp_modules.ModuleResponse, error) {
+	// Clear pending confirmation
+	m.clearPendingConfirmation(ctx.User.Id)
+
+	// Create the project/task in ERP
+	if pending.Type == "project" {
+		var projectRequest ProjectCreationRequest
+		dataBytes, _ := json.Marshal(pending.Data)
+		json.Unmarshal(dataBytes, &projectRequest)
+
+		projectName, err := m.erpClient.CreateProject(projectRequest, pending.EmployeeID)
+		if err != nil {
+			return &erp_modules.ModuleResponse{
+				Success: false,
+				Message: "⚠️ Có lỗi xảy ra khi tạo dự án trong hệ thống. Vui lòng thử lại.",
+				Error:   err.Error(),
+			}, nil
+		}
+
+		return &erp_modules.ModuleResponse{
+			Success:     true,
+			Message:     fmt.Sprintf("✅ Đã tạo dự án mới thành công: **%s**!", projectName),
+			ActionTaken: "create_project",
+			Data: map[string]interface{}{
+				"project_name": projectName,
+				"description":  projectRequest.Description,
+				"priority":     projectRequest.Priority,
+			},
+		}, nil
+
+	} else if pending.Type == "task" {
+		var taskRequest TaskCreationRequest
+		dataBytes, _ := json.Marshal(pending.Data)
+		json.Unmarshal(dataBytes, &taskRequest)
+
+		taskName, err := m.erpClient.CreateTask(taskRequest, pending.EmployeeID)
+		if err != nil {
+			return &erp_modules.ModuleResponse{
+				Success: false,
+				Message: "⚠️ Có lỗi xảy ra khi tạo task trong hệ thống. Vui lòng thử lại.",
+				Error:   err.Error(),
+			}, nil
+		}
+
+		return &erp_modules.ModuleResponse{
+			Success:     true,
+			Message:     fmt.Sprintf("✅ Đã tạo task mới thành công: **%s**!", taskName),
+			ActionTaken: "create_task",
+			Data: map[string]interface{}{
+				"task_name":   taskName,
+				"description": taskRequest.Description,
+				"assigned_to": taskRequest.AssignedTo,
+				"priority":    taskRequest.Priority,
+				"project":     taskRequest.Project,
+			},
+		}, nil
+	}
+
+	return &erp_modules.ModuleResponse{
+		Success: false,
+		Message: "⚠️ Loại xác nhận không hợp lệ.",
+	}, nil
+}
+
+// handleModifyAction handles user modification requests
+func (m *ProjectManagementModule) handleModifyAction(ctx *erp_modules.ModuleContext, pending *PendingConfirmation, modifications map[string]interface{}) (*erp_modules.ModuleResponse, error) {
+	// Update the pending data with modifications while preserving schema
+	for key, value := range modifications {
+		pending.Data[key] = value
+	}
+
+	// Update the stored confirmation
+	m.confirmationMutex.Lock()
+	m.confirmationState.pendingConfirmations[ctx.User.Id] = pending
+	m.confirmationMutex.Unlock()
+
+	// Generate new confirmation message with updated data
+	confirmationMsg, err := m.generateConfirmationMessage(ctx, pending.Type, pending.Data)
+	if err != nil {
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: "⚠️ Có lỗi xảy ra khi tạo tin nhắn xác nhận cập nhật.",
+			Error:   err.Error(),
+		}, nil
+	}
+
+	return &erp_modules.ModuleResponse{
+		Success:     true,
+		Message:     confirmationMsg,
+		ActionTaken: "update_confirmation",
+		Data: map[string]interface{}{
+			"awaiting_confirmation": true,
+			"type":                  pending.Type,
+			"updated":               true,
+		},
+	}, nil
+}
+
+// handleCancelAction handles user cancellation
+func (m *ProjectManagementModule) handleCancelAction(userID string) (*erp_modules.ModuleResponse, error) {
+	m.clearPendingConfirmation(userID)
+
+	return &erp_modules.ModuleResponse{
+		Success:     true,
+		Message:     "❌ Đã hủy bỏ yêu cầu tạo dự án/task.",
+		ActionTaken: "cancel_confirmation",
+	}, nil
+}
+
+// clearPendingConfirmation clears pending confirmation for a user
+func (m *ProjectManagementModule) clearPendingConfirmation(userID string) {
+	m.confirmationMutex.Lock()
+	defer m.confirmationMutex.Unlock()
+	delete(m.confirmationState.pendingConfirmations, userID)
+}
+
+// getOriginalSchema returns the original schema for the given type
+func (m *ProjectManagementModule) getOriginalSchema(confirmationType string) map[string]interface{} {
+	if confirmationType == "project" {
+		return map[string]interface{}{
+			"project_name":        "",
+			"description":         "",
+			"priority":            "",
+			"project_type":        "",
+			"expected_start_date": "",
+			"expected_end_date":   "",
+			"department":          "",
+			"customer":            "",
+		}
+	} else if confirmationType == "task" {
+		return map[string]interface{}{
+			"subject":        "",
+			"description":    "",
+			"priority":       "",
+			"project":        "",
+			"assigned_to":    "",
+			"exp_start_date": "",
+			"exp_end_date":   "",
+			"department":     "",
+		}
+	}
+	return make(map[string]interface{})
+}
+
+// analyzeProjectCreation uses LLM to extract project details with complete schema
 func (m *ProjectManagementModule) analyzeProjectCreation(ctx *erp_modules.ModuleContext, userMessage string) (*ProjectCreationRequest, error) {
 	// Create LLM context
 	llmContext := &llm.Context{
@@ -248,7 +576,7 @@ func (m *ProjectManagementModule) analyzeProjectCreation(ctx *erp_modules.Module
 		Context: llmContext,
 	}
 
-	// Get LLM response with lower token limit to encourage concise responses
+	// Get LLM response
 	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(200))
 	if err != nil {
 		return nil, fmt.Errorf("failed to analyze project creation with LLM: %w", err)
@@ -274,7 +602,7 @@ func (m *ProjectManagementModule) analyzeProjectCreation(ctx *erp_modules.Module
 	return &projectRequest, nil
 }
 
-// analyzeTaskCreation uses LLM to extract task details from user message
+// analyzeTaskCreation uses LLM to extract task details with complete schema
 func (m *ProjectManagementModule) analyzeTaskCreation(ctx *erp_modules.ModuleContext, userMessage string) (*TaskCreationRequest, error) {
 	// Create LLM context
 	llmContext := &llm.Context{
@@ -306,7 +634,7 @@ func (m *ProjectManagementModule) analyzeTaskCreation(ctx *erp_modules.ModuleCon
 		Context: llmContext,
 	}
 
-	// Get LLM response with lower token limit
+	// Get LLM response
 	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(200))
 	if err != nil {
 		return nil, fmt.Errorf("failed to analyze task creation with LLM: %w", err)

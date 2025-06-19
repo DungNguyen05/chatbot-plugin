@@ -94,3 +94,24 @@ type TaskCreationRequest struct {
 	ExpEndDate   string `json:"exp_end_date,omitempty"`
 	Department   string `json:"department,omitempty"`
 }
+
+// PendingConfirmation represents a pending confirmation for project/task creation
+type PendingConfirmation struct {
+	UserID     string                 `json:"user_id"`
+	Type       string                 `json:"type"` // "project" or "task"
+	Data       map[string]interface{} `json:"data"` // Complete schema data
+	CreatedAt  int64                  `json:"created_at"`
+	EmployeeID string                 `json:"employee_id"`
+}
+
+// UserResponse represents parsed user response to confirmation
+type UserResponse struct {
+	Intent        string                 `json:"intent"`        // "confirm", "modify", "cancel"
+	Modifications map[string]interface{} `json:"modifications"` // Fields to modify
+	Reasoning     string                 `json:"reasoning"`     // LLM reasoning
+}
+
+// ConfirmationState manages confirmation states for users
+type ConfirmationState struct {
+	pendingConfirmations map[string]*PendingConfirmation
+}

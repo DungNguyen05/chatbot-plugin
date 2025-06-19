@@ -13,15 +13,6 @@ import (
 	"github.com/mattermost/mattermost/server/public/model"
 )
 
-// ConfirmationRequest represents a request awaiting user confirmation
-type ConfirmationRequest struct {
-	OriginalIntent  *Intent                `json:"original_intent"`
-	ConfirmationMsg string                 `json:"confirmation_msg"`
-	UserID          string                 `json:"user_id"`
-	CreatedAt       int64                  `json:"created_at"`
-	Context         map[string]interface{} `json:"context"`
-}
-
 // ModuleClassificationResult represents the result of module classification
 type ModuleClassificationResult struct {
 	Category   string  `json:"category"`
@@ -39,21 +30,17 @@ type ActionClassificationResult struct {
 
 // LLMIntentAnalyzer uses LLM to analyze user intents with dynamic 2-step classification
 type LLMIntentAnalyzer struct {
-	llmProvider             func() llm.LanguageModel
-	prompts                 *llm.Prompts
-	registry                ModuleRegistry
-	pendingConfirmations    map[string]*ConfirmationRequest
-	confirmationPromptCache map[string]string
+	llmProvider func() llm.LanguageModel
+	prompts     *llm.Prompts
+	registry    ModuleRegistry
 }
 
 // NewLLMIntentAnalyzer creates a new LLM-based intent analyzer
 func NewLLMIntentAnalyzer(llmProvider func() llm.LanguageModel, prompts *llm.Prompts, registry ModuleRegistry) *LLMIntentAnalyzer {
 	return &LLMIntentAnalyzer{
-		llmProvider:             llmProvider,
-		prompts:                 prompts,
-		registry:                registry,
-		pendingConfirmations:    make(map[string]*ConfirmationRequest),
-		confirmationPromptCache: make(map[string]string),
+		llmProvider: llmProvider,
+		prompts:     prompts,
+		registry:    registry,
 	}
 }
 
@@ -62,12 +49,6 @@ func (a *LLMIntentAnalyzer) AnalyzeIntent(ctx context.Context, message string, u
 	fmt.Printf("=== ANALYZING INTENT ===\n")
 	fmt.Printf("User: %s\n", user.Username)
 	fmt.Printf("Message: %s\n", message)
-
-	// Check if user has a pending confirmation
-	if pending, exists := a.pendingConfirmations[user.Id]; exists {
-		fmt.Printf("User has pending confirmation, handling confirmation response\n")
-		return a.handleConfirmationResponse(ctx, message, user, pending)
-	}
 
 	// STEP 1: Classify module first
 	fmt.Printf("STEP 1: Classifying module...\n")
@@ -395,183 +376,4 @@ func min(a, b float64) float64 {
 		return a
 	}
 	return b
-}
-
-// handleConfirmationResponse handles user confirmation responses (unchanged from original)
-func (a *LLMIntentAnalyzer) handleConfirmationResponse(ctx context.Context, message string, user *model.User, pending *ConfirmationRequest) (*Intent, error) {
-	// Use LLM to analyze confirmation response
-	confirmationContext := llm.NewContext()
-	confirmationContext.RequestingUser = user
-
-	// Use the stored context which has the properly formatted intent
-	confirmationContext.Parameters = map[string]interface{}{
-		"UserMessage":     message,
-		"OriginalIntent":  pending.Context["OriginalIntent"], // Use the map version
-		"ConfirmationMsg": pending.Context["ConfirmationMsg"],
-	}
-
-	systemPrompt, err := a.prompts.Format("confirmation_analysis", confirmationContext)
-	if err != nil {
-		return nil, fmt.Errorf("failed to format confirmation analysis prompt: %w", err)
-	}
-
-	completionRequest := llm.CompletionRequest{
-		Posts: []llm.Post{
-			{
-				Role:    llm.PostRoleSystem,
-				Message: systemPrompt,
-			},
-			{
-				Role:    llm.PostRoleUser,
-				Message: message,
-			},
-		},
-		Context: confirmationContext,
-	}
-
-	response, err := a.llmProvider().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(150))
-	if err != nil {
-		return nil, fmt.Errorf("failed to analyze confirmation with LLM: %w", err)
-	}
-
-	// Parse confirmation response
-	var confirmResult struct {
-		Confirmed bool   `json:"confirmed"`
-		Reasoning string `json:"reasoning"`
-	}
-
-	// Clean and parse JSON response
-	response = strings.TrimSpace(response)
-	start := strings.Index(response, "{")
-	end := strings.LastIndex(response, "}") + 1
-
-	if start == -1 || end <= start {
-		// If can't parse, assume denial for safety
-		delete(a.pendingConfirmations, user.Id)
-		return &Intent{
-			Category:   "general",
-			Action:     "fallback",
-			Confidence: 0.1,
-			RawMessage: message,
-			Parameters: make(map[string]string),
-		}, nil
-	}
-
-	jsonStr := response[start:end]
-	if err := json.Unmarshal([]byte(jsonStr), &confirmResult); err != nil {
-		// If can't parse, assume denial for safety
-		delete(a.pendingConfirmations, user.Id)
-		return &Intent{
-			Category:   "general",
-			Action:     "fallback",
-			Confidence: 0.1,
-			RawMessage: message,
-			Parameters: make(map[string]string),
-		}, nil
-	}
-
-	// Clear pending confirmation
-	delete(a.pendingConfirmations, user.Id)
-
-	if confirmResult.Confirmed {
-		// User confirmed, return the original intent with high confidence
-		pending.OriginalIntent.Confidence = 0.98 // High confidence after confirmation
-		return pending.OriginalIntent, nil
-	} else {
-		// User denied, return fallback intent
-		return &Intent{
-			Category:   "general",
-			Action:     "fallback",
-			Confidence: 0.1,
-			RawMessage: message,
-			Parameters: make(map[string]string),
-		}, nil
-	}
-}
-
-// RequestConfirmation generates confirmation messages (unchanged from original)
-func (a *LLMIntentAnalyzer) RequestConfirmation(ctx context.Context, intent *Intent, user *model.User) (string, error) {
-	// Generate confirmation message using LLM
-	confirmationContext := llm.NewContext()
-	confirmationContext.RequestingUser = user
-
-	// Store the intent properly as a map for template access
-	intentMap := map[string]interface{}{
-		"Category":   intent.Category,
-		"Action":     intent.Action,
-		"Parameters": intent.Parameters,
-		"Confidence": intent.Confidence,
-		"RawMessage": intent.RawMessage,
-	}
-
-	confirmationContext.Parameters = map[string]interface{}{
-		"Intent":      intentMap, // Store as map for template
-		"Category":    intent.Category,
-		"Action":      intent.Action,
-		"Parameters":  intent.Parameters,
-		"UserMessage": intent.RawMessage,
-	}
-
-	// Get module info for better confirmation message
-	if module, exists := a.registry.GetModule(intent.Category); exists {
-		confirmationContext.Parameters["ModuleDescription"] = module.GetDescription()
-
-		if actionExamples := module.GetActionExamples(); actionExamples != nil {
-			if examples, ok := actionExamples[intent.Action]; ok {
-				confirmationContext.Parameters["ActionExamples"] = examples
-			}
-		}
-	}
-
-	systemPrompt, err := a.prompts.Format("confirmation_generation", confirmationContext)
-	if err != nil {
-		return "", fmt.Errorf("failed to format confirmation generation prompt: %w", err)
-	}
-
-	completionRequest := llm.CompletionRequest{
-		Posts: []llm.Post{
-			{
-				Role:    llm.PostRoleSystem,
-				Message: systemPrompt,
-			},
-			{
-				Role:    llm.PostRoleUser,
-				Message: intent.RawMessage,
-			},
-		},
-		Context: confirmationContext,
-	}
-
-	confirmationMsg, err := a.llmProvider().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(200))
-	if err != nil {
-		return "", fmt.Errorf("failed to generate confirmation message: %w", err)
-	}
-
-	confirmationMsg = strings.TrimSpace(confirmationMsg)
-
-	// Store pending confirmation with the intent as a map
-	a.pendingConfirmations[user.Id] = &ConfirmationRequest{
-		OriginalIntent:  intent, // Keep original intent object
-		ConfirmationMsg: confirmationMsg,
-		UserID:          user.Id,
-		CreatedAt:       model.GetMillis(),
-		Context: map[string]interface{}{
-			"OriginalIntent":  intentMap, // Store as map for template access
-			"UserMessage":     intent.RawMessage,
-			"ConfirmationMsg": confirmationMsg,
-		},
-	}
-
-	return confirmationMsg, nil
-}
-
-// ClearPendingConfirmation removes any pending confirmation for a user
-func (a *LLMIntentAnalyzer) ClearPendingConfirmation(userID string) {
-	delete(a.pendingConfirmations, userID)
-}
-
-// HasPendingConfirmation checks if a user has a pending confirmation
-func (a *LLMIntentAnalyzer) HasPendingConfirmation(userID string) bool {
-	_, exists := a.pendingConfirmations[userID]
-	return exists
 }
