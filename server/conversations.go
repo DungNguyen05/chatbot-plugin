@@ -28,13 +28,32 @@ func (p *Plugin) processUserRequestToBot(bot *Bot, postingUser *model.User, chan
 		if err != nil {
 			p.API.LogError("Error processing ERP request", "error", err.Error())
 			// Continue with normal processing if ERP fails
-		} else if erpResponse != nil && erpResponse.Success {
-			// ERP request was processed successfully, return a stream with the response
-			return llm.NewStreamFromString(erpResponse.Message), nil
+		} else if erpResponse != nil {
+			// ✅ FIXED: Return ANY ERP response that exists
+			// This includes:
+			// - Successful operations (Success = true)
+			// - Failed operations with error messages (Success = false)
+			// - Confirmation requests (Success = true, awaiting_confirmation = true)
+
+			// But we need to distinguish between:
+			// 1. "This was an ERP request that failed" -> return error message
+			// 2. "This was not an ERP request at all" -> continue to general knowledge
+
+			// Check if this was determined to be a general knowledge request
+			if actionTaken, ok := erpResponse.Data["type"]; ok && actionTaken == "general_knowledge" {
+				// This was processed as general knowledge by ERP system,
+				// but let's use the main LLM instead for better responses
+				// Fall through to general LLM processing
+			} else {
+				// This was a genuine ERP request (successful, failed, or confirmation)
+				return llm.NewStreamFromString(erpResponse.Message), nil
+			}
 		}
+		// If erpResponse is nil, it means no ERP module could handle this request
+		// Fall through to general knowledge processing
 	}
 
-	// Continue with normal LLM processing if not an ERP request
+	// Continue with normal LLM processing for general knowledge
 	var posts []llm.Post
 	if post.RootId == "" {
 		// A new conversation

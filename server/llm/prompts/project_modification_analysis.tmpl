@@ -42,6 +42,7 @@ Extract the specific modifications requested. CRITICAL: Always maintain the comp
 - Never remove fields from the schema
 
 **DATE FORMATTING RULES FOR MODIFICATIONS:**
+- Current date context: {{.Time}}
 - ALWAYS convert dates to YYYY-MM-DD format
 - Examples: "29/12/2026" → "2026-12-29", "12/25/2025" → "2025-12-25"
 - If user says relative dates like "next week", calculate from current date
