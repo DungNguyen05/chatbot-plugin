@@ -120,7 +120,7 @@ func (p *Plugin) createExternalHTTPClient() *http.Client {
 
 	// Start with user-configured hostnames
 	allowedHosts := parseAllowedHostnames(config.AllowedUpstreamHostnames)
-	
+
 	// Always add OpenAI API domain
 	allowedHosts = append(allowedHosts, "api.openai.com")
 

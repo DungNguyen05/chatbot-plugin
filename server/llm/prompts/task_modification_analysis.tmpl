@@ -14,12 +14,26 @@ Original task schema (ALWAYS maintain these fields):
 
 User response: "{{.Parameters.UserMessage}}"
 
-Analyze the user's response and determine their intent:
+**CRITICAL ANALYSIS RULES:**
+1. **CONFIRM Intent**: User explicitly agrees to proceed with creation as-is
+   - Clear agreement: "yes", "có", "đúng", "okay", "được", "create it", "làm đi"
+   - Must NOT contain any new information or corrections
+   
+2. **MODIFY Intent**: User provides additional information, corrections, or changes
+   - Adding missing information: "phân công cho Nam", "priority cao", "thuộc project ABC"
+   - Correcting existing data: "sửa tên thành...", "change description to...", "actually assign to..."
+   - Clarifying details: "this is urgent", "assign to development team", "deadline tomorrow"
+   - ANY statement that adds or changes task information = MODIFY
+   
+3. **CANCEL Intent**: User wants to stop the process
+   - Clear rejection: "no", "không", "cancel", "hủy", "stop", "forget it"
 
-**Intent Categories:**
-- "confirm" - User wants to proceed with creation (yes, có, đúng, create it, làm đi, etc.)
-- "modify" - User wants to change some information (add, change, update, thêm, sửa, etc.)
-- "cancel" - User wants to cancel (no, không, cancel, hủy, stop, etc.)
+**SEMANTIC ANALYSIS APPROACH:**
+- Focus on MEANING and CONTEXT, not just keywords
+- If user provides ANY new information about the task → MODIFY
+- If user clarifies or adds details → MODIFY  
+- If user makes corrections → MODIFY
+- Only pure agreement without new info → CONFIRM
 
 **For MODIFY intent:**
 Extract the specific modifications requested. CRITICAL: Always maintain the complete schema structure. If user wants to:

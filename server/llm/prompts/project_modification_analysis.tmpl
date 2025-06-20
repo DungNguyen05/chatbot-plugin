@@ -14,12 +14,26 @@ Original project schema (ALWAYS maintain these fields):
 
 User response: "{{.Parameters.UserMessage}}"
 
-Analyze the user's response and determine their intent:
+**CRITICAL ANALYSIS RULES:**
+1. **CONFIRM Intent**: User explicitly agrees to proceed with creation as-is
+   - Clear agreement: "yes", "có", "đúng", "okay", "được", "create it", "làm đi"
+   - Must NOT contain any new information or corrections
+   
+2. **MODIFY Intent**: User provides additional information, corrections, or changes
+   - Adding missing information: "đây là dự án ngoại bộ", "priority is high", "assign to John"
+   - Correcting existing data: "sửa tên thành...", "change description to...", "actually it's..."
+   - Clarifying details: "this is external project", "it belongs to marketing department"
+   - ANY statement that adds or changes project information = MODIFY
+   
+3. **CANCEL Intent**: User wants to stop the process
+   - Clear rejection: "no", "không", "cancel", "hủy", "stop", "forget it"
 
-**Intent Categories:**
-- "confirm" - User wants to proceed with creation (yes, có, đúng, create it, làm đi, etc.)
-- "modify" - User wants to change some information (add, change, update, thêm, sửa, etc.)
-- "cancel" - User wants to cancel (no, không, cancel, hủy, stop, etc.)
+**SEMANTIC ANALYSIS APPROACH:**
+- Focus on MEANING and CONTEXT, not just keywords
+- If user provides ANY new information about the project → MODIFY
+- If user clarifies or adds details → MODIFY  
+- If user makes corrections → MODIFY
+- Only pure agreement without new info → CONFIRM
 
 **For MODIFY intent:**
 Extract the specific modifications requested. CRITICAL: Always maintain the complete schema structure. If user wants to:

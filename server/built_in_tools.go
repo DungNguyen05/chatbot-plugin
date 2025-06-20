@@ -425,13 +425,17 @@ func (p *Plugin) getBuiltInTools(isDM bool, bot *Bot) []llm.Tool {
 		})
 	}
 
-	// Jira plugin tools
-	builtInTools = append(builtInTools, llm.Tool{
-		Name:        "GetJiraIssue",
-		Description: "Retrieve a single Jira issue by issue key.",
-		Schema:      GetJiraIssueArgs{},
-		Resolver:    p.toolGetJiraIssue,
-	})
+	// DISABLED: Jira plugin tools - commented out to prevent LLM from using Jira search
+	// This prevents the bot from automatically falling back to Jira search when other requests fail
+	/*
+		// Jira plugin tools
+		builtInTools = append(builtInTools, llm.Tool{
+			Name:        "GetJiraIssue",
+			Description: "Retrieve a single Jira issue by issue key.",
+			Schema:      GetJiraIssueArgs{},
+			Resolver:    p.toolGetJiraIssue,
+		})
+	*/
 
 	return builtInTools
 }

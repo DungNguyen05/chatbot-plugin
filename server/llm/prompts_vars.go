@@ -9,8 +9,6 @@ const (
 	PromptAttendanceConfirmationGeneration = "attendance_confirmation_generation"
 	PromptAttendanceQueryAnalysis          = "attendance_query_analysis"
 	PromptAttendanceQueryResponse          = "attendance_query_response"
-	PromptConfirmationAnalysis             = "confirmation_analysis"
-	PromptConfirmationGeneration           = "confirmation_generation"
 	PromptDirectMessageQuestionSystem      = "direct_message_question_system"
 	PromptEmojiSelectSystem                = "emoji_select_system"
 	PromptErpActionClassification          = "erp_action_classification"
