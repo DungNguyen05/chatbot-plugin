@@ -27,6 +27,11 @@ type ProjectManagementModule struct {
 	confirmationMutex sync.RWMutex
 }
 
+// detectUserLanguage determines if user prefers Vietnamese or English
+func detectUserLanguage(user *model.User) bool {
+	return strings.HasPrefix(user.Locale, "vi")
+}
+
 // NewProjectManagementModule creates a new project management module
 func NewProjectManagementModule(
 	config ProjectManagementConfig,
@@ -90,9 +95,14 @@ func (m *ProjectManagementModule) ProcessUserMessage(ctx *erp_modules.ModuleCont
 	userResponse, err := m.parseUserResponse(ctx, message, pending)
 	if err != nil {
 		m.api.LogError("Failed to parse user response", "error", err.Error())
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Không thể hiểu phản hồi của bạn. Vui lòng thử lại."
+		if !isVietnamese {
+			errorMsg = "⚠️ Cannot understand your response. Please try again."
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "⚠️ Không thể hiểu phản hồi của bạn. Vui lòng thử lại.",
+			Message: errorMsg,
 			Error:   err.Error(),
 		}, nil
 	}
@@ -105,21 +115,32 @@ func (m *ProjectManagementModule) ProcessUserMessage(ctx *erp_modules.ModuleCont
 	case "cancel":
 		return m.handleCancelAction(ctx.User.Id)
 	default:
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Vui lòng xác nhận (có/yes), chỉnh sửa thông tin, hoặc hủy bỏ (không/cancel)."
+		if !isVietnamese {
+			errorMsg = "⚠️ Please confirm (yes), modify information, or cancel (no/cancel)."
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "⚠️ Vui lòng xác nhận (có/yes), chỉnh sửa thông tin, hoặc hủy bỏ (không/cancel).",
+			Message: errorMsg,
 		}, nil
 	}
 }
 
 // Execute processes the project management intent
 func (m *ProjectManagementModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
+	isVietnamese := detectUserLanguage(ctx.User)
+
 	// Get employee ID
 	employeeID, err := m.GetEmployeeIDFromUser(ctx.User)
 	if err != nil {
+		errorMsg := "❌ Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
+		if !isVietnamese {
+			errorMsg = "❌ Cannot find your employee information in the ERP system. Please contact administrator."
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "❌ Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên.",
+			Message: errorMsg,
 			Error:   err.Error(),
 		}, nil
 	}
@@ -131,9 +152,13 @@ func (m *ProjectManagementModule) Execute(ctx *erp_modules.ModuleContext, intent
 	case "create_task":
 		return m.handleCreateTaskRequest(employeeID, ctx, intent)
 	default:
+		errorMsg := "Hành động không được hỗ trợ"
+		if !isVietnamese {
+			errorMsg = "Action not supported"
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "Hành động không được hỗ trợ",
+			Message: errorMsg,
 			Error:   fmt.Sprintf("unsupported action: %s", intent.Action),
 		}, nil
 	}
@@ -174,21 +199,31 @@ func (m *ProjectManagementModule) GetActionExamples() map[string][]string {
 
 // handleCreateProjectRequest processes project creation request with confirmation
 func (m *ProjectManagementModule) handleCreateProjectRequest(employeeID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
+	isVietnamese := detectUserLanguage(ctx.User)
+
 	// Extract project details using LLM with complete schema
 	projectRequest, err := m.analyzeProjectCreation(ctx, intent.RawMessage)
 	if err != nil {
+		errorMsg := "⚠️ Không thể hiểu được yêu cầu tạo dự án. Vui lòng thử lại với thông tin rõ ràng hơn."
+		if !isVietnamese {
+			errorMsg = "⚠️ Cannot understand the project creation request. Please try again with clearer information."
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "⚠️ Không thể hiểu được yêu cầu tạo dự án. Vui lòng thử lại với thông tin rõ ràng hơn.",
+			Message: errorMsg,
 			Error:   err.Error(),
 		}, nil
 	}
 
 	// Validate required fields
 	if projectRequest.ProjectName == "" {
+		errorMsg := "📝 Vui lòng cung cấp tên dự án. Ví dụ: 'Tạo dự án phát triển website bán hàng'"
+		if !isVietnamese {
+			errorMsg = "📝 Please provide project name. Example: 'Create e-commerce website development project'"
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "📝 Vui lòng cung cấp tên dự án. Ví dụ: 'Tạo dự án phát triển website bán hàng'",
+			Message: errorMsg,
 		}, nil
 	}
 
@@ -198,9 +233,13 @@ func (m *ProjectManagementModule) handleCreateProjectRequest(employeeID string, 
 	// Generate confirmation message
 	confirmationMsg, err := m.generateConfirmationMessage(ctx, "project", projectRequest)
 	if err != nil {
+		errorMsg := "⚠️ Có lỗi xảy ra khi tạo tin nhắn xác nhận."
+		if !isVietnamese {
+			errorMsg = "⚠️ An error occurred while creating confirmation message."
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "⚠️ Có lỗi xảy ra khi tạo tin nhắn xác nhận.",
+			Message: errorMsg,
 			Error:   err.Error(),
 		}, nil
 	}
@@ -218,21 +257,31 @@ func (m *ProjectManagementModule) handleCreateProjectRequest(employeeID string, 
 
 // handleCreateTaskRequest processes task creation request with confirmation
 func (m *ProjectManagementModule) handleCreateTaskRequest(employeeID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
+	isVietnamese := detectUserLanguage(ctx.User)
+
 	// Extract task details using LLM with complete schema
 	taskRequest, err := m.analyzeTaskCreation(ctx, intent.RawMessage)
 	if err != nil {
+		errorMsg := "⚠️ Không thể hiểu được yêu cầu tạo task. Vui lòng thử lại với thông tin rõ ràng hơn."
+		if !isVietnamese {
+			errorMsg = "⚠️ Cannot understand the task creation request. Please try again with clearer information."
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "⚠️ Không thể hiểu được yêu cầu tạo task. Vui lòng thử lại với thông tin rõ ràng hơn.",
+			Message: errorMsg,
 			Error:   err.Error(),
 		}, nil
 	}
 
 	// Validate required fields
 	if taskRequest.Subject == "" {
+		errorMsg := "📝 Vui lòng cung cấp tên công việc. Ví dụ: 'Tạo task thiết kế giao diện trang chủ'"
+		if !isVietnamese {
+			errorMsg = "📝 Please provide task name. Example: 'Create homepage design task'"
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "📝 Vui lòng cung cấp tên công việc. Ví dụ: 'Tạo task thiết kế giao diện trang chủ'",
+			Message: errorMsg,
 		}, nil
 	}
 
@@ -242,9 +291,13 @@ func (m *ProjectManagementModule) handleCreateTaskRequest(employeeID string, ctx
 	// Generate confirmation message
 	confirmationMsg, err := m.generateConfirmationMessage(ctx, "task", taskRequest)
 	if err != nil {
+		errorMsg := "⚠️ Có lỗi xảy ra khi tạo tin nhắn xác nhận."
+		if !isVietnamese {
+			errorMsg = "⚠️ An error occurred while creating confirmation message."
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "⚠️ Có lỗi xảy ra khi tạo tin nhắn xác nhận.",
+			Message: errorMsg,
 			Error:   err.Error(),
 		}, nil
 	}
@@ -287,14 +340,18 @@ func (m *ProjectManagementModule) generateConfirmationMessage(ctx *erp_modules.M
 		Time:           time.Now().Format(time.RFC1123),
 	}
 
+	// Detect user language
+	isVietnamese := detectUserLanguage(ctx.User)
+
 	// Convert data to map for template access
 	dataMap := make(map[string]interface{})
 	dataBytes, _ := json.Marshal(data)
 	json.Unmarshal(dataBytes, &dataMap)
 
 	llmContext.Parameters = map[string]interface{}{
-		"Type": confirmationType,
-		"Data": dataMap,
+		"Type":         confirmationType,
+		"Data":         dataMap,
+		"IsVietnamese": isVietnamese,
 	}
 
 	// Use appropriate template based on type
@@ -401,6 +458,8 @@ func (m *ProjectManagementModule) parseUserResponse(ctx *erp_modules.ModuleConte
 
 // handleConfirmAction handles user confirmation
 func (m *ProjectManagementModule) handleConfirmAction(ctx *erp_modules.ModuleContext, pending *PendingConfirmation) (*erp_modules.ModuleResponse, error) {
+	isVietnamese := detectUserLanguage(ctx.User)
+
 	// Clear pending confirmation
 	m.clearPendingConfirmation(ctx.User.Id)
 
@@ -412,16 +471,25 @@ func (m *ProjectManagementModule) handleConfirmAction(ctx *erp_modules.ModuleCon
 
 		projectName, err := m.erpClient.CreateProject(projectRequest, pending.EmployeeID)
 		if err != nil {
+			errorMsg := "⚠️ Có lỗi xảy ra khi tạo dự án trong hệ thống. Vui lòng thử lại."
+			if !isVietnamese {
+				errorMsg = "⚠️ An error occurred while creating project in the system. Please try again."
+			}
 			return &erp_modules.ModuleResponse{
 				Success: false,
-				Message: "⚠️ Có lỗi xảy ra khi tạo dự án trong hệ thống. Vui lòng thử lại.",
+				Message: errorMsg,
 				Error:   err.Error(),
 			}, nil
 		}
 
+		successMsg := fmt.Sprintf("✅ Đã tạo dự án mới thành công: **%s**!", projectName)
+		if !isVietnamese {
+			successMsg = fmt.Sprintf("✅ Successfully created new project: **%s**!", projectName)
+		}
+
 		return &erp_modules.ModuleResponse{
 			Success:     true,
-			Message:     fmt.Sprintf("✅ Đã tạo dự án mới thành công: **%s**!", projectName),
+			Message:     successMsg,
 			ActionTaken: "create_project",
 			Data: map[string]interface{}{
 				"project_name": projectName,
@@ -437,16 +505,25 @@ func (m *ProjectManagementModule) handleConfirmAction(ctx *erp_modules.ModuleCon
 
 		taskName, err := m.erpClient.CreateTask(taskRequest, pending.EmployeeID)
 		if err != nil {
+			errorMsg := "⚠️ Có lỗi xảy ra khi tạo task trong hệ thống. Vui lòng thử lại."
+			if !isVietnamese {
+				errorMsg = "⚠️ An error occurred while creating task in the system. Please try again."
+			}
 			return &erp_modules.ModuleResponse{
 				Success: false,
-				Message: "⚠️ Có lỗi xảy ra khi tạo task trong hệ thống. Vui lòng thử lại.",
+				Message: errorMsg,
 				Error:   err.Error(),
 			}, nil
 		}
 
+		successMsg := fmt.Sprintf("✅ Đã tạo task mới thành công: **%s**!", taskName)
+		if !isVietnamese {
+			successMsg = fmt.Sprintf("✅ Successfully created new task: **%s**!", taskName)
+		}
+
 		return &erp_modules.ModuleResponse{
 			Success:     true,
-			Message:     fmt.Sprintf("✅ Đã tạo task mới thành công: **%s**!", taskName),
+			Message:     successMsg,
 			ActionTaken: "create_task",
 			Data: map[string]interface{}{
 				"task_name":   taskName,
@@ -458,9 +535,13 @@ func (m *ProjectManagementModule) handleConfirmAction(ctx *erp_modules.ModuleCon
 		}, nil
 	}
 
+	errorMsg := "⚠️ Loại xác nhận không hợp lệ."
+	if !isVietnamese {
+		errorMsg = "⚠️ Invalid confirmation type."
+	}
 	return &erp_modules.ModuleResponse{
 		Success: false,
-		Message: "⚠️ Loại xác nhận không hợp lệ.",
+		Message: errorMsg,
 	}, nil
 }
 
@@ -479,9 +560,14 @@ func (m *ProjectManagementModule) handleModifyAction(ctx *erp_modules.ModuleCont
 	// Generate new confirmation message with updated data
 	confirmationMsg, err := m.generateConfirmationMessage(ctx, pending.Type, pending.Data)
 	if err != nil {
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Có lỗi xảy ra khi tạo tin nhắn xác nhận cập nhật."
+		if !isVietnamese {
+			errorMsg = "⚠️ An error occurred while creating updated confirmation message."
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "⚠️ Có lỗi xảy ra khi tạo tin nhắn xác nhận cập nhật.",
+			Message: errorMsg,
 			Error:   err.Error(),
 		}, nil
 	}
@@ -502,6 +588,8 @@ func (m *ProjectManagementModule) handleModifyAction(ctx *erp_modules.ModuleCont
 func (m *ProjectManagementModule) handleCancelAction(userID string) (*erp_modules.ModuleResponse, error) {
 	m.clearPendingConfirmation(userID)
 
+	// Note: We can't get user here to detect language, so we'll use Vietnamese as default
+	// This could be improved by storing user language in the pending confirmation
 	return &erp_modules.ModuleResponse{
 		Success:     true,
 		Message:     "❌ Đã hủy bỏ yêu cầu tạo dự án/task.",

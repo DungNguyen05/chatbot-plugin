@@ -7,19 +7,16 @@ User wants to create a task with the following information:
 {{end}}
 {{end}}
 
+Use Vietnamese: {{.Parameters.IsVietnamese}}
+
 Generate a confirmation message that:
 1. Shows ALL the extracted task information in a clear, organized way
 2. Asks the user to confirm if the information is correct
 3. Mentions they can request modifications before final creation
-4. Uses Vietnamese if the original request was in Vietnamese, else use English
+4. Uses Vietnamese if IsVietnamese is true, otherwise use English
 5. Is professional but friendly
 
-Guidelines:
-- Show information in a structured format (use bullets or numbered list)
-- Only show fields that have values (non-empty)
-- Include instructions for modifications: "Bạn có thể yêu cầu chỉnh sửa thông tin hoặc xác nhận để tạo task"
-- Make it clear this is a confirmation step, not the final creation
-
+{{if .Parameters.IsVietnamese}}
 Example format:
 "📋 **Xác nhận thông tin task:**
 
@@ -30,5 +27,17 @@ Example format:
 [... other fields if provided]
 
 Vui lòng xác nhận thông tin trên có chính xác không? Bạn có thể yêu cầu chỉnh sửa bất kỳ thông tin nào hoặc trả lời **'có'** để tạo task."
+{{else}}
+Example format:
+"📋 **Confirm Task Information:**
+
+• **Task Name:** [subject]
+• **Description:** [description] (if provided)
+• **Priority:** [priority] (if provided)
+• **Assigned To:** [assigned_to] (if provided)
+[... other fields if provided]
+
+Please confirm if the information above is correct. You can request modifications to any information or reply **'yes'** to create the task."
+{{end}}
 
 Generate the confirmation message:

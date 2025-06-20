@@ -5,6 +5,7 @@ package erp_modules
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/mattermost/mattermost-plugin-ai/server/llm"
 )
@@ -60,9 +61,14 @@ func (r *ModuleRouter) executeModule(ctx *ModuleContext, intent *Intent) (*Modul
 	// Route to appropriate module
 	module, err := r.registry.RouteIntent(intent)
 	if err != nil {
+		isVietnamese := strings.HasPrefix(ctx.User.Locale, "vi")
+		errorMsg := "Tôi chưa hỗ trợ yêu cầu này. Vui lòng thử lại với yêu cầu khác."
+		if !isVietnamese {
+			errorMsg = "I don't support this request yet. Please try again with a different request."
+		}
 		return &ModuleResponse{
 			Success: false,
-			Message: "Tôi chưa hỗ trợ yêu cầu này. Vui lòng thử lại với yêu cầu khác.",
+			Message: errorMsg,
 			Error:   err.Error(),
 		}, err
 	}
@@ -81,21 +87,31 @@ func (r *ModuleRouter) executeModule(ctx *ModuleContext, intent *Intent) (*Modul
 
 // handleGeneralQuery uses LLM to provide general knowledge response
 func (r *ModuleRouter) handleGeneralQuery(ctx *ModuleContext, userMessage string) (*ModuleResponse, error) {
+	// Detect user language
+	isVietnamese := strings.HasPrefix(ctx.User.Locale, "vi")
+
 	// Create context for general response
 	llmContext := llm.NewContext()
 	llmContext.RequestingUser = ctx.User
 	llmContext.Channel = ctx.Channel
 	llmContext.Parameters = map[string]interface{}{
-		"UserMessage": userMessage,
+		"UserMessage":  userMessage,
+		"IsVietnamese": isVietnamese,
 	}
 
 	// Format system prompt for general response
 	systemPrompt, err := r.prompts.Format("general_knowledge_response", llmContext)
 	if err != nil {
 		// Fallback prompt if template doesn't exist
-		systemPrompt = `You are a helpful assistant. The user's message doesn't seem to be related to any specific system functions like attendance tracking, task management, or deadline checking. Please provide a helpful, general response to their question or comment in Vietnamese if they wrote in Vietnamese, or in English if they wrote in English.
+		if isVietnamese {
+			systemPrompt = `Bạn là trợ lý hữu ích. Tin nhắn của người dùng có vẻ không liên quan đến các chức năng hệ thống cụ thể như theo dõi chấm công, quản lý tác vụ, hoặc kiểm tra deadline.
 
-Be conversational and helpful, but also mention that if they need help with specific functions like attendance tracking, task management, or deadline checking, they can ask specifically about those topics.`
+Hãy cung cấp phản hồi hữu ích, thân thiện cho câu hỏi hoặc nhận xét của họ bằng tiếng Việt. Nếu phù hợp, nhẹ nhàng đề cập rằng bạn cũng có thể giúp với các chức năng cụ thể như theo dõi chấm công, quản lý tác vụ, hoặc kiểm tra deadline.`
+		} else {
+			systemPrompt = `You are a helpful assistant. The user's message doesn't seem to be related to any specific system functions like attendance tracking, task management, or deadline checking.
+
+Please provide a helpful, general response to their question or comment in English. If appropriate, mention that you can also help with specific functions like attendance tracking, task management, or deadline checking.`
+		}
 	}
 
 	completionRequest := llm.CompletionRequest{
@@ -115,9 +131,13 @@ Be conversational and helpful, but also mention that if they need help with spec
 	// Get LLM response
 	response, err := r.llmProvider().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(300))
 	if err != nil {
+		errorMsg := "Xin lỗi, tôi không thể hiểu yêu cầu của bạn lúc này. Vui lòng thử lại sau."
+		if !isVietnamese {
+			errorMsg = "Sorry, I cannot understand your request at this time. Please try again later."
+		}
 		return &ModuleResponse{
 			Success: false,
-			Message: "Xin lỗi, tôi không thể hiểu yêu cầu của bạn lúc này. Vui lòng thử lại sau.",
+			Message: errorMsg,
 			Error:   err.Error(),
 		}, err
 	}

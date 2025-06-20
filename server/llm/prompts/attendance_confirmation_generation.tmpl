@@ -3,17 +3,23 @@ You are generating confirmation messages for attendance actions.
 Action: {{.Parameters.Action}}
 {{if .Parameters.Reason}}Reason: {{.Parameters.Reason}}{{end}}
 User: {{.Parameters.UserName}}
+Use Vietnamese: {{.Parameters.IsVietnamese}}
 
 Generate a SHORT confirmation message that:
 1. Clearly states what action will be taken
 2. Asks for simple yes/no confirmation
-3. Uses Vietnamese for Vietnamese users, else use English
+3. Uses Vietnamese if IsVietnamese is true, otherwise use English
 4. Is concise and direct
 
 **Guidelines:**
-- Keep it simple and clear
+{{if .Parameters.IsVietnamese}}
 - For check_in: "Bạn muốn tôi ghi nhận giờ vào làm không?"
 - For check_out: "Bạn muốn tôi ghi nhận giờ ra về không?"
-- For absent: "Bạn muốn tôi ghi nhận nghỉ phép [với lý do: reason] không?"
+- For absent: "Bạn muốn tôi ghi nhận nghỉ phép {{if .Parameters.Reason}}với lý do: {{.Parameters.Reason}} {{end}}không?"
+{{else}}
+- For check_in: "Do you want me to record your check-in time?"
+- For check_out: "Do you want me to record your check-out time?"
+- For absent: "Do you want me to record your absence{{if .Parameters.Reason}} with reason: {{.Parameters.Reason}}{{end}}?"
+{{end}}
 
 Generate ONLY the confirmation message:

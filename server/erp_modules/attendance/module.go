@@ -48,6 +48,11 @@ type AttendanceQueryRequest struct {
 	} `json:"time_period"`
 }
 
+// detectUserLanguage determines if user prefers Vietnamese or English
+func detectUserLanguage(user *model.User) bool {
+	return strings.HasPrefix(user.Locale, "vi")
+}
+
 // NewAttendanceModule creates a new attendance module
 func NewAttendanceModule(
 	config AttendanceConfig,
@@ -116,9 +121,14 @@ func (m *AttendanceModule) ProcessUserMessage(ctx *erp_modules.ModuleContext, me
 	confirmed, err := m.parseConfirmationResponse(ctx, message)
 	if err != nil {
 		m.api.LogError("Failed to parse confirmation response", "error", err.Error())
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Không thể hiểu phản hồi của bạn. Vui lòng trả lời 'có' để xác nhận hoặc 'không' để hủy bỏ."
+		if !isVietnamese {
+			errorMsg = "⚠️ Cannot understand your response. Please reply 'yes' to confirm or 'no' to cancel."
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "⚠️ Không thể hiểu phản hồi của bạn. Vui lòng trả lời 'có' để xác nhận hoặc 'không' để hủy bỏ.",
+			Message: errorMsg,
 		}, nil
 	}
 
@@ -128,9 +138,14 @@ func (m *AttendanceModule) ProcessUserMessage(ctx *erp_modules.ModuleContext, me
 	if confirmed {
 		return m.executeConfirmedAction(ctx, pending)
 	} else {
+		isVietnamese := detectUserLanguage(ctx.User)
+		cancelMsg := "❌ Đã hủy bỏ yêu cầu."
+		if !isVietnamese {
+			cancelMsg = "❌ Request cancelled."
+		}
 		return &erp_modules.ModuleResponse{
 			Success:     true,
-			Message:     "❌ Đã hủy bỏ yêu cầu.",
+			Message:     cancelMsg,
 			ActionTaken: "cancel_confirmation",
 		}, nil
 	}
@@ -138,12 +153,18 @@ func (m *AttendanceModule) ProcessUserMessage(ctx *erp_modules.ModuleContext, me
 
 // Execute processes the attendance intent
 func (m *AttendanceModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
+	isVietnamese := detectUserLanguage(ctx.User)
+
 	// Get employee ID
 	employeeID, err := m.getEmployeeIDFromUser(ctx.User)
 	if err != nil {
+		errorMsg := "❌ Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
+		if !isVietnamese {
+			errorMsg = "❌ Cannot find your employee information in the ERP system. Please contact administrator."
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "❌ Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên.",
+			Message: errorMsg,
 			Error:   err.Error(),
 		}, nil
 	}
@@ -157,15 +178,23 @@ func (m *AttendanceModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_m
 	case "absent":
 		reason := intent.Parameters["reason"]
 		if reason == "" {
-			reason = "Không có lý do cụ thể"
+			if isVietnamese {
+				reason = "Không có lý do cụ thể"
+			} else {
+				reason = "No specific reason"
+			}
 		}
 		return m.handleAbsentRequest(employeeID, ctx, intent, reason)
 	case "get_status_count":
 		return m.handleGetStatusCountRequest(employeeID, ctx, intent)
 	default:
+		errorMsg := "Hành động không được hỗ trợ"
+		if !isVietnamese {
+			errorMsg = "Action not supported"
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "Hành động không được hỗ trợ",
+			Message: errorMsg,
 			Error:   fmt.Sprintf("unsupported action: %s", intent.Action),
 		}, nil
 	}
@@ -252,12 +281,18 @@ func (m *AttendanceModule) handleAbsentRequest(employeeID string, ctx *erp_modul
 
 // handleGetStatusCountRequest processes attendance status count queries
 func (m *AttendanceModule) handleGetStatusCountRequest(employeeID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
+	isVietnamese := detectUserLanguage(ctx.User)
+
 	// Use LLM to analyze the user's query and extract structured request
 	queryRequest, err := m.analyzeAttendanceQuery(ctx, intent.RawMessage)
 	if err != nil {
+		errorMsg := "⚠️ Không thể hiểu được yêu cầu của bạn. Vui lòng thử lại với câu hỏi rõ ràng hơn."
+		if !isVietnamese {
+			errorMsg = "⚠️ Cannot understand your request. Please try again with a clearer question."
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "⚠️ Không thể hiểu được yêu cầu của bạn. Vui lòng thử lại với câu hỏi rõ ràng hơn.",
+			Message: errorMsg,
 			Error:   err.Error(),
 		}, nil
 	}
@@ -265,9 +300,13 @@ func (m *AttendanceModule) handleGetStatusCountRequest(employeeID string, ctx *e
 	// Query ERPNext for attendance records
 	count, err := m.erpClient.QueryAttendanceCount(employeeID, queryRequest.Status, queryRequest.TimePeriod.StartDate, queryRequest.TimePeriod.EndDate)
 	if err != nil {
+		errorMsg := "⚠️ Có lỗi xảy ra khi truy vấn dữ liệu chấm công. Vui lòng thử lại."
+		if !isVietnamese {
+			errorMsg = "⚠️ An error occurred while querying attendance data. Please try again."
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "⚠️ Có lỗi xảy ra khi truy vấn dữ liệu chấm công. Vui lòng thử lại.",
+			Message: errorMsg,
 			Error:   err.Error(),
 		}, nil
 	}
@@ -276,7 +315,11 @@ func (m *AttendanceModule) handleGetStatusCountRequest(employeeID string, ctx *e
 	response, err := m.generateQueryResponse(ctx, intent.RawMessage, queryRequest, count)
 	if err != nil {
 		// Fallback to simple response if LLM fails
-		response = fmt.Sprintf("Bạn có %d ngày %s trong %s", count, queryRequest.Status, queryRequest.TimePeriod.Description)
+		if isVietnamese {
+			response = fmt.Sprintf("Bạn có %d ngày %s trong %s", count, queryRequest.Status, queryRequest.TimePeriod.Description)
+		} else {
+			response = fmt.Sprintf("You have %d %s days in %s", count, queryRequest.Status, queryRequest.TimePeriod.Description)
+		}
 	}
 
 	return &erp_modules.ModuleResponse{
@@ -309,9 +352,14 @@ func (m *AttendanceModule) requestConfirmation(ctx *erp_modules.ModuleContext, a
 	// Generate confirmation message
 	confirmationMsg, err := m.generateConfirmationMessage(ctx, action, reason)
 	if err != nil {
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Có lỗi xảy ra khi tạo tin nhắn xác nhận."
+		if !isVietnamese {
+			errorMsg = "⚠️ An error occurred while creating confirmation message."
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "⚠️ Có lỗi xảy ra khi tạo tin nhắn xác nhận.",
+			Message: errorMsg,
 			Error:   err.Error(),
 		}, nil
 	}
@@ -335,10 +383,14 @@ func (m *AttendanceModule) generateConfirmationMessage(ctx *erp_modules.ModuleCo
 		Time:           time.Now().Format(time.RFC1123),
 	}
 
+	// Detect user language
+	isVietnamese := detectUserLanguage(ctx.User)
+
 	llmContext.Parameters = map[string]interface{}{
-		"Action":   action,
-		"Reason":   reason,
-		"UserName": getUserDisplayName(ctx.User),
+		"Action":       action,
+		"Reason":       reason,
+		"UserName":     getUserDisplayName(ctx.User),
+		"IsVietnamese": isVietnamese,
 	}
 
 	// Format the confirmation prompt
@@ -446,9 +498,14 @@ func (m *AttendanceModule) executeConfirmedAction(ctx *erp_modules.ModuleContext
 	case "absent":
 		return m.handleAbsent(pending.EmployeeID, employeeName, ctx.User.Id, pending.Reason)
 	default:
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "Hành động không hợp lệ"
+		if !isVietnamese {
+			errorMsg = "Invalid action"
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "Hành động không hợp lệ",
+			Message: errorMsg,
 		}, nil
 	}
 }
@@ -464,9 +521,15 @@ func (m *AttendanceModule) clearPendingConfirmation(userID string) {
 func (m *AttendanceModule) handleCheckIn(employeeID, employeeName, userID string) (*erp_modules.ModuleResponse, error) {
 	formattedTime, err := m.erpClient.RecordEmployeeCheckin(employeeID)
 	if err != nil {
+		user, _ := m.api.GetUser(userID)
+		isVietnamese := detectUserLanguage(user)
+		errorMsg := "⚠️ Có lỗi xảy ra khi ghi nhận check-in. Vui lòng thử lại."
+		if !isVietnamese {
+			errorMsg = "⚠️ An error occurred while recording check-in. Please try again."
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "⚠️ Có lỗi xảy ra khi ghi nhận check-in. Vui lòng thử lại.",
+			Message: errorMsg,
 			Error:   err.Error(),
 		}, nil
 	}
@@ -476,9 +539,16 @@ func (m *AttendanceModule) handleCheckIn(employeeID, employeeName, userID string
 		_ = m.notificationManager.SendNotification(userID, employeeName, RollCallEventCheckIn, formattedTime, "")
 	}()
 
+	user, _ := m.api.GetUser(userID)
+	isVietnamese := detectUserLanguage(user)
+	successMsg := fmt.Sprintf("✅ Đã ghi nhận check-in của bạn lúc **%s**!", formattedTime)
+	if !isVietnamese {
+		successMsg = fmt.Sprintf("✅ Successfully recorded your check-in at **%s**!", formattedTime)
+	}
+
 	return &erp_modules.ModuleResponse{
 		Success:     true,
-		Message:     fmt.Sprintf("✅ Đã ghi nhận check-in của bạn lúc **%s**!", formattedTime),
+		Message:     successMsg,
 		ActionTaken: "check_in",
 		Data: map[string]interface{}{
 			"time":     formattedTime,
@@ -491,9 +561,15 @@ func (m *AttendanceModule) handleCheckIn(employeeID, employeeName, userID string
 func (m *AttendanceModule) handleCheckOut(employeeID, employeeName, userID string) (*erp_modules.ModuleResponse, error) {
 	formattedTime, err := m.erpClient.RecordEmployeeCheckout(employeeID)
 	if err != nil {
+		user, _ := m.api.GetUser(userID)
+		isVietnamese := detectUserLanguage(user)
+		errorMsg := "⚠️ Có lỗi xảy ra khi ghi nhận check-out. Vui lòng thử lại."
+		if !isVietnamese {
+			errorMsg = "⚠️ An error occurred while recording check-out. Please try again."
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "⚠️ Có lỗi xảy ra khi ghi nhận check-out. Vui lòng thử lại.",
+			Message: errorMsg,
 			Error:   err.Error(),
 		}, nil
 	}
@@ -503,9 +579,16 @@ func (m *AttendanceModule) handleCheckOut(employeeID, employeeName, userID strin
 		_ = m.notificationManager.SendNotification(userID, employeeName, RollCallEventCheckOut, formattedTime, "")
 	}()
 
+	user, _ := m.api.GetUser(userID)
+	isVietnamese := detectUserLanguage(user)
+	successMsg := fmt.Sprintf("✅ Đã ghi nhận check-out của bạn lúc **%s**!", formattedTime)
+	if !isVietnamese {
+		successMsg = fmt.Sprintf("✅ Successfully recorded your check-out at **%s**!", formattedTime)
+	}
+
 	return &erp_modules.ModuleResponse{
 		Success:     true,
-		Message:     fmt.Sprintf("✅ Đã ghi nhận check-out của bạn lúc **%s**!", formattedTime),
+		Message:     successMsg,
 		ActionTaken: "check_out",
 		Data: map[string]interface{}{
 			"time":     formattedTime,
@@ -518,9 +601,15 @@ func (m *AttendanceModule) handleCheckOut(employeeID, employeeName, userID strin
 func (m *AttendanceModule) handleAbsent(employeeID, employeeName, userID, reason string) (*erp_modules.ModuleResponse, error) {
 	recordedDate, err := m.erpClient.RecordEmployeeAbsent(employeeID, reason)
 	if err != nil {
+		user, _ := m.api.GetUser(userID)
+		isVietnamese := detectUserLanguage(user)
+		errorMsg := "⚠️ Có lỗi xảy ra khi ghi nhận nghỉ phép. Vui lòng thử lại."
+		if !isVietnamese {
+			errorMsg = "⚠️ An error occurred while recording absence. Please try again."
+		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
-			Message: "⚠️ Có lỗi xảy ra khi ghi nhận nghỉ phép. Vui lòng thử lại.",
+			Message: errorMsg,
 			Error:   err.Error(),
 		}, nil
 	}
@@ -530,9 +619,16 @@ func (m *AttendanceModule) handleAbsent(employeeID, employeeName, userID, reason
 		_ = m.notificationManager.SendNotification(userID, employeeName, RollCallEventAbsent, recordedDate, reason)
 	}()
 
+	user, _ := m.api.GetUser(userID)
+	isVietnamese := detectUserLanguage(user)
+	successMsg := fmt.Sprintf("📝 Đã ghi nhận nghỉ phép của bạn cho ngày **%s** với lý do: \"%s\"", recordedDate, reason)
+	if !isVietnamese {
+		successMsg = fmt.Sprintf("📝 Successfully recorded your absence for **%s** with reason: \"%s\"", recordedDate, reason)
+	}
+
 	return &erp_modules.ModuleResponse{
 		Success:     true,
-		Message:     fmt.Sprintf("📝 Đã ghi nhận nghỉ phép của bạn cho ngày **%s** với lý do: \"%s\"", recordedDate, reason),
+		Message:     successMsg,
 		ActionTaken: "absent",
 		Data: map[string]interface{}{
 			"date":     recordedDate,
