@@ -15,11 +15,9 @@ import (
 
 // UserMentionAnalysisResult represents the result of analyzing user mentions
 type UserMentionAnalysisResult struct {
-	IsSelfQuery      bool     `json:"is_self_query"`
-	MentionedUsers   []string `json:"mentioned_users"`
-	QueryType        string   `json:"query_type"` // "self", "others", "mixed"
-	RequiresSelfData bool     `json:"requires_self_data"`
-	Reasoning        string   `json:"reasoning"`
+	MentionedUsers []string `json:"mentioned_users"`
+	QueryType      string   `json:"query_type"` // "self", "others"
+	Reasoning      string   `json:"reasoning"`
 }
 
 // UserMentionAnalyzer analyzes user mentions in attendance queries

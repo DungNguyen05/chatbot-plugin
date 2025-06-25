@@ -86,7 +86,7 @@ func (h *AttendanceQueryHandler) HandleMultiUserAttendanceQuery(ctx *erp_modules
 
 	// Determine which users to query
 	var userIDsToQuery []string
-	if mentionAnalysis.IsSelfQuery || len(mentionAnalysis.MentionedUsers) == 0 {
+	if mentionAnalysis.QueryType == "self" || len(mentionAnalysis.MentionedUsers) == 0 {
 		// Query about requesting user
 		userIDsToQuery = []string{ctx.User.Id}
 	} else {

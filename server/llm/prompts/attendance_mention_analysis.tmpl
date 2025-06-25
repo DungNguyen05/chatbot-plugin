@@ -30,7 +30,6 @@ Use Vietnamese: {{.Parameters.IsVietnamese}}
 **Query Type Classification:**
 - **"self"**: User asking about their own attendance (with or without mentions used as context)
 - **"others"**: User asking about mentioned users' attendance
-- **"mixed"**: Both self and others (treat as "others" for this implementation)
 
 **Important:**
 - If NO @mentions detected, default to "self"
@@ -52,9 +51,7 @@ Use Vietnamese: {{.Parameters.IsVietnamese}}
 
 Respond with ONLY valid JSON:
 {
-  "is_self_query": true/false,
   "mentioned_users": ["username1", "username2"],
   "query_type": "self|others",
-  "requires_self_data": true/false,
   "reasoning": "Brief explanation of the analysis"
 }
