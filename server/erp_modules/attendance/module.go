@@ -21,6 +21,7 @@ type AttendanceModule struct {
 	config              AttendanceConfig
 	erpClient           *ERPClient
 	notificationManager *NotificationManager
+	queryHandler        *AttendanceQueryHandler
 	api                 PluginAPI
 	prompts             PromptsInterface
 	getLLM              func() llm.LanguageModel
@@ -70,10 +71,14 @@ func NewAttendanceModule(
 	// Create notification manager
 	notificationManager := NewNotificationManager(config, i18n, prompts, getLLM, api, botUserID)
 
+	// Create attendance query handler
+	queryHandler := NewAttendanceQueryHandler(erpClient, api, prompts, getLLM)
+
 	return &AttendanceModule{
 		config:              config,
 		erpClient:           erpClient,
 		notificationManager: notificationManager,
+		queryHandler:        queryHandler,
 		api:                 api,
 		prompts:             prompts,
 		getLLM:              getLLM,
@@ -153,9 +158,15 @@ func (m *AttendanceModule) ProcessUserMessage(ctx *erp_modules.ModuleContext, me
 
 // Execute processes the attendance intent
 func (m *AttendanceModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
+	// Handle get_status_count with multi-user support
+	if intent.Action == "get_status_count" {
+		return m.queryHandler.HandleMultiUserAttendanceQuery(ctx, intent)
+	}
+
+	// Handle other actions (check_in, check_out, absent) for the requesting user only
 	isVietnamese := detectUserLanguage(ctx.User)
 
-	// Get employee ID
+	// Get employee ID for the requesting user
 	employeeID, err := m.getEmployeeIDFromUser(ctx.User)
 	if err != nil {
 		errorMsg := "❌ Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
@@ -185,8 +196,6 @@ func (m *AttendanceModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_m
 			}
 		}
 		return m.handleAbsentRequest(employeeID, ctx, intent, reason)
-	case "get_status_count":
-		return m.handleGetStatusCountRequest(employeeID, ctx, intent)
 	default:
 		errorMsg := "Hành động không được hỗ trợ"
 		if !isVietnamese {
@@ -202,7 +211,7 @@ func (m *AttendanceModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_m
 
 // GetDescription returns a description of what this module does
 func (m *AttendanceModule) GetDescription() string {
-	return "Quản lý điểm danh nhân viên: check-in, check-out, báo nghỉ phép, và truy vấn báo cáo chấm công"
+	return "Quản lý điểm danh nhân viên: check-in, check-out, báo nghỉ phép, và truy vấn báo cáo chấm công cho bản thân hoặc người khác"
 }
 
 // GetActionExamples returns examples of user messages for each action
@@ -247,6 +256,10 @@ func (m *AttendanceModule) GetActionExamples() map[string][]string {
 			"tôi đi làm mấy ngày tuần trước",
 			"show my present days",
 			"xem số ngày có mặt",
+			"show attendance of @tai @phuc",
+			"báo cáo chấm công của @nghia",
+			"@john attendance this week",
+			"attendance report for @alice @bob",
 		},
 	}
 }
@@ -277,63 +290,6 @@ func (m *AttendanceModule) handleCheckOutRequest(employeeID string, ctx *erp_mod
 func (m *AttendanceModule) handleAbsentRequest(employeeID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent, reason string) (*erp_modules.ModuleResponse, error) {
 	// Always request confirmation for absence reporting as it's important
 	return m.requestConfirmation(ctx, "absent", reason, employeeID)
-}
-
-// handleGetStatusCountRequest processes attendance status count queries
-func (m *AttendanceModule) handleGetStatusCountRequest(employeeID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
-	isVietnamese := detectUserLanguage(ctx.User)
-
-	// Use LLM to analyze the user's query and extract structured request
-	queryRequest, err := m.analyzeAttendanceQuery(ctx, intent.RawMessage)
-	if err != nil {
-		errorMsg := "⚠️ Không thể hiểu được yêu cầu của bạn. Vui lòng thử lại với câu hỏi rõ ràng hơn."
-		if !isVietnamese {
-			errorMsg = "⚠️ Cannot understand your request. Please try again with a clearer question."
-		}
-		return &erp_modules.ModuleResponse{
-			Success: false,
-			Message: errorMsg,
-			Error:   err.Error(),
-		}, nil
-	}
-
-	// Query ERPNext for attendance records
-	count, err := m.erpClient.QueryAttendanceCount(employeeID, queryRequest.Status, queryRequest.TimePeriod.StartDate, queryRequest.TimePeriod.EndDate)
-	if err != nil {
-		errorMsg := "⚠️ Có lỗi xảy ra khi truy vấn dữ liệu chấm công. Vui lòng thử lại."
-		if !isVietnamese {
-			errorMsg = "⚠️ An error occurred while querying attendance data. Please try again."
-		}
-		return &erp_modules.ModuleResponse{
-			Success: false,
-			Message: errorMsg,
-			Error:   err.Error(),
-		}, nil
-	}
-
-	// Generate natural language response using LLM
-	response, err := m.generateQueryResponse(ctx, intent.RawMessage, queryRequest, count)
-	if err != nil {
-		// Fallback to simple response if LLM fails
-		if isVietnamese {
-			response = fmt.Sprintf("Bạn có %d ngày %s trong %s", count, queryRequest.Status, queryRequest.TimePeriod.Description)
-		} else {
-			response = fmt.Sprintf("You have %d %s days in %s", count, queryRequest.Status, queryRequest.TimePeriod.Description)
-		}
-	}
-
-	return &erp_modules.ModuleResponse{
-		Success:     true,
-		Message:     response,
-		ActionTaken: "get_status_count",
-		Data: map[string]interface{}{
-			"count":       count,
-			"status":      queryRequest.Status,
-			"start_date":  queryRequest.TimePeriod.StartDate,
-			"end_date":    queryRequest.TimePeriod.EndDate,
-			"description": queryRequest.TimePeriod.Description,
-		},
-	}, nil
 }
 
 // requestConfirmation requests confirmation from user
@@ -636,108 +592,6 @@ func (m *AttendanceModule) handleAbsent(employeeID, employeeName, userID, reason
 			"employee": employeeName,
 		},
 	}, nil
-}
-
-// analyzeAttendanceQuery uses LLM to convert natural language to structured request
-func (m *AttendanceModule) analyzeAttendanceQuery(ctx *erp_modules.ModuleContext, userMessage string) (*AttendanceQueryRequest, error) {
-	// Create LLM context
-	llmContext := &llm.Context{
-		RequestingUser: ctx.User,
-		Time:           time.Now().Format(time.RFC1123),
-	}
-	llmContext.Parameters = map[string]interface{}{
-		"UserMessage": userMessage,
-	}
-
-	// Format the query analysis prompt
-	systemPrompt, err := m.prompts.Format("attendance_query_analysis", llmContext)
-	if err != nil {
-		return nil, fmt.Errorf("failed to format query analysis prompt: %w", err)
-	}
-
-	// Create completion request
-	completionRequest := llm.CompletionRequest{
-		Posts: []llm.Post{
-			{
-				Role:    llm.PostRoleSystem,
-				Message: systemPrompt,
-			},
-			{
-				Role:    llm.PostRoleUser,
-				Message: userMessage,
-			},
-		},
-		Context: llmContext,
-	}
-
-	// Get LLM response
-	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(300))
-	if err != nil {
-		return nil, fmt.Errorf("failed to analyze query with LLM: %w", err)
-	}
-
-	// Parse JSON response
-	var queryRequest AttendanceQueryRequest
-
-	// Clean response to extract JSON
-	response = strings.TrimSpace(response)
-	start := strings.Index(response, "{")
-	end := strings.LastIndex(response, "}") + 1
-
-	if start == -1 || end <= start {
-		return nil, fmt.Errorf("no valid JSON found in LLM response: %s", response)
-	}
-
-	jsonStr := response[start:end]
-	if err := json.Unmarshal([]byte(jsonStr), &queryRequest); err != nil {
-		return nil, fmt.Errorf("failed to parse LLM response as JSON: %w", err)
-	}
-
-	return &queryRequest, nil
-}
-
-// generateQueryResponse uses LLM to format the query results into natural language
-func (m *AttendanceModule) generateQueryResponse(ctx *erp_modules.ModuleContext, userMessage string, queryRequest *AttendanceQueryRequest, count int) (string, error) {
-	// Create LLM context
-	llmContext := &llm.Context{
-		RequestingUser: ctx.User,
-	}
-	llmContext.Parameters = map[string]interface{}{
-		"UserMessage":  userMessage,
-		"QueryDetails": fmt.Sprintf("Status: %s, Period: %s", queryRequest.Status, queryRequest.TimePeriod.Description),
-		"Count":        count,
-		"TimePeriod":   queryRequest.TimePeriod.Description,
-		"Status":       queryRequest.Status,
-	}
-
-	// Format the response generation prompt
-	systemPrompt, err := m.prompts.Format("attendance_query_response", llmContext)
-	if err != nil {
-		return "", fmt.Errorf("failed to format response prompt: %w", err)
-	}
-
-	// Create completion request
-	completionRequest := llm.CompletionRequest{
-		Posts: []llm.Post{
-			{
-				Role:    llm.PostRoleSystem,
-				Message: systemPrompt,
-			},
-			{
-				Role:    llm.PostRoleUser,
-				Message: fmt.Sprintf("Generate response for: %s (Count: %d)", userMessage, count),
-			},
-		},
-		Context: llmContext,
-	}
-
-	// Get LLM response
-	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(200))
-	if err != nil {
-		return "", fmt.Errorf("failed to generate response with LLM: %w", err)
-	}
-
-	return strings.TrimSpace(response), nil
 }
 
 // getEmployeeIDFromUser gets employee ID from user

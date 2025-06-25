@@ -590,6 +590,11 @@ func (a *PluginAPIAdapter) AddChannelMember(channelID, userID string) (*model.Ch
 	return a.plugin.pluginAPI.Channel.AddMember(channelID, userID)
 }
 
+// GetUserByUsername gets a user by username - NEW METHOD
+func (a *PluginAPIAdapter) GetUserByUsername(username string) (*model.User, error) {
+	return a.plugin.pluginAPI.User.GetByUsername(username)
+}
+
 // PromptsAdapter adapts the plugin's prompts to the interface needed by modules
 type PromptsAdapter struct {
 	prompts *llm.Prompts

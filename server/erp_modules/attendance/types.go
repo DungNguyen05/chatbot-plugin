@@ -56,6 +56,7 @@ type PluginAPI interface {
 	GetChannel(channelID string) (*model.Channel, error)
 	GetChannelMember(channelID, userID string) (*model.ChannelMember, error)
 	AddChannelMember(channelID, userID string) (*model.ChannelMember, error)
+	GetUserByUsername(username string) (*model.User, error)
 }
 
 // EmployeeCheckin represents the data structure for ERPNEXT employee check-in

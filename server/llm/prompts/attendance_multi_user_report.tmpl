@@ -1,0 +1,78 @@
+You are generating attendance reports for multiple users. Create a comprehensive, well-formatted report.
+
+Original Query: "{{.Parameters.OriginalQuery}}"
+Query Type: {{.Parameters.QueryType}}
+Requesting User: {{.Parameters.RequestingUser}}
+Use Vietnamese: {{.Parameters.IsVietnamese}}
+
+Query Details: {{.Parameters.QueryDetails}}
+Total Users: {{.Parameters.TotalUsers}}
+Successful Queries: {{.Parameters.SuccessfulUsers}}
+Failed Queries: {{.Parameters.FailedUsers}}
+
+Users Data:
+{{range .Parameters.UsersData}}
+- User: {{.DisplayName}} (@{{.Username}})
+  {{if .FoundInERP}}
+  - Employee ID: {{.EmployeeID}}
+  - Count: {{.Count}} days
+  {{if .QueryRequest}}
+  - Status: {{.QueryRequest.Status}}
+  - Period: {{.QueryRequest.TimePeriod.Description}}
+  {{end}}
+  {{else}}
+  - Error: {{.Error}}
+  {{end}}
+{{end}}
+
+**Report Generation Guidelines:**
+
+{{if .Parameters.IsVietnamese}}
+**Vietnamese Format:**
+1. Start with clear header: "📊 **Báo cáo chấm công**"
+2. Add summary section if multiple users
+3. List each user with clear formatting:
+   - ✅ for successful queries
+   - ❌ for failed/not found users
+4. Use natural Vietnamese language
+5. Include period and status information clearly
+6. Add summary statistics at the end if applicable
+
+**Example structure:**
+📊 **Báo cáo chấm công**
+
+**Tóm tắt:** Báo cáo cho {{.Parameters.TotalUsers}} người dùng ({{.Parameters.SuccessfulUsers}} thành công, {{.Parameters.FailedUsers}} thất bại)
+
+**Chi tiết:**
+✅ **Tên người** (@username): X ngày [status] trong [period]
+❌ **Tên người** (@username): Không tìm thấy trong hệ thống ERP
+{{else}}
+**English Format:**
+1. Start with clear header: "📊 **Attendance Report**"
+2. Add summary section if multiple users
+3. List each user with clear formatting:
+   - ✅ for successful queries
+   - ❌ for failed/not found users
+4. Use professional English
+5. Include period and status information clearly
+6. Add summary statistics at the end if applicable
+
+**Example structure:**
+📊 **Attendance Report**
+
+**Summary:** Report for {{.Parameters.TotalUsers}} users ({{.Parameters.SuccessfulUsers}} successful, {{.Parameters.FailedUsers}} failed)
+
+**Details:**
+✅ **Name** (@username): X [status] days in [period]
+❌ **Name** (@username): Not found in ERP system
+{{end}}
+
+**Formatting Requirements:**
+- Use markdown formatting with **bold** for names and headers
+- Use ✅ for successful results and ❌ for errors
+- Include emoji indicators for visual clarity
+- Keep the format clean and professional
+- If only one user, make it more conversational
+- If multiple users, include summary statistics
+
+Generate a comprehensive, well-formatted attendance report:

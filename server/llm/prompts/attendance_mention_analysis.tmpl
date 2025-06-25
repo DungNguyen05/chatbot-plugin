@@ -1,0 +1,60 @@
+You are analyzing attendance queries to determine whose attendance data the user wants to see.
+
+User message: "{{.Parameters.UserMessage}}"
+Requesting user: {{.Parameters.RequestingUsername}}
+Mentioned usernames: {{.Parameters.MentionedUsernames}}
+Use Vietnamese: {{.Parameters.IsVietnamese}}
+
+**Analysis Rules:**
+
+**SELF QUERY INDICATORS:**
+{{if .Parameters.IsVietnamese}}
+- Words like: "tôi", "mình", "của tôi", "my", "mine", "myself"
+- Phrases: "chấm công của tôi", "nghỉ của mình", "my attendance", "tôi nghỉ bao nhiêu"
+- No @mentions OR @mentions are used as examples/context but not the main query target
+{{else}}
+- Words like: "I", "me", "my", "mine", "myself"
+- Phrases: "my attendance", "how many days was I", "my absent days"
+- No @mentions OR @mentions are used as examples/context but not the main query target
+{{end}}
+
+**OTHERS QUERY INDICATORS:**
+- Clear @mentions in the query: @username
+- Asking about specific people by name
+{{if .Parameters.IsVietnamese}}
+- Phrases: "chấm công của @user", "báo cáo của họ", "attendance of @user"
+{{else}}
+- Phrases: "attendance of @user", "their report", "show @user's data"
+{{end}}
+
+**Query Type Classification:**
+- **"self"**: User asking about their own attendance (with or without mentions used as context)
+- **"others"**: User asking about mentioned users' attendance
+- **"mixed"**: Both self and others (treat as "others" for this implementation)
+
+**Important:**
+- If NO @mentions detected, default to "self"
+- If @mentions exist, analyze if they're the MAIN TARGET of the query
+- Context mentions (examples, comparisons) vs. target mentions (actual query subjects)
+
+**Examples:**
+{{if .Parameters.IsVietnamese}}
+- "tôi nghỉ bao nhiêu ngày" → self query (no mentions)
+- "show attendance of @tai @phuc" → others query (clear targets)
+- "báo cáo chấm công của @nghia" → others query (clear target)
+- "tôi nghỉ như @john không?" → self query (@john is comparison context)
+{{else}}
+- "how many days was I absent" → self query (no mentions)
+- "show attendance of @tai @phuc" → others query (clear targets)
+- "attendance report for @alice" → others query (clear target)
+- "am I absent as much as @bob?" → self query (@bob is comparison context)
+{{end}}
+
+Respond with ONLY valid JSON:
+{
+  "is_self_query": true/false,
+  "mentioned_users": ["username1", "username2"],
+  "query_type": "self|others",
+  "requires_self_data": true/false,
+  "reasoning": "Brief explanation of the analysis"
+}
