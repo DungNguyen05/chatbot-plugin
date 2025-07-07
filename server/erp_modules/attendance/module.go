@@ -893,120 +893,88 @@ func (m *AttendanceModule) removeDuplicateEmployees(employees []Employee) []Empl
 	return unique
 }
 
-// formatAttendanceReports formats the attendance reports into a readable message
+// formatAttendanceReports formats the attendance reports into a readable table message
 func (m *AttendanceModule) formatAttendanceReports(reports []*EmployeeAttendanceReport, request *AttendanceReportRequest, isVietnamese bool, reportType string) string {
 	var message strings.Builder
 
 	// Header
 	if reportType == "all_employees" {
 		if isVietnamese {
-			message.WriteString(fmt.Sprintf(" **Báo cáo chấm công tất cả nhân viên** (%s)\n", request.TimePeriod.Description))
+			message.WriteString(fmt.Sprintf("**Báo cáo chấm công tất cả nhân viên** (%s)\n\n", request.TimePeriod.Description))
 		} else {
-			message.WriteString(fmt.Sprintf(" **All Employees Attendance Report** (%s)\n", request.TimePeriod.Description))
+			message.WriteString(fmt.Sprintf("**All Employees Attendance Report** (%s)\n\n", request.TimePeriod.Description))
 		}
 	} else {
 		searchedNames := strings.Join(request.Names, ", ")
 		if isVietnamese {
-			message.WriteString(fmt.Sprintf(" **Báo cáo chấm công cho '%s'** (%s)\n", searchedNames, request.TimePeriod.Description))
+			message.WriteString(fmt.Sprintf("**Báo cáo chấm công cho '%s'** (%s)\n\n", searchedNames, request.TimePeriod.Description))
 		} else {
-			message.WriteString(fmt.Sprintf(" **Attendance Report for '%s'** (%s)\n", searchedNames, request.TimePeriod.Description))
+			message.WriteString(fmt.Sprintf("**Attendance Report for '%s'** (%s)\n\n", searchedNames, request.TimePeriod.Description))
 		}
 	}
 
-	message.WriteString("\n")
-
-	// Summary statistics
-	totalEmployees := len(reports)
-	var totalPresent, totalAbsent, totalHalfDay, totalWFH, successfulReports int
-
-	for _, report := range reports {
-		if report.ErrorMessage == "" {
-			successfulReports++
-			totalPresent += report.PresentDays
-			totalAbsent += report.AbsentDays
-			totalHalfDay += report.HalfDays
-			totalWFH += report.WorkFromHomeDays
-		}
-	}
-
-	if successfulReports > 0 {
+	// Check if we have any reports
+	if len(reports) == 0 {
 		if isVietnamese {
-			message.WriteString("**Tổng quan:**\n")
-			message.WriteString(fmt.Sprintf("• Tổng số nhân viên: %d\n", totalEmployees))
-			message.WriteString(fmt.Sprintf("• Báo cáo thành công: %d\n", successfulReports))
-			if totalEmployees > successfulReports {
-				message.WriteString(fmt.Sprintf("• Báo cáo lỗi: %d\n", totalEmployees-successfulReports))
-			}
+			message.WriteString("Không có dữ liệu chấm công.")
 		} else {
-			message.WriteString("**Summary:**\n")
-			message.WriteString(fmt.Sprintf("• Total employees: %d\n", totalEmployees))
-			message.WriteString(fmt.Sprintf("• Successful reports: %d\n", successfulReports))
-			if totalEmployees > successfulReports {
-				message.WriteString(fmt.Sprintf("• Failed reports: %d\n", totalEmployees-successfulReports))
-			}
+			message.WriteString("No attendance data available.")
 		}
-		message.WriteString("\n")
+		return message.String()
 	}
 
-	// Individual employee reports
+	// Table headers
 	if isVietnamese {
-		message.WriteString("**Chi tiết từng nhân viên:**\n")
+		message.WriteString("| **Nhân viên** | **Tổng** | **Có mặt** | **Vắng** |\n")
 	} else {
-		message.WriteString("**Individual Reports:**\n")
+		message.WriteString("| **Employee** | **Total** | **Present** | **Absent** |\n")
 	}
+	message.WriteString("|---|---:|---:|---:|\n")
 
 	// Limit display to prevent overwhelming messages
 	displayLimit := 50
 	displayedCount := 0
+	var successfulReports int
 
+	// Table rows
 	for _, report := range reports {
 		if displayedCount >= displayLimit {
 			remaining := len(reports) - displayedCount
 			if isVietnamese {
-				message.WriteString(fmt.Sprintf("\n... và %d nhân viên khác. Sử dụng tên cụ thể hơn để thu hẹp kết quả.\n", remaining))
+				message.WriteString(fmt.Sprintf("| *...và %d nhân viên khác* | | | |\n", remaining))
 			} else {
-				message.WriteString(fmt.Sprintf("\n... and %d more employees. Use more specific names to narrow results.\n", remaining))
+				message.WriteString(fmt.Sprintf("| *...and %d more employees* | | | |\n", remaining))
 			}
 			break
 		}
 
-		message.WriteString(fmt.Sprintf("\n**%s** (%s)", report.EmployeeName, report.EmployeeID))
-
 		if report.ErrorMessage != "" {
+			// Show error row
 			if isVietnamese {
-				message.WriteString(fmt.Sprintf("\nLỗi: %s", report.ErrorMessage))
+				message.WriteString(fmt.Sprintf("| %s | ❌ | ❌ | ❌ |\n", report.EmployeeName))
 			} else {
-				message.WriteString(fmt.Sprintf("\nError: %s", report.ErrorMessage))
+				message.WriteString(fmt.Sprintf("| %s | ❌ | ❌ | ❌ |\n", report.EmployeeName))
 			}
 		} else {
-			if isVietnamese {
-				message.WriteString(fmt.Sprintf("\n• Tổng số ngày: %d | Có mặt: %d | Vắng mặt: %d",
-					report.TotalDays, report.PresentDays, report.AbsentDays))
-				if report.HalfDays > 0 {
-					message.WriteString(fmt.Sprintf(" | Nửa ngày: %d", report.HalfDays))
-				}
-				if report.WorkFromHomeDays > 0 {
-					message.WriteString(fmt.Sprintf(" | WFH: %d", report.WorkFromHomeDays))
-				}
-				if report.LateDays > 0 {
-					message.WriteString(fmt.Sprintf(" | Đi muộn: %d", report.LateDays))
-				}
-			} else {
-				message.WriteString(fmt.Sprintf("\n• Total: %d | Present: %d | Absent: %d",
-					report.TotalDays, report.PresentDays, report.AbsentDays))
-				if report.HalfDays > 0 {
-					message.WriteString(fmt.Sprintf(" | Half Day: %d", report.HalfDays))
-				}
-				if report.WorkFromHomeDays > 0 {
-					message.WriteString(fmt.Sprintf(" | WFH: %d", report.WorkFromHomeDays))
-				}
-				if report.LateDays > 0 {
-					message.WriteString(fmt.Sprintf(" | Late: %d", report.LateDays))
-				}
-			}
+			// Show data row
+			message.WriteString(fmt.Sprintf("| %s | %d | %d | %d |\n",
+				report.EmployeeName,
+				report.TotalDays,
+				report.PresentDays,
+				report.AbsentDays))
+			successfulReports++
 		}
 
 		displayedCount++
+	}
+
+	// Add note about using more specific names if results were limited
+	if displayedCount >= displayLimit {
+		if isVietnamese {
+			message.WriteString("\n💡 *Sử dụng tên cụ thể hơn để thu hẹp kết quả.*")
+		} else {
+			message.WriteString("\n💡 *Use more specific names to narrow results.*")
+		}
 	}
 
 	return message.String()
