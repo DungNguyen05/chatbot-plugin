@@ -129,13 +129,8 @@ func (p *Plugin) processAttendanceRequest(user *model.User, action, reason strin
 	intent := &erp_modules.Intent{
 		Category:   "attendance",
 		Action:     action,
-		Parameters: map[string]string{},
 		Confidence: 1.0,
 		RawMessage: action,
-	}
-
-	if reason != "" {
-		intent.Parameters["reason"] = reason
 	}
 
 	// Create module context

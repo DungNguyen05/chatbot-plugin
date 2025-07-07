@@ -12,11 +12,10 @@ import (
 
 // Intent represents a user's parsed intention
 type Intent struct {
-	Category   string            `json:"category"`    // "attendance", "task", "deadline"
-	Action     string            `json:"action"`      // "check_in", "check_out", "absent", "create", "list"
-	Parameters map[string]string `json:"parameters"`  // Additional parameters
-	Confidence float64           `json:"confidence"`  // Confidence score 0.0-1.0
-	RawMessage string            `json:"raw_message"` // Original user message
+	Category   string  `json:"category"`    // "attendance", "task", "deadline"
+	Action     string  `json:"action"`      // "check_in", "check_out", "absent", "create", "list"
+	Confidence float64 `json:"confidence"`  // Confidence score 0.0-1.0
+	RawMessage string  `json:"raw_message"` // Original user message
 }
 
 // ModuleResponse represents the response from a module execution

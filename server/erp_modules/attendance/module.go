@@ -203,7 +203,7 @@ func (m *AttendanceModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_m
 				Error:   err.Error(),
 			}, nil
 		}
-		reason := intent.Parameters["reason"]
+		reason := ""
 		if reason == "" {
 			if isVietnamese {
 				reason = "Không có lý do cụ thể"
@@ -600,9 +600,9 @@ func (m *AttendanceModule) handleCheckIn(employeeID, employeeName, userID string
 
 	user, _ := m.api.GetUser(userID)
 	isVietnamese := detectUserLanguage(user)
-	successMsg := fmt.Sprintf("✅ Đã ghi nhận check-in của bạn lúc **%s**!", formattedTime)
+	successMsg := fmt.Sprintf("Đã ghi nhận check-in của bạn lúc **%s**!", formattedTime)
 	if !isVietnamese {
-		successMsg = fmt.Sprintf("✅ Successfully recorded your check-in at **%s**!", formattedTime)
+		successMsg = fmt.Sprintf("Successfully recorded your check-in at **%s**!", formattedTime)
 	}
 
 	return &erp_modules.ModuleResponse{
@@ -640,9 +640,9 @@ func (m *AttendanceModule) handleCheckOut(employeeID, employeeName, userID strin
 
 	user, _ := m.api.GetUser(userID)
 	isVietnamese := detectUserLanguage(user)
-	successMsg := fmt.Sprintf("✅ Đã ghi nhận check-out của bạn lúc **%s**!", formattedTime)
+	successMsg := fmt.Sprintf("Đã ghi nhận check-out của bạn lúc **%s**!", formattedTime)
 	if !isVietnamese {
-		successMsg = fmt.Sprintf("✅ Successfully recorded your check-out at **%s**!", formattedTime)
+		successMsg = fmt.Sprintf("Successfully recorded your check-out at **%s**!", formattedTime)
 	}
 
 	return &erp_modules.ModuleResponse{
@@ -680,9 +680,9 @@ func (m *AttendanceModule) handleAbsent(employeeID, employeeName, userID, reason
 
 	user, _ := m.api.GetUser(userID)
 	isVietnamese := detectUserLanguage(user)
-	successMsg := fmt.Sprintf("📝 Đã ghi nhận nghỉ phép của bạn cho ngày **%s** với lý do: \"%s\"", recordedDate, reason)
+	successMsg := fmt.Sprintf("Đã ghi nhận nghỉ phép của bạn cho ngày **%s** với lý do: \"%s\"", recordedDate, reason)
 	if !isVietnamese {
-		successMsg = fmt.Sprintf("📝 Successfully recorded your absence for **%s** with reason: \"%s\"", recordedDate, reason)
+		successMsg = fmt.Sprintf("Successfully recorded your absence for **%s** with reason: \"%s\"", recordedDate, reason)
 	}
 
 	return &erp_modules.ModuleResponse{
@@ -951,7 +951,7 @@ func (m *AttendanceModule) formatAttendanceReports(reports []*EmployeeAttendance
 	}
 
 	// Limit display to prevent overwhelming messages
-	displayLimit := 15
+	displayLimit := 50
 	displayedCount := 0
 
 	for _, report := range reports {

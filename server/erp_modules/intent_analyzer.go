@@ -22,10 +22,9 @@ type ModuleClassificationResult struct {
 
 // ActionClassificationResult represents the result of action classification within a module
 type ActionClassificationResult struct {
-	Action     string            `json:"action"`
-	Parameters map[string]string `json:"parameters"`
-	Confidence float64           `json:"confidence"`
-	Reasoning  string            `json:"reasoning"`
+	Action     string  `json:"action"`
+	Confidence float64 `json:"confidence"`
+	Reasoning  string  `json:"reasoning"`
 }
 
 // LLMIntentAnalyzer uses LLM to analyze user intents with dynamic 2-step classification
@@ -68,7 +67,6 @@ func (a *LLMIntentAnalyzer) AnalyzeIntent(ctx context.Context, message string, u
 			Action:     "fallback",
 			Confidence: moduleResult.Confidence,
 			RawMessage: message,
-			Parameters: make(map[string]string),
 		}, nil
 	}
 
@@ -79,7 +77,6 @@ func (a *LLMIntentAnalyzer) AnalyzeIntent(ctx context.Context, message string, u
 			Action:     "fallback",
 			Confidence: moduleResult.Confidence,
 			RawMessage: message,
-			Parameters: make(map[string]string),
 		}, nil
 	}
 
@@ -100,7 +97,6 @@ func (a *LLMIntentAnalyzer) AnalyzeIntent(ctx context.Context, message string, u
 	intent := &Intent{
 		Category:   moduleResult.Category,
 		Action:     actionResult.Action,
-		Parameters: actionResult.Parameters,
 		Confidence: finalConfidence,
 		RawMessage: message,
 	}
@@ -109,7 +105,6 @@ func (a *LLMIntentAnalyzer) AnalyzeIntent(ctx context.Context, message string, u
 	fmt.Printf("  Category: %s\n", intent.Category)
 	fmt.Printf("  Action: %s\n", intent.Action)
 	fmt.Printf("  Final Confidence: %.3f\n", intent.Confidence)
-	fmt.Printf("  Parameters: %v\n", intent.Parameters)
 	fmt.Printf("=== END INTENT ANALYSIS ===\n")
 
 	return intent, nil
