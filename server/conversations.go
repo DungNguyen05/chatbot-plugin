@@ -29,7 +29,7 @@ func (p *Plugin) processUserRequestToBot(bot *Bot, postingUser *model.User, chan
 			p.API.LogError("Error processing ERP request", "error", err.Error())
 			// Continue with normal processing if ERP fails
 		} else if erpResponse != nil {
-			// ✅ FIXED: Return ANY ERP response that exists
+			// FIXED: Return ANY ERP response that exists
 			// This includes:
 			// - Successful operations (Success = true)
 			// - Failed operations with error messages (Success = false)

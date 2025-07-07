@@ -1,11 +1,11 @@
 [
     {
       "id": "rollcall.checkin.success",
-      "translation": "✅ Check in của bạn đã được ghi nhận trong hệ thống ERP lúc **%s**!"
+      "translation": "Check in của bạn đã được ghi nhận trong hệ thống ERP lúc **%s**!"
     },
     {
       "id": "rollcall.checkout.success", 
-      "translation": "✅ Check out của bạn đã được ghi nhận trong hệ thống ERP lúc **%s**!"
+      "translation": "Check out của bạn đã được ghi nhận trong hệ thống ERP lúc **%s**!"
     },
     {
       "id": "rollcall.absent.success",
@@ -13,7 +13,7 @@
     },
     {
       "id": "rollcall.employee.not.found",
-      "translation": "❌ Không tìm thấy hồ sơ nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên để đảm bảo tài khoản Workdone của bạn được liên kết với hồ sơ nhân viên."
+      "translation": "Không tìm thấy hồ sơ nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên để đảm bảo tài khoản Workdone của bạn được liên kết với hồ sơ nhân viên."
     },
     {
       "id": "rollcall.erp.error",

@@ -134,9 +134,9 @@ func (m *ProjectManagementModule) Execute(ctx *erp_modules.ModuleContext, intent
 	// Get employee ID
 	employeeID, err := m.GetEmployeeIDFromUser(ctx.User)
 	if err != nil {
-		errorMsg := "❌ Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
+		errorMsg := "Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
 		if !isVietnamese {
-			errorMsg = "❌ Cannot find your employee information in the ERP system. Please contact administrator."
+			errorMsg = "Cannot find your employee information in the ERP system. Please contact administrator."
 		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
@@ -482,9 +482,9 @@ func (m *ProjectManagementModule) handleConfirmAction(ctx *erp_modules.ModuleCon
 			}, nil
 		}
 
-		successMsg := fmt.Sprintf("✅ Đã tạo dự án mới thành công: **%s**!", projectName)
+		successMsg := fmt.Sprintf("Đã tạo dự án mới thành công: **%s**!", projectName)
 		if !isVietnamese {
-			successMsg = fmt.Sprintf("✅ Successfully created new project: **%s**!", projectName)
+			successMsg = fmt.Sprintf("Successfully created new project: **%s**!", projectName)
 		}
 
 		return &erp_modules.ModuleResponse{
@@ -516,9 +516,9 @@ func (m *ProjectManagementModule) handleConfirmAction(ctx *erp_modules.ModuleCon
 			}, nil
 		}
 
-		successMsg := fmt.Sprintf("✅ Đã tạo task mới thành công: **%s**!", taskName)
+		successMsg := fmt.Sprintf("Đã tạo task mới thành công: **%s**!", taskName)
 		if !isVietnamese {
-			successMsg = fmt.Sprintf("✅ Successfully created new task: **%s**!", taskName)
+			successMsg = fmt.Sprintf("Successfully created new task: **%s**!", taskName)
 		}
 
 		return &erp_modules.ModuleResponse{
@@ -592,7 +592,7 @@ func (m *ProjectManagementModule) handleCancelAction(userID string) (*erp_module
 	// This could be improved by storing user language in the pending confirmation
 	return &erp_modules.ModuleResponse{
 		Success:     true,
-		Message:     "❌ Đã hủy bỏ yêu cầu tạo dự án/task.",
+		Message:     "Đã hủy bỏ yêu cầu tạo dự án/task.",
 		ActionTaken: "cancel_confirmation",
 	}, nil
 }

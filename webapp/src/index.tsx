@@ -259,10 +259,10 @@ export default class Plugin {
                 this.rollCallModalRoot = this.rollCallModalElement;
             }
             
-            console.log('✅ Modal opened successfully with React component');
+            console.log('Modal opened successfully with React component');
             
         } catch (error) {
-            console.error('❌ Error in openRollCallModal:', error);
+            console.error('Error in openRollCallModal:', error);
             this.closeRollCallModal();
             
             // Show user-friendly error message
@@ -294,9 +294,9 @@ export default class Plugin {
             // Restore body scroll
             document.body.style.overflow = 'auto';
             
-            console.log('✅ Modal closed successfully');
+            console.log('Modal closed successfully');
         } catch (error) {
-            console.error('❌ Error closing modal:', error);
+            console.error('Error closing modal:', error);
             
             // Force cleanup
             const existingModal = document.getElementById('rollcall-modal-root');
@@ -304,7 +304,7 @@ export default class Plugin {
                 try {
                     existingModal.parentNode.removeChild(existingModal);
                 } catch (cleanupError) {
-                    console.error('❌ Error in force cleanup:', cleanupError);
+                    console.error('Error in force cleanup:', cleanupError);
                 }
             }
             
@@ -374,9 +374,9 @@ export default class Plugin {
             
             // Store reference for cleanup
             this.floatingButtonElement = buttonContainer;
-            console.log('✅ Floating Roll Call button created successfully');
+            console.log('Floating Roll Call button created successfully');
         } catch (error) {
-            console.error('❌ Error creating floating button:', error);
+            console.error('Error creating floating button:', error);
         }
     };
 
@@ -584,7 +584,7 @@ export default class Plugin {
         // Also listen for popstate events (back/forward browser buttons)
         window.addEventListener('popstate', this.handleRouteChange);
 
-        console.log('✅ Plugin initialized successfully');
+        console.log('Plugin initialized successfully');
     }
 
     // Enhanced cleanup function
@@ -596,7 +596,7 @@ export default class Plugin {
         // Remove event listeners
         window.removeEventListener('popstate', this.handleRouteChange);
         
-        console.log('✅ Plugin uninitialized successfully');
+        console.log('Plugin uninitialized successfully');
     }
 }
 

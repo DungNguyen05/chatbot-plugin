@@ -139,9 +139,9 @@ func (m *AttendanceModule) ProcessUserMessage(ctx *erp_modules.ModuleContext, me
 		return m.executeConfirmedAction(ctx, pending)
 	} else {
 		isVietnamese := detectUserLanguage(ctx.User)
-		cancelMsg := "❌ Đã hủy bỏ yêu cầu."
+		cancelMsg := "Đã hủy bỏ yêu cầu."
 		if !isVietnamese {
-			cancelMsg = "❌ Request cancelled."
+			cancelMsg = "Request cancelled."
 		}
 		return &erp_modules.ModuleResponse{
 			Success:     true,
@@ -161,9 +161,9 @@ func (m *AttendanceModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_m
 		// Get employee ID for check-in/check-out actions
 		employeeID, err := m.getEmployeeIDFromUser(ctx.User)
 		if err != nil {
-			errorMsg := "❌ Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
+			errorMsg := "Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
 			if !isVietnamese {
-				errorMsg = "❌ Cannot find your employee information in the ERP system. Please contact administrator."
+				errorMsg = "Cannot find your employee information in the ERP system. Please contact administrator."
 			}
 			return &erp_modules.ModuleResponse{
 				Success: false,
@@ -177,9 +177,9 @@ func (m *AttendanceModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_m
 		// Get employee ID for check-in/check-out actions
 		employeeID, err := m.getEmployeeIDFromUser(ctx.User)
 		if err != nil {
-			errorMsg := "❌ Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
+			errorMsg := "Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
 			if !isVietnamese {
-				errorMsg = "❌ Cannot find your employee information in the ERP system. Please contact administrator."
+				errorMsg = "Cannot find your employee information in the ERP system. Please contact administrator."
 			}
 			return &erp_modules.ModuleResponse{
 				Success: false,
@@ -193,9 +193,9 @@ func (m *AttendanceModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_m
 		// Get employee ID for absence reporting
 		employeeID, err := m.getEmployeeIDFromUser(ctx.User)
 		if err != nil {
-			errorMsg := "❌ Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
+			errorMsg := "Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
 			if !isVietnamese {
-				errorMsg = "❌ Cannot find your employee information in the ERP system. Please contact administrator."
+				errorMsg = "Cannot find your employee information in the ERP system. Please contact administrator."
 			}
 			return &erp_modules.ModuleResponse{
 				Success: false,
@@ -209,9 +209,9 @@ func (m *AttendanceModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_m
 		// Get employee ID for status count queries
 		employeeID, err := m.getEmployeeIDFromUser(ctx.User)
 		if err != nil {
-			errorMsg := "❌ Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
+			errorMsg := "Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
 			if !isVietnamese {
-				errorMsg = "❌ Cannot find your employee information in the ERP system. Please contact administrator."
+				errorMsg = "Cannot find your employee information in the ERP system. Please contact administrator."
 			}
 			return &erp_modules.ModuleResponse{
 				Success: false,
@@ -757,9 +757,9 @@ func (m *AttendanceModule) generateNameBasedReport(ctx *erp_modules.ModuleContex
 	uniqueEmployees := m.removeDuplicateEmployees(allMatchedEmployees)
 
 	if len(uniqueEmployees) == 0 {
-		errorMsg := fmt.Sprintf("❌ Không tìm thấy nhân viên nào phù hợp với tên: %s", strings.Join(request.Names, ", "))
+		errorMsg := fmt.Sprintf("Không tìm thấy nhân viên nào phù hợp với tên: %s", strings.Join(request.Names, ", "))
 		if !isVietnamese {
-			errorMsg = fmt.Sprintf("❌ No employees found matching names: %s", strings.Join(request.Names, ", "))
+			errorMsg = fmt.Sprintf("No employees found matching names: %s", strings.Join(request.Names, ", "))
 		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
@@ -827,9 +827,9 @@ func (m *AttendanceModule) generateAllEmployeesReport(ctx *erp_modules.ModuleCon
 	}
 
 	if len(allEmployees) == 0 {
-		errorMsg := "❌ Không có nhân viên nào trong hệ thống."
+		errorMsg := "Không có nhân viên nào trong hệ thống."
 		if !isVietnamese {
-			errorMsg = "❌ No employees found in the system."
+			errorMsg = "No employees found in the system."
 		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
@@ -900,16 +900,16 @@ func (m *AttendanceModule) formatAttendanceReports(reports []*EmployeeAttendance
 	// Header
 	if reportType == "all_employees" {
 		if isVietnamese {
-			message.WriteString(fmt.Sprintf("📊 **Báo cáo chấm công tất cả nhân viên** (%s)\n", request.TimePeriod.Description))
+			message.WriteString(fmt.Sprintf(" **Báo cáo chấm công tất cả nhân viên** (%s)\n", request.TimePeriod.Description))
 		} else {
-			message.WriteString(fmt.Sprintf("📊 **All Employees Attendance Report** (%s)\n", request.TimePeriod.Description))
+			message.WriteString(fmt.Sprintf(" **All Employees Attendance Report** (%s)\n", request.TimePeriod.Description))
 		}
 	} else {
 		searchedNames := strings.Join(request.Names, ", ")
 		if isVietnamese {
-			message.WriteString(fmt.Sprintf("📊 **Báo cáo chấm công cho '%s'** (%s)\n", searchedNames, request.TimePeriod.Description))
+			message.WriteString(fmt.Sprintf(" **Báo cáo chấm công cho '%s'** (%s)\n", searchedNames, request.TimePeriod.Description))
 		} else {
-			message.WriteString(fmt.Sprintf("📊 **Attendance Report for '%s'** (%s)\n", searchedNames, request.TimePeriod.Description))
+			message.WriteString(fmt.Sprintf(" **Attendance Report for '%s'** (%s)\n", searchedNames, request.TimePeriod.Description))
 		}
 	}
 
@@ -931,14 +931,14 @@ func (m *AttendanceModule) formatAttendanceReports(reports []*EmployeeAttendance
 
 	if successfulReports > 0 {
 		if isVietnamese {
-			message.WriteString("**📈 Tổng quan:**\n")
+			message.WriteString("**Tổng quan:**\n")
 			message.WriteString(fmt.Sprintf("• Tổng số nhân viên: %d\n", totalEmployees))
 			message.WriteString(fmt.Sprintf("• Báo cáo thành công: %d\n", successfulReports))
 			if totalEmployees > successfulReports {
 				message.WriteString(fmt.Sprintf("• Báo cáo lỗi: %d\n", totalEmployees-successfulReports))
 			}
 		} else {
-			message.WriteString("**📈 Summary:**\n")
+			message.WriteString("**Summary:**\n")
 			message.WriteString(fmt.Sprintf("• Total employees: %d\n", totalEmployees))
 			message.WriteString(fmt.Sprintf("• Successful reports: %d\n", successfulReports))
 			if totalEmployees > successfulReports {
@@ -950,9 +950,9 @@ func (m *AttendanceModule) formatAttendanceReports(reports []*EmployeeAttendance
 
 	// Individual employee reports
 	if isVietnamese {
-		message.WriteString("**👥 Chi tiết từng nhân viên:**\n")
+		message.WriteString("**Chi tiết từng nhân viên:**\n")
 	} else {
-		message.WriteString("**👥 Individual Reports:**\n")
+		message.WriteString("**Individual Reports:**\n")
 	}
 
 	// Limit display to prevent overwhelming messages
@@ -974,9 +974,9 @@ func (m *AttendanceModule) formatAttendanceReports(reports []*EmployeeAttendance
 
 		if report.ErrorMessage != "" {
 			if isVietnamese {
-				message.WriteString(fmt.Sprintf("\n❌ Lỗi: %s", report.ErrorMessage))
+				message.WriteString(fmt.Sprintf("\nLỗi: %s", report.ErrorMessage))
 			} else {
-				message.WriteString(fmt.Sprintf("\n❌ Error: %s", report.ErrorMessage))
+				message.WriteString(fmt.Sprintf("\nError: %s", report.ErrorMessage))
 			}
 		} else {
 			if isVietnamese {
@@ -1003,12 +1003,6 @@ func (m *AttendanceModule) formatAttendanceReports(reports []*EmployeeAttendance
 				if report.LateDays > 0 {
 					message.WriteString(fmt.Sprintf(" | Late: %d", report.LateDays))
 				}
-			}
-
-			// Calculate attendance percentage
-			if report.TotalDays > 0 {
-				attendanceRate := float64(report.PresentDays+report.HalfDays+report.WorkFromHomeDays) / float64(report.TotalDays) * 100
-				message.WriteString(fmt.Sprintf(" | %.1f%%", attendanceRate))
 			}
 		}
 

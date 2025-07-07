@@ -37,11 +37,11 @@
   },
   {
     "id": "rollcall.checkin.success",
-    "translation": "✅ Su entrada ha sido registrada en el sistema ERP a las **%s**!"
+    "translation": "Su entrada ha sido registrada en el sistema ERP a las **%s**!"
   },
   {
     "id": "rollcall.checkout.success",
-    "translation": "✅ Su salida ha sido registrada en el sistema ERP a las **%s**!"
+    "translation": "Su salida ha sido registrada en el sistema ERP a las **%s**!"
   },
   {
     "id": "rollcall.absent.success", 
@@ -49,7 +49,7 @@
   },
   {
     "id": "rollcall.employee.not.found",
-    "translation": "❌ No se puede encontrar su registro de empleado en el sistema ERP. Póngase en contacto con su administrador."
+    "translation": "No se puede encontrar su registro de empleado en el sistema ERP. Póngase en contacto con su administrador."
   },
   {
     "id": "rollcall.erp.error",
