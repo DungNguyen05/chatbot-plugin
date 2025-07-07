@@ -9,6 +9,7 @@ const (
 	PromptAttendanceConfirmationGeneration = "attendance_confirmation_generation"
 	PromptAttendanceQueryAnalysis          = "attendance_query_analysis"
 	PromptAttendanceQueryResponse          = "attendance_query_response"
+	PromptAttendanceReasonAnalysis         = "attendance_reason_analysis"
 	PromptAttendanceReportAnalysis         = "attendance_report_analysis"
 	PromptDirectMessageQuestionSystem      = "direct_message_question_system"
 	PromptEmojiSelectSystem                = "emoji_select_system"

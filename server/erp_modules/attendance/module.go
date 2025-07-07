@@ -203,15 +203,7 @@ func (m *AttendanceModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_m
 				Error:   err.Error(),
 			}, nil
 		}
-		reason := ""
-		if reason == "" {
-			if isVietnamese {
-				reason = "Không có lý do cụ thể"
-			} else {
-				reason = "No specific reason"
-			}
-		}
-		return m.handleAbsentRequest(employeeID, ctx, intent, reason)
+		return m.handleAbsentRequest(employeeID, ctx, intent, "")
 
 	case "get_status_count":
 		// Get employee ID for status count queries
@@ -334,6 +326,19 @@ func (m *AttendanceModule) handleCheckOutRequest(employeeID string, ctx *erp_mod
 
 // handleAbsentRequest processes absent request with confirmation
 func (m *AttendanceModule) handleAbsentRequest(employeeID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent, reason string) (*erp_modules.ModuleResponse, error) {
+
+	reason, err := m.analyzeAbsentReason(ctx, intent.RawMessage)
+	if err != nil {
+		// Log the error but continue with fallback
+		m.api.LogWarn("Failed to extract absence reason using LLM, using fallback", "error", err.Error())
+		isVietnamese := detectUserLanguage(ctx.User)
+		if isVietnamese {
+			reason = "Việc cá nhân"
+		} else {
+			reason = "Personal matters"
+		}
+	}
+
 	// Always request confirmation for absence reporting as it's important
 	return m.requestConfirmation(ctx, "absent", reason, employeeID)
 }
@@ -1190,4 +1195,63 @@ func (m *AttendanceModule) getEmployeeIDFromUser(user *model.User) (string, erro
 // This method is kept for backward compatibility
 func (m *AttendanceModule) SendNotification(userID, employeeName string, eventType RollCallEventType, eventTime string, reason string) error {
 	return m.notificationManager.SendNotification(userID, employeeName, eventType, eventTime, reason)
+}
+
+// analyzeAbsentReason uses LLM to extract the absence reason from user message
+func (m *AttendanceModule) analyzeAbsentReason(ctx *erp_modules.ModuleContext, userMessage string) (string, error) {
+	// Create LLM context
+	llmContext := &llm.Context{
+		RequestingUser: ctx.User,
+		Time:           time.Now().Format(time.RFC1123),
+	}
+
+	// Detect user language
+	isVietnamese := detectUserLanguage(ctx.User)
+
+	llmContext.Parameters = map[string]interface{}{
+		"UserMessage":  userMessage,
+		"IsVietnamese": isVietnamese,
+	}
+
+	// Format the reason analysis prompt
+	systemPrompt, err := m.prompts.Format("attendance_reason_analysis", llmContext)
+	if err != nil {
+		return "", fmt.Errorf("failed to format reason analysis prompt: %w", err)
+	}
+
+	// Create completion request
+	completionRequest := llm.CompletionRequest{
+		Posts: []llm.Post{
+			{
+				Role:    llm.PostRoleSystem,
+				Message: systemPrompt,
+			},
+			{
+				Role:    llm.PostRoleUser,
+				Message: userMessage,
+			},
+		},
+		Context: llmContext,
+	}
+
+	// Get LLM response
+	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(100))
+	if err != nil {
+		return "", fmt.Errorf("failed to analyze absence reason with LLM: %w", err)
+	}
+
+	// Clean and return the response
+	reason := strings.TrimSpace(response)
+
+	// Validate that we got a reasonable response
+	if reason == "" {
+		isVietnamese := detectUserLanguage(ctx.User)
+		if isVietnamese {
+			reason = "Việc cá nhân"
+		} else {
+			reason = "Personal matters"
+		}
+	}
+
+	return reason, nil
 }
