@@ -91,8 +91,6 @@ type EmployeeAttendance struct {
 	Company        string `json:"company,omitempty"`
 }
 
-// Add these types to the existing types.go file
-
 // Employee represents an employee from ERPNext
 type Employee struct {
 	Name            string  `json:"name"`             // Employee ID
@@ -132,16 +130,4 @@ type EmployeeAttendanceReport struct {
 	EarlyExitDays    int                `json:"early_exit_days"`
 	Records          []AttendanceRecord `json:"records"`
 	ErrorMessage     string             `json:"error_message,omitempty"` // For failed queries
-}
-
-// AttendanceReportRequest represents the structured attendance report request
-type AttendanceReportRequest struct {
-	Type       string   `json:"type"`  // "by_names" or "all_employees"
-	Names      []string `json:"names"` // List of names to search for
-	TimePeriod struct {
-		Type        string `json:"type"`
-		StartDate   string `json:"start_date"`
-		EndDate     string `json:"end_date"`
-		Description string `json:"description"`
-	} `json:"time_period"`
 }

@@ -7,10 +7,8 @@ package llm
 const (
 	PromptAttendanceConfirmationAnalysis   = "attendance_confirmation_analysis"
 	PromptAttendanceConfirmationGeneration = "attendance_confirmation_generation"
-	PromptAttendanceQueryAnalysis          = "attendance_query_analysis"
-	PromptAttendanceQueryResponse          = "attendance_query_response"
 	PromptAttendanceReasonAnalysis         = "attendance_reason_analysis"
-	PromptAttendanceReportAnalysis         = "attendance_report_analysis"
+	PromptAttendanceUnifiedAnalysis        = "attendance_unified_analysis"
 	PromptDirectMessageQuestionSystem      = "direct_message_question_system"
 	PromptEmojiSelectSystem                = "emoji_select_system"
 	PromptErpActionClassification          = "erp_action_classification"

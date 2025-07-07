@@ -564,7 +564,7 @@ func (c *ERPClient) SearchEmployeesByName(searchName string) ([]Employee, error)
 		confidence := calculateNameMatchConfidence(searchNameLower, employeeNameLower, employeeIDLower, employeeNumberLower)
 
 		// Only include employees with confidence above threshold
-		if confidence >= 0.7 { // 70% confidence threshold
+		if confidence >= 0.8 { // 70% confidence threshold
 			employee.MatchConfidence = confidence
 			matchedEmployees = append(matchedEmployees, employee)
 		}
