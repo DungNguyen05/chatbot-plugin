@@ -88,7 +88,7 @@ func (m *AttendanceModule) GetCategory() string {
 
 // GetSupportedActions returns list of actions this module supports
 func (m *AttendanceModule) GetSupportedActions() []string {
-	return []string{"check_in", "check_out", "absent", "get_status_count"}
+	return []string{"check_in", "check_out", "absent", "get_status_count", "get_attendance_report"}
 }
 
 // CanHandle determines if this module can handle the given intent
@@ -155,27 +155,54 @@ func (m *AttendanceModule) ProcessUserMessage(ctx *erp_modules.ModuleContext, me
 func (m *AttendanceModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
 	isVietnamese := detectUserLanguage(ctx.User)
 
-	// Get employee ID
-	employeeID, err := m.getEmployeeIDFromUser(ctx.User)
-	if err != nil {
-		errorMsg := "❌ Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
-		if !isVietnamese {
-			errorMsg = "❌ Cannot find your employee information in the ERP system. Please contact administrator."
-		}
-		return &erp_modules.ModuleResponse{
-			Success: false,
-			Message: errorMsg,
-			Error:   err.Error(),
-		}, nil
-	}
-
-	// Execute specific action with confirmation for risky actions
+	// Execute specific action based on intent.Action
 	switch intent.Action {
 	case "check_in":
+		// Get employee ID for check-in/check-out actions
+		employeeID, err := m.getEmployeeIDFromUser(ctx.User)
+		if err != nil {
+			errorMsg := "❌ Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
+			if !isVietnamese {
+				errorMsg = "❌ Cannot find your employee information in the ERP system. Please contact administrator."
+			}
+			return &erp_modules.ModuleResponse{
+				Success: false,
+				Message: errorMsg,
+				Error:   err.Error(),
+			}, nil
+		}
 		return m.handleCheckInRequest(employeeID, ctx, intent)
+
 	case "check_out":
+		// Get employee ID for check-in/check-out actions
+		employeeID, err := m.getEmployeeIDFromUser(ctx.User)
+		if err != nil {
+			errorMsg := "❌ Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
+			if !isVietnamese {
+				errorMsg = "❌ Cannot find your employee information in the ERP system. Please contact administrator."
+			}
+			return &erp_modules.ModuleResponse{
+				Success: false,
+				Message: errorMsg,
+				Error:   err.Error(),
+			}, nil
+		}
 		return m.handleCheckOutRequest(employeeID, ctx, intent)
+
 	case "absent":
+		// Get employee ID for absence reporting
+		employeeID, err := m.getEmployeeIDFromUser(ctx.User)
+		if err != nil {
+			errorMsg := "❌ Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
+			if !isVietnamese {
+				errorMsg = "❌ Cannot find your employee information in the ERP system. Please contact administrator."
+			}
+			return &erp_modules.ModuleResponse{
+				Success: false,
+				Message: errorMsg,
+				Error:   err.Error(),
+			}, nil
+		}
 		reason := intent.Parameters["reason"]
 		if reason == "" {
 			if isVietnamese {
@@ -185,8 +212,28 @@ func (m *AttendanceModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_m
 			}
 		}
 		return m.handleAbsentRequest(employeeID, ctx, intent, reason)
+
 	case "get_status_count":
+		// Get employee ID for status count queries
+		employeeID, err := m.getEmployeeIDFromUser(ctx.User)
+		if err != nil {
+			errorMsg := "❌ Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
+			if !isVietnamese {
+				errorMsg = "❌ Cannot find your employee information in the ERP system. Please contact administrator."
+			}
+			return &erp_modules.ModuleResponse{
+				Success: false,
+				Message: errorMsg,
+				Error:   err.Error(),
+			}, nil
+		}
 		return m.handleGetStatusCountRequest(employeeID, ctx, intent)
+
+	case "get_attendance_report":
+		// For attendance reports, we don't need the current user's employee ID
+		// since we'll be searching for other employees
+		return m.handleGetAttendanceReportRequest(ctx, intent)
+
 	default:
 		errorMsg := "Hành động không được hỗ trợ"
 		if !isVietnamese {
@@ -247,6 +294,18 @@ func (m *AttendanceModule) GetActionExamples() map[string][]string {
 			"tôi đi làm mấy ngày tuần trước",
 			"show my present days",
 			"xem số ngày có mặt",
+		},
+		"get_attendance_report": {
+			"báo cáo chấm công của Minh",
+			"attendance report for Minh",
+			"xem chấm công của Minh và An",
+			"báo cáo điểm danh team",
+			"attendance của tất cả nhân viên",
+			"báo cáo chấm công toàn bộ",
+			"xem chấm công Nguyễn Văn An",
+			"attendance report all employees",
+			"chấm công của nhân viên",
+			"điểm danh báo cáo",
 		},
 	}
 }
@@ -636,6 +695,380 @@ func (m *AttendanceModule) handleAbsent(employeeID, employeeName, userID, reason
 			"employee": employeeName,
 		},
 	}, nil
+}
+
+// handleGetAttendanceReportRequest processes attendance report requests
+func (m *AttendanceModule) handleGetAttendanceReportRequest(ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
+	isVietnamese := detectUserLanguage(ctx.User)
+
+	// Use LLM to analyze the user's query and extract structured request
+	reportRequest, err := m.analyzeAttendanceReportQuery(ctx, intent.RawMessage)
+	if err != nil {
+		errorMsg := "⚠️ Không thể hiểu được yêu cầu báo cáo chấm công. Vui lòng thử lại với câu hỏi rõ ràng hơn."
+		if !isVietnamese {
+			errorMsg = "⚠️ Cannot understand the attendance report request. Please try again with a clearer question."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	// Generate attendance report based on request type
+	switch reportRequest.Type {
+	case "by_names":
+		return m.generateNameBasedReport(ctx, reportRequest, isVietnamese)
+	case "all_employees":
+		return m.generateAllEmployeesReport(ctx, reportRequest, isVietnamese)
+	default:
+		errorMsg := "⚠️ Loại báo cáo không được hỗ trợ."
+		if !isVietnamese {
+			errorMsg = "⚠️ Unsupported report type."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+		}, nil
+	}
+}
+
+// generateNameBasedReport generates report for specific employees by name
+func (m *AttendanceModule) generateNameBasedReport(ctx *erp_modules.ModuleContext, request *AttendanceReportRequest, isVietnamese bool) (*erp_modules.ModuleResponse, error) {
+	var allReports []*EmployeeAttendanceReport
+	var allMatchedEmployees []Employee
+
+	// Search for employees matching each name
+	for _, name := range request.Names {
+		matchedEmployees, err := m.erpClient.SearchEmployeesByName(name)
+		if err != nil {
+			m.api.LogError("Failed to search employees by name", "name", name, "error", err.Error())
+			continue
+		}
+		allMatchedEmployees = append(allMatchedEmployees, matchedEmployees...)
+	}
+
+	// Remove duplicates (same employee matched by different names)
+	uniqueEmployees := m.removeDuplicateEmployees(allMatchedEmployees)
+
+	if len(uniqueEmployees) == 0 {
+		errorMsg := fmt.Sprintf("❌ Không tìm thấy nhân viên nào phù hợp với tên: %s", strings.Join(request.Names, ", "))
+		if !isVietnamese {
+			errorMsg = fmt.Sprintf("❌ No employees found matching names: %s", strings.Join(request.Names, ", "))
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+		}, nil
+	}
+
+	// Limit results to prevent overwhelming reports
+	maxResults := 20
+	if len(uniqueEmployees) > maxResults {
+		uniqueEmployees = uniqueEmployees[:maxResults]
+	}
+
+	// Generate attendance reports for each matched employee
+	for _, employee := range uniqueEmployees {
+		report, err := m.erpClient.GetAttendanceForEmployee(
+			employee.Name,
+			request.TimePeriod.StartDate,
+			request.TimePeriod.EndDate,
+		)
+		if err != nil {
+			// Create error report for failed employee
+			report = &EmployeeAttendanceReport{
+				EmployeeID:   employee.Name,
+				EmployeeName: employee.EmployeeName,
+				ErrorMessage: err.Error(),
+			}
+		} else {
+			report.EmployeeName = employee.EmployeeName
+		}
+		allReports = append(allReports, report)
+	}
+
+	// Generate formatted response
+	responseMessage := m.formatAttendanceReports(allReports, request, isVietnamese, "name_based")
+
+	return &erp_modules.ModuleResponse{
+		Success:     true,
+		Message:     responseMessage,
+		ActionTaken: "get_attendance_report",
+		Data: map[string]interface{}{
+			"report_type":       "by_names",
+			"searched_names":    request.Names,
+			"employees_found":   len(uniqueEmployees),
+			"reports_generated": len(allReports),
+			"time_period":       request.TimePeriod.Description,
+		},
+	}, nil
+}
+
+// generateAllEmployeesReport generates report for all employees
+func (m *AttendanceModule) generateAllEmployeesReport(ctx *erp_modules.ModuleContext, request *AttendanceReportRequest, isVietnamese bool) (*erp_modules.ModuleResponse, error) {
+	// Get all employees from ERP
+	allEmployees, err := m.erpClient.GetAllEmployees()
+	if err != nil {
+		errorMsg := "⚠️ Không thể lấy danh sách nhân viên từ hệ thống ERP."
+		if !isVietnamese {
+			errorMsg = "⚠️ Cannot retrieve employee list from ERP system."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	if len(allEmployees) == 0 {
+		errorMsg := "❌ Không có nhân viên nào trong hệ thống."
+		if !isVietnamese {
+			errorMsg = "❌ No employees found in the system."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+		}, nil
+	}
+
+	var allReports []*EmployeeAttendanceReport
+
+	// Generate attendance reports for all employees
+	successCount := 0
+	for _, employee := range allEmployees {
+		report, err := m.erpClient.GetAttendanceForEmployee(
+			employee.Name,
+			request.TimePeriod.StartDate,
+			request.TimePeriod.EndDate,
+		)
+		if err != nil {
+			// Create error report for failed employee
+			report = &EmployeeAttendanceReport{
+				EmployeeID:   employee.Name,
+				EmployeeName: employee.EmployeeName,
+				ErrorMessage: err.Error(),
+			}
+		} else {
+			report.EmployeeName = employee.EmployeeName
+			successCount++
+		}
+		allReports = append(allReports, report)
+	}
+
+	// Generate formatted response
+	responseMessage := m.formatAttendanceReports(allReports, request, isVietnamese, "all_employees")
+
+	return &erp_modules.ModuleResponse{
+		Success:     true,
+		Message:     responseMessage,
+		ActionTaken: "get_attendance_report",
+		Data: map[string]interface{}{
+			"report_type":        "all_employees",
+			"total_employees":    len(allEmployees),
+			"successful_reports": successCount,
+			"failed_reports":     len(allEmployees) - successCount,
+			"time_period":        request.TimePeriod.Description,
+		},
+	}, nil
+}
+
+// removeDuplicateEmployees removes duplicate employees from the list
+func (m *AttendanceModule) removeDuplicateEmployees(employees []Employee) []Employee {
+	seen := make(map[string]bool)
+	var unique []Employee
+
+	for _, emp := range employees {
+		if !seen[emp.Name] {
+			seen[emp.Name] = true
+			unique = append(unique, emp)
+		}
+	}
+
+	return unique
+}
+
+// formatAttendanceReports formats the attendance reports into a readable message
+func (m *AttendanceModule) formatAttendanceReports(reports []*EmployeeAttendanceReport, request *AttendanceReportRequest, isVietnamese bool, reportType string) string {
+	var message strings.Builder
+
+	// Header
+	if reportType == "all_employees" {
+		if isVietnamese {
+			message.WriteString(fmt.Sprintf("📊 **Báo cáo chấm công tất cả nhân viên** (%s)\n", request.TimePeriod.Description))
+		} else {
+			message.WriteString(fmt.Sprintf("📊 **All Employees Attendance Report** (%s)\n", request.TimePeriod.Description))
+		}
+	} else {
+		searchedNames := strings.Join(request.Names, ", ")
+		if isVietnamese {
+			message.WriteString(fmt.Sprintf("📊 **Báo cáo chấm công cho '%s'** (%s)\n", searchedNames, request.TimePeriod.Description))
+		} else {
+			message.WriteString(fmt.Sprintf("📊 **Attendance Report for '%s'** (%s)\n", searchedNames, request.TimePeriod.Description))
+		}
+	}
+
+	message.WriteString("\n")
+
+	// Summary statistics
+	totalEmployees := len(reports)
+	var totalPresent, totalAbsent, totalHalfDay, totalWFH, successfulReports int
+
+	for _, report := range reports {
+		if report.ErrorMessage == "" {
+			successfulReports++
+			totalPresent += report.PresentDays
+			totalAbsent += report.AbsentDays
+			totalHalfDay += report.HalfDays
+			totalWFH += report.WorkFromHomeDays
+		}
+	}
+
+	if successfulReports > 0 {
+		if isVietnamese {
+			message.WriteString("**📈 Tổng quan:**\n")
+			message.WriteString(fmt.Sprintf("• Tổng số nhân viên: %d\n", totalEmployees))
+			message.WriteString(fmt.Sprintf("• Báo cáo thành công: %d\n", successfulReports))
+			if totalEmployees > successfulReports {
+				message.WriteString(fmt.Sprintf("• Báo cáo lỗi: %d\n", totalEmployees-successfulReports))
+			}
+		} else {
+			message.WriteString("**📈 Summary:**\n")
+			message.WriteString(fmt.Sprintf("• Total employees: %d\n", totalEmployees))
+			message.WriteString(fmt.Sprintf("• Successful reports: %d\n", successfulReports))
+			if totalEmployees > successfulReports {
+				message.WriteString(fmt.Sprintf("• Failed reports: %d\n", totalEmployees-successfulReports))
+			}
+		}
+		message.WriteString("\n")
+	}
+
+	// Individual employee reports
+	if isVietnamese {
+		message.WriteString("**👥 Chi tiết từng nhân viên:**\n")
+	} else {
+		message.WriteString("**👥 Individual Reports:**\n")
+	}
+
+	// Limit display to prevent overwhelming messages
+	displayLimit := 15
+	displayedCount := 0
+
+	for _, report := range reports {
+		if displayedCount >= displayLimit {
+			remaining := len(reports) - displayedCount
+			if isVietnamese {
+				message.WriteString(fmt.Sprintf("\n... và %d nhân viên khác. Sử dụng tên cụ thể hơn để thu hẹp kết quả.\n", remaining))
+			} else {
+				message.WriteString(fmt.Sprintf("\n... and %d more employees. Use more specific names to narrow results.\n", remaining))
+			}
+			break
+		}
+
+		message.WriteString(fmt.Sprintf("\n**%s** (%s)", report.EmployeeName, report.EmployeeID))
+
+		if report.ErrorMessage != "" {
+			if isVietnamese {
+				message.WriteString(fmt.Sprintf("\n❌ Lỗi: %s", report.ErrorMessage))
+			} else {
+				message.WriteString(fmt.Sprintf("\n❌ Error: %s", report.ErrorMessage))
+			}
+		} else {
+			if isVietnamese {
+				message.WriteString(fmt.Sprintf("\n• Tổng số ngày: %d | Có mặt: %d | Vắng mặt: %d",
+					report.TotalDays, report.PresentDays, report.AbsentDays))
+				if report.HalfDays > 0 {
+					message.WriteString(fmt.Sprintf(" | Nửa ngày: %d", report.HalfDays))
+				}
+				if report.WorkFromHomeDays > 0 {
+					message.WriteString(fmt.Sprintf(" | WFH: %d", report.WorkFromHomeDays))
+				}
+				if report.LateDays > 0 {
+					message.WriteString(fmt.Sprintf(" | Đi muộn: %d", report.LateDays))
+				}
+			} else {
+				message.WriteString(fmt.Sprintf("\n• Total: %d | Present: %d | Absent: %d",
+					report.TotalDays, report.PresentDays, report.AbsentDays))
+				if report.HalfDays > 0 {
+					message.WriteString(fmt.Sprintf(" | Half Day: %d", report.HalfDays))
+				}
+				if report.WorkFromHomeDays > 0 {
+					message.WriteString(fmt.Sprintf(" | WFH: %d", report.WorkFromHomeDays))
+				}
+				if report.LateDays > 0 {
+					message.WriteString(fmt.Sprintf(" | Late: %d", report.LateDays))
+				}
+			}
+
+			// Calculate attendance percentage
+			if report.TotalDays > 0 {
+				attendanceRate := float64(report.PresentDays+report.HalfDays+report.WorkFromHomeDays) / float64(report.TotalDays) * 100
+				message.WriteString(fmt.Sprintf(" | %.1f%%", attendanceRate))
+			}
+		}
+
+		displayedCount++
+	}
+
+	return message.String()
+}
+
+// analyzeAttendanceReportQuery uses LLM to convert natural language to structured report request
+func (m *AttendanceModule) analyzeAttendanceReportQuery(ctx *erp_modules.ModuleContext, userMessage string) (*AttendanceReportRequest, error) {
+	// Create LLM context
+	llmContext := &llm.Context{
+		RequestingUser: ctx.User,
+		Time:           time.Now().Format(time.RFC1123),
+	}
+	llmContext.Parameters = map[string]interface{}{
+		"UserMessage": userMessage,
+	}
+
+	// Format the report analysis prompt
+	systemPrompt, err := m.prompts.Format("attendance_report_analysis", llmContext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to format report analysis prompt: %w", err)
+	}
+
+	// Create completion request
+	completionRequest := llm.CompletionRequest{
+		Posts: []llm.Post{
+			{
+				Role:    llm.PostRoleSystem,
+				Message: systemPrompt,
+			},
+			{
+				Role:    llm.PostRoleUser,
+				Message: userMessage,
+			},
+		},
+		Context: llmContext,
+	}
+
+	// Get LLM response
+	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(300))
+	if err != nil {
+		return nil, fmt.Errorf("failed to analyze report query with LLM: %w", err)
+	}
+
+	// Parse JSON response
+	var reportRequest AttendanceReportRequest
+
+	// Clean response to extract JSON
+	response = strings.TrimSpace(response)
+	start := strings.Index(response, "{")
+	end := strings.LastIndex(response, "}") + 1
+
+	if start == -1 || end <= start {
+		return nil, fmt.Errorf("no valid JSON found in LLM response: %s", response)
+	}
+
+	jsonStr := response[start:end]
+	if err := json.Unmarshal([]byte(jsonStr), &reportRequest); err != nil {
+		return nil, fmt.Errorf("failed to parse LLM response as JSON: %w", err)
+	}
+
+	return &reportRequest, nil
 }
 
 // analyzeAttendanceQuery uses LLM to convert natural language to structured request
