@@ -65,7 +65,6 @@ func (p *Plugin) SetupTables() error {
 	driverName := p.pluginAPI.Store.DriverName()
 
 	var createTableSQL string
-	var alterTableSQL string
 
 	if driverName == model.DatabaseDriverPostgres {
 		createTableSQL = `
@@ -74,7 +73,6 @@ func (p *Plugin) SetupTables() error {
 				Title TEXT NOT NULL
 			);
 		`
-		alterTableSQL = `ALTER TABLE IF EXISTS LLM_Threads DROP CONSTRAINT IF EXISTS llm_threads_rootpostid_fkey;`
 	} else {
 		// MySQL
 		createTableSQL = `
@@ -84,17 +82,83 @@ func (p *Plugin) SetupTables() error {
 				FOREIGN KEY (RootPostID) REFERENCES Posts(ID) ON DELETE CASCADE
 			);
 		`
-		alterTableSQL = `ALTER TABLE LLM_Threads DROP FOREIGN KEY IF EXISTS llm_threads_rootpostid_fkey;`
 	}
 
 	if _, err := p.db.Exec(createTableSQL); err != nil {
 		return fmt.Errorf("can't create llm titles table: %w", err)
 	}
 
+	// Handle migration from old LLM_Threads table if it exists
 	// This fixes data retention issues when a post is deleted for an older version of the postmeta table.
-	// Migrate from the old table using `"INSERT INTO LLM_PostMeta(RootPostID, Title) SELECT RootPostID, Title from LLM_Threads"`
-	if _, err := p.db.Exec(alterTableSQL); err != nil {
-		return fmt.Errorf("failed to migrate constraint: %w", err)
+	if err := p.migrateLegacyTable(); err != nil {
+		return fmt.Errorf("failed to migrate legacy table: %w", err)
+	}
+
+	return nil
+}
+
+// migrateLegacyTable handles the migration from the old LLM_Threads table
+func (p *Plugin) migrateLegacyTable() error {
+	driverName := p.pluginAPI.Store.DriverName()
+
+	// First, check if the old LLM_Threads table exists
+	var tableExists bool
+	if driverName == model.DatabaseDriverPostgres {
+		err := p.db.Get(&tableExists,
+			"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'llm_threads')")
+		if err != nil {
+			// If we can't check, assume table doesn't exist and continue
+			return nil
+		}
+	} else {
+		// MySQL
+		err := p.db.Get(&tableExists,
+			"SELECT COUNT(*) > 0 FROM information_schema.tables WHERE table_name = 'LLM_Threads' AND table_schema = DATABASE()")
+		if err != nil {
+			// If we can't check, assume table doesn't exist and continue
+			return nil
+		}
+	}
+
+	if !tableExists {
+		return nil
+	}
+
+	// If old table exists, migrate data and drop constraints
+	if driverName == model.DatabaseDriverPostgres {
+		// Drop constraint if it exists (PostgreSQL supports IF EXISTS)
+		if _, err := p.db.Exec("ALTER TABLE IF EXISTS LLM_Threads DROP CONSTRAINT IF EXISTS llm_threads_rootpostid_fkey"); err != nil {
+			// Log but don't fail - constraint might not exist
+			p.pluginAPI.Log.Warn("Could not drop constraint from LLM_Threads table", "error", err)
+		}
+	} else {
+		// MySQL - need to check if constraint exists before dropping
+		var constraintExists bool
+		err := p.db.Get(&constraintExists, `
+			SELECT COUNT(*) > 0 
+			FROM information_schema.table_constraints 
+			WHERE constraint_name = 'llm_threads_rootpostid_fkey' 
+			AND table_name = 'LLM_Threads' 
+			AND table_schema = DATABASE()`)
+
+		if err == nil && constraintExists {
+			if _, err := p.db.Exec("ALTER TABLE LLM_Threads DROP FOREIGN KEY llm_threads_rootpostid_fkey"); err != nil {
+				// Log but don't fail - we'll try to continue
+				p.pluginAPI.Log.Warn("Could not drop constraint from LLM_Threads table", "error", err)
+			}
+		}
+	}
+
+	// Migrate data from old table to new table
+	_, err := p.db.Exec("INSERT IGNORE INTO LLM_PostMeta(RootPostID, Title) SELECT RootPostID, Title FROM LLM_Threads")
+	if err != nil {
+		// For PostgreSQL, use ON CONFLICT instead of INSERT IGNORE
+		if driverName == model.DatabaseDriverPostgres {
+			_, err = p.db.Exec("INSERT INTO LLM_PostMeta(RootPostID, Title) SELECT RootPostID, Title FROM LLM_Threads ON CONFLICT (RootPostID) DO NOTHING")
+		}
+		if err != nil {
+			p.pluginAPI.Log.Warn("Could not migrate data from LLM_Threads to LLM_PostMeta", "error", err)
+		}
 	}
 
 	return nil
