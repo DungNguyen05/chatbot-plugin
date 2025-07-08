@@ -17,12 +17,22 @@ func detectUserLanguage(user *model.User) bool {
 
 // getUserDisplayName returns the best display name for a user
 func getUserDisplayName(user *model.User) string {
+	// Try to build full name first
+	fullName := strings.TrimSpace(user.FirstName + " " + user.LastName)
+	if fullName != "" && fullName != " " {
+		return fullName
+	}
+
+	// Fallback to first name only if last name is not available
 	if user.FirstName != "" {
 		return user.FirstName
 	}
+
+	// Further fallbacks
 	if user.Nickname != "" {
 		return user.Nickname
 	}
+
 	return user.Username
 }
 
