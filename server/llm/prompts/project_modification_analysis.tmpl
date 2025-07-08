@@ -35,11 +35,27 @@ User response: "{{.Parameters.UserMessage}}"
 - If user makes corrections → MODIFY
 - Only pure agreement without new info → CONFIRM
 
+**FIELD VALIDATION RULES FOR MODIFICATIONS:**
+When extracting modifications, ensure values comply with these rules:
+
+**priority** (string): Must be one of:
+- "High" (for urgent, important, asap, cao, khẩn cấp)
+- "Medium" (for normal, bình thường, trung bình)  
+- "Low" (for not urgent, không khẩn cấp, thấp)
+- "" (empty if not specified)
+
+**project_type** (string): Must be one of:
+- "Internal" (for internal projects, dự án nội bộ)
+- "External" (for client/customer projects, dự án khách hàng)
+- "Other" (for other types, khác)
+- "" (empty if not specified)
+
 **For MODIFY intent:**
 Extract the specific modifications requested. CRITICAL: Always maintain the complete schema structure. If user wants to:
 - Add/change a field: Update that field value
 - Keep all other fields unchanged, including empty ones
 - Never remove fields from the schema
+- ALWAYS validate field values against the rules above
 
 **DATE FORMATTING RULES FOR MODIFICATIONS:**
 - Current date context: {{.Time}}
@@ -53,6 +69,8 @@ Extract the specific modifications requested. CRITICAL: Always maintain the comp
 - "set customer to ABC Company" → modify customer to "ABC Company"
 - "add start date 29/12/2026" → modify expected_start_date to "2026-12-29"
 - "change end date to tomorrow" → modify expected_end_date to calculated date in YYYY-MM-DD format
+- "đây là dự án ngoại bộ" → modify project_type to "External"
+- "set priority khẩn cấp" → modify priority to "High"
 
 Respond with ONLY valid JSON:
 {
