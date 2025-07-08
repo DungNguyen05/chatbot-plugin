@@ -79,7 +79,7 @@ func (m *AttendanceModule) handleCheckOutRequest(employeeID string, ctx *erp_mod
 }
 
 // handleAbsentRequest processes absent request with confirmation
-func (m *AttendanceModule) handleAbsentRequest(employeeID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent, reason string) (*erp_modules.ModuleResponse, error) {
+func (m *AttendanceModule) handleAbsentRequest(employeeID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
 	reason, err := m.analyzeAbsentReason(ctx, intent.RawMessage)
 	if err != nil {
 		// Log the error but continue with fallback

@@ -195,7 +195,7 @@ func (m *AttendanceModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_m
 				Error:   err.Error(),
 			}, nil
 		}
-		return m.handleAbsentRequest(employeeID, ctx, intent, "")
+		return m.handleAbsentRequest(employeeID, ctx, intent)
 
 	case "get_attendance_report":
 		// Handle unified attendance report (for self, by names, or all employees)
