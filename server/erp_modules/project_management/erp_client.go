@@ -128,6 +128,83 @@ func (c *ERPClient) GetEmployeeByChatID(chatID string) (string, error) {
 	return "", fmt.Errorf("no employee found with chat_id: %s", chatID)
 }
 
+// GetAllEmployees fetches all employees from ERPNext
+func (c *ERPClient) GetAllEmployees() ([]Employee, error) {
+	c.api.LogDebug("Getting all employees from ERPNext for project management")
+
+	// Validate configuration
+	if err := c.validateConfig(); err != nil {
+		return nil, err
+	}
+
+	// Combine API key and secret for token
+	erpToken := c.config.ERPAPIKey + ":" + c.config.ERPAPISecret
+
+	// Build the API endpoint for fetching all employees
+	baseURL := strings.TrimSuffix(c.config.ERPDomain, "/") + "/api/resource/Employee"
+
+	// Parse the base URL
+	reqURL, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse URL: %w", err)
+	}
+
+	// Add query parameters
+	query := reqURL.Query()
+	query.Add("fields", `["name","employee_name","custom_chat_id","status","department","designation","employee_number"]`)
+	query.Add("filters", `[["status","=","Active"]]`) // Only active employees
+	query.Add("limit_page_length", "1000")            // Get more employees
+	reqURL.RawQuery = query.Encode()
+
+	c.api.LogDebug("Making request to ERPNext for all employees", "url", reqURL.String())
+
+	// Create the request
+	req, err := http.NewRequest("GET", reqURL.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Authorization", "token "+erpToken)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	// Make the request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read the response
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	c.api.LogDebug("ERPNext API Response for all employees",
+		"status", resp.Status,
+		"response_length", len(respBody))
+
+	// Check the response status
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ERP API error: %s - %s", resp.Status, string(respBody))
+	}
+
+	// Parse the response
+	var apiResponse struct {
+		Data []Employee `json:"data"`
+	}
+
+	if err := json.Unmarshal(respBody, &apiResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	c.api.LogDebug("Found employees for project management", "count", len(apiResponse.Data))
+
+	return apiResponse.Data, nil
+}
+
 // CreateProject creates a new project in ERPNext
 func (c *ERPClient) CreateProject(projectData ProjectCreationRequest, creatorEmployeeID string) (string, error) {
 	c.api.LogDebug("Creating project in ERPNext", "project_name", projectData.ProjectName)
@@ -309,6 +386,10 @@ func NewProject(data ProjectCreationRequest, creatorEmployeeID string) *Project 
 	if data.Customer != "" {
 		project.Customer = data.Customer
 	}
+	// Only set project manager if we have a resolved employee ID
+	if data.AssignedToEmployeeID != "" {
+		project.ProjectManager = data.AssignedToEmployeeID
+	}
 
 	return project
 }
@@ -336,8 +417,9 @@ func NewTask(data TaskCreationRequest, creatorEmployeeID string) *Task {
 	if data.Project != "" {
 		task.Project = data.Project
 	}
-	if data.AssignedTo != "" {
-		task.AssignedTo = data.AssignedTo
+	// Only set assigned_to if we have a resolved employee ID
+	if data.AssignedToEmployeeID != "" {
+		task.AssignedTo = data.AssignedToEmployeeID
 	}
 	if data.Description != "" {
 		task.Description = data.Description

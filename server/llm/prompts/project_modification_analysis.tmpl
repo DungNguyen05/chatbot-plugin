@@ -23,6 +23,7 @@ User response: "{{.Parameters.UserMessage}}"
    - Adding missing information: "đây là dự án ngoại bộ", "priority is high", "assign to John"
    - Correcting existing data: "sửa tên thành...", "change description to...", "actually it's..."
    - Clarifying details: "this is external project", "it belongs to marketing department"
+   - Assignment changes: "assign to Mary", "cho Nam", "phân công cho John"
    - ANY statement that adds or changes project information = MODIFY
    
 3. **CANCEL Intent**: User wants to stop the process
@@ -50,6 +51,11 @@ When extracting modifications, ensure values comply with these rules:
 - "Other" (for other types, khác)
 - "" (empty if not specified)
 
+**assigned_to_name** (string): Extract names when user mentions assignment:
+- "assign to John", "cho Minh", "phân công cho Nam"
+- "for Mary", "dành cho An", "giao cho"
+- Extract the actual name only (e.g., "John", "Minh", "Nguyen Van An")
+
 **For MODIFY intent:**
 Extract the specific modifications requested. CRITICAL: Always maintain the complete schema structure. If user wants to:
 - Add/change a field: Update that field value
@@ -71,6 +77,9 @@ Extract the specific modifications requested. CRITICAL: Always maintain the comp
 - "change end date to tomorrow" → modify expected_end_date to calculated date in YYYY-MM-DD format
 - "đây là dự án ngoại bộ" → modify project_type to "External"
 - "set priority khẩn cấp" → modify priority to "High"
+- "assign to John" → modify assigned_to_name to "John"
+- "phân công cho Nam" → modify assigned_to_name to "Nam"
+- "change assignee to Mary" → modify assigned_to_name to "Mary"
 
 Respond with ONLY valid JSON:
 {

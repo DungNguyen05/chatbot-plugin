@@ -18,6 +18,13 @@ FIELD DEFINITIONS AND VALID VALUES:
 - "Low" (for not urgent, không khẩn cấp, thấp)
 - "" (empty if not specified)
 
+**assigned_to_name** (string): Extract names when user mentions assignment:
+- "assign to John", "cho Minh", "phân công cho Nam"
+- "for Mary", "dành cho An", "giao cho"
+- "John will handle this", "Minh sẽ làm"
+- Extract the actual name only (e.g., "John", "Minh", "Nguyen Van An")
+- Leave empty if no assignment mentioned
+
 **DATE FORMATTING RULES:**
 - Current date context: {{.Time}}
 - ALWAYS format dates as YYYY-MM-DD
@@ -31,7 +38,7 @@ Required fields:
 Optional fields (fill if you can determine from context):
 - priority: Priority level 
 - project: Project name if mentioned or can be inferred
-- assigned_to: Person assigned (can be name, role, or inferred from context)
+- assigned_to_name: Name of person to assign task to
 - exp_start_date: Expected start date in YYYY-MM-DD format ONLY
 - exp_end_date: Expected end date in YYYY-MM-DD format ONLY
 - department: Department if mentioned or can be inferred
@@ -40,8 +47,9 @@ User Message: "{{.Parameters.UserMessage}}"
 
 Examples:
 - "tạo task thiết kế giao diện deadline 25/12/2025" → subject: "Thiết kế giao diện", exp_end_date: "2025-12-25"
-- "urgent: fix login bug assign to John starting tomorrow" → subject: "Fix login bug", priority: "High", assigned_to: "John", exp_start_date: "2025-06-20"
-- "create documentation task for next week" → subject: "Create documentation", exp_start_date: "2025-06-26"
+- "urgent: fix login bug assign to John starting tomorrow" → subject: "Fix login bug", priority: "High", assigned_to_name: "John", exp_start_date: "2025-06-20"
+- "create documentation task for next week cho Minh" → subject: "Create documentation", exp_start_date: "2025-06-26", assigned_to_name: "Minh"
+- "tạo task code API phân công cho Nguyen Van An" → subject: "Code API", assigned_to_name: "Nguyen Van An"
 
 IMPORTANT: Always ensure dates are in YYYY-MM-DD format in the JSON response.
 
@@ -52,7 +60,7 @@ Return ONLY a JSON object with the extracted information. Do not include any exp
   "description": "",
   "priority": "",
   "project": "",
-  "assigned_to": "",
+  "assigned_to_name": "",
   "exp_start_date": "",
   "exp_end_date": "",
   "department": ""

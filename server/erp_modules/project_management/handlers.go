@@ -78,6 +78,9 @@ func (m *ProjectManagementModule) handleCreateProjectRequest(employeeID string, 
 		}, nil
 	}
 
+	// Process assignee if provided (using dedicated function)
+	m.processAssigneeForProject(projectRequest)
+
 	// Request confirmation
 	return m.requestConfirmation(ctx, "create_project", "project", projectRequest, employeeID)
 }
@@ -111,6 +114,9 @@ func (m *ProjectManagementModule) handleCreateTaskRequest(employeeID string, ctx
 			Message: errorMsg,
 		}, nil
 	}
+
+	// Process assignee if provided (using dedicated function)
+	m.processAssigneeForTask(taskRequest)
 
 	// Request confirmation
 	return m.requestConfirmation(ctx, "create_task", "task", taskRequest, employeeID)
@@ -202,9 +208,20 @@ func (m *ProjectManagementModule) handleCreateProject(employeeID, userID string,
 
 	user, _ := m.api.GetUser(userID)
 	isVietnamese := detectUserLanguage(user)
-	successMsg := fmt.Sprintf("Đã tạo dự án mới thành công: **%s**!", projectName)
-	if !isVietnamese {
-		successMsg = fmt.Sprintf("Successfully created new project: **%s**!", projectName)
+
+	var successMsg string
+	if projectRequest.AssignedToEmployeeID != "" {
+		if isVietnamese {
+			successMsg = fmt.Sprintf("Đã tạo dự án mới thành công: **%s** và phân công cho nhân viên!", projectName)
+		} else {
+			successMsg = fmt.Sprintf("Successfully created new project: **%s** and assigned to employee!", projectName)
+		}
+	} else {
+		if isVietnamese {
+			successMsg = fmt.Sprintf("Đã tạo dự án mới thành công: **%s**!", projectName)
+		} else {
+			successMsg = fmt.Sprintf("Successfully created new project: **%s**!", projectName)
+		}
 	}
 
 	return &erp_modules.ModuleResponse{
@@ -212,9 +229,10 @@ func (m *ProjectManagementModule) handleCreateProject(employeeID, userID string,
 		Message:     successMsg,
 		ActionTaken: "create_project",
 		Data: map[string]interface{}{
-			"project_name": projectName,
-			"description":  projectRequest.Description,
-			"priority":     projectRequest.Priority,
+			"project_name":            projectName,
+			"description":             projectRequest.Description,
+			"priority":                projectRequest.Priority,
+			"assigned_to_employee_id": projectRequest.AssignedToEmployeeID,
 		},
 	}, nil
 }
@@ -242,9 +260,20 @@ func (m *ProjectManagementModule) handleCreateTask(employeeID, userID string, da
 
 	user, _ := m.api.GetUser(userID)
 	isVietnamese := detectUserLanguage(user)
-	successMsg := fmt.Sprintf("Đã tạo task mới thành công: **%s**!", taskName)
-	if !isVietnamese {
-		successMsg = fmt.Sprintf("Successfully created new task: **%s**!", taskName)
+
+	var successMsg string
+	if taskRequest.AssignedToEmployeeID != "" {
+		if isVietnamese {
+			successMsg = fmt.Sprintf("Đã tạo task mới thành công: **%s** và phân công cho nhân viên!", taskName)
+		} else {
+			successMsg = fmt.Sprintf("Successfully created new task: **%s** and assigned to employee!", taskName)
+		}
+	} else {
+		if isVietnamese {
+			successMsg = fmt.Sprintf("Đã tạo task mới thành công: **%s**!", taskName)
+		} else {
+			successMsg = fmt.Sprintf("Successfully created new task: **%s**!", taskName)
+		}
 	}
 
 	return &erp_modules.ModuleResponse{
@@ -252,11 +281,11 @@ func (m *ProjectManagementModule) handleCreateTask(employeeID, userID string, da
 		Message:     successMsg,
 		ActionTaken: "create_task",
 		Data: map[string]interface{}{
-			"task_name":   taskName,
-			"description": taskRequest.Description,
-			"assigned_to": taskRequest.AssignedTo,
-			"priority":    taskRequest.Priority,
-			"project":     taskRequest.Project,
+			"task_name":               taskName,
+			"description":             taskRequest.Description,
+			"assigned_to_employee_id": taskRequest.AssignedToEmployeeID,
+			"priority":                taskRequest.Priority,
+			"project":                 taskRequest.Project,
 		},
 	}, nil
 }

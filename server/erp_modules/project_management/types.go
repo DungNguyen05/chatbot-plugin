@@ -33,6 +33,18 @@ type PluginAPI interface {
 	GetUser(userID string) (*model.User, error)
 }
 
+// Employee represents an employee from ERPNext
+type Employee struct {
+	Name            string  `json:"name"`             // Employee ID
+	EmployeeName    string  `json:"employee_name"`    // Full name
+	CustomChatID    string  `json:"custom_chat_id"`   // Chat ID for integration
+	Status          string  `json:"status"`           // Active/Inactive
+	Department      string  `json:"department"`       // Department
+	Designation     string  `json:"designation"`      // Job title
+	EmployeeNumber  string  `json:"employee_number"`  // Employee number
+	MatchConfidence float64 `json:"match_confidence"` // Search confidence score
+}
+
 // Project represents the data structure for ERPNext Project
 type Project struct {
 	Docstatus         int    `json:"docstatus"`
@@ -51,6 +63,7 @@ type Project struct {
 	Department        string `json:"department,omitempty"`
 	Customer          string `json:"customer,omitempty"`
 	Company           string `json:"company,omitempty"`
+	ProjectManager    string `json:"project_manager,omitempty"` // Employee ID for assigned project manager
 }
 
 // Task represents the data structure for ERPNext Task
@@ -65,7 +78,7 @@ type Task struct {
 	Status       string `json:"status"`
 	Priority     string `json:"priority,omitempty"`
 	Project      string `json:"project,omitempty"`
-	AssignedTo   string `json:"assigned_to,omitempty"`
+	AssignedTo   string `json:"assigned_to,omitempty"` // Employee ID for assigned person
 	Description  string `json:"description,omitempty"`
 	ExpStartDate string `json:"exp_start_date,omitempty"`
 	ExpEndDate   string `json:"exp_end_date,omitempty"`
@@ -75,26 +88,29 @@ type Task struct {
 
 // ProjectCreationRequest represents parsed project creation intent
 type ProjectCreationRequest struct {
-	ProjectName       string `json:"project_name"`
-	Description       string `json:"description,omitempty"`
-	Priority          string `json:"priority,omitempty"`
-	ProjectType       string `json:"project_type,omitempty"`
-	ExpectedStartDate string `json:"expected_start_date,omitempty"`
-	ExpectedEndDate   string `json:"expected_end_date,omitempty"`
-	Department        string `json:"department,omitempty"`
-	Customer          string `json:"customer,omitempty"`
+	ProjectName          string `json:"project_name"`
+	Description          string `json:"description,omitempty"`
+	Priority             string `json:"priority,omitempty"`
+	ProjectType          string `json:"project_type,omitempty"`
+	ExpectedStartDate    string `json:"expected_start_date,omitempty"`
+	ExpectedEndDate      string `json:"expected_end_date,omitempty"`
+	Department           string `json:"department,omitempty"`
+	Customer             string `json:"customer,omitempty"`
+	AssignedToName       string `json:"assigned_to_name,omitempty"`        // Name extracted from user input
+	AssignedToEmployeeID string `json:"assigned_to_employee_id,omitempty"` // Resolved employee ID
 }
 
 // TaskCreationRequest represents parsed task creation intent
 type TaskCreationRequest struct {
-	Subject      string `json:"subject"`
-	Description  string `json:"description,omitempty"`
-	Priority     string `json:"priority,omitempty"`
-	Project      string `json:"project,omitempty"`
-	AssignedTo   string `json:"assigned_to,omitempty"`
-	ExpStartDate string `json:"exp_start_date,omitempty"`
-	ExpEndDate   string `json:"exp_end_date,omitempty"`
-	Department   string `json:"department,omitempty"`
+	Subject              string `json:"subject"`
+	Description          string `json:"description,omitempty"`
+	Priority             string `json:"priority,omitempty"`
+	Project              string `json:"project,omitempty"`
+	AssignedToName       string `json:"assigned_to_name,omitempty"`        // Name extracted from user input
+	AssignedToEmployeeID string `json:"assigned_to_employee_id,omitempty"` // Resolved employee ID
+	ExpStartDate         string `json:"exp_start_date,omitempty"`
+	ExpEndDate           string `json:"exp_end_date,omitempty"`
+	Department           string `json:"department,omitempty"`
 }
 
 // ProjectManagementConfirmation represents pending confirmation
@@ -112,4 +128,12 @@ type UserResponse struct {
 	Intent        string                 `json:"intent"`        // "confirm", "modify", "cancel"
 	Modifications map[string]interface{} `json:"modifications"` // Fields to modify
 	Reasoning     string                 `json:"reasoning"`     // LLM reasoning
+}
+
+// AssigneeResolutionResult represents the result of resolving an assignee name
+type AssigneeResolutionResult struct {
+	Found        bool   `json:"found"`
+	EmployeeID   string `json:"employee_id"`
+	EmployeeName string `json:"employee_name"`
+	Error        string `json:"error,omitempty"`
 }

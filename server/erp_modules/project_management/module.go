@@ -172,6 +172,8 @@ func (m *ProjectManagementModule) GetActionExamples() map[string][]string {
 			"start project",
 			"initialize project",
 			"new project",
+			"tạo dự án cho Minh",
+			"create project assign to John",
 		},
 		"create_task": {
 			"tạo task mới",
@@ -184,12 +186,17 @@ func (m *ProjectManagementModule) GetActionExamples() map[string][]string {
 			"assign work",
 			"new task",
 			"create job",
+			"tạo task cho Nam",
+			"create task assign to Mary",
 		},
 	}
 }
 
 // handleModifyAction handles user modification requests
 func (m *ProjectManagementModule) handleModifyAction(ctx *erp_modules.ModuleContext, pending *ProjectManagementConfirmation, modifications map[string]interface{}) (*erp_modules.ModuleResponse, error) {
+	// Handle assignee modification using dedicated function
+	m.handleAssigneeModification(modifications)
+
 	// Update the pending data with modifications
 	for key, value := range modifications {
 		pending.Data[key] = value

@@ -23,6 +23,7 @@ User response: "{{.Parameters.UserMessage}}"
    - Adding missing information: "phân công cho Nam", "priority cao", "thuộc project ABC"
    - Correcting existing data: "sửa tên thành...", "change description to...", "actually assign to..."
    - Clarifying details: "this is urgent", "assign to development team", "deadline tomorrow"
+   - Assignment changes: "assign to Mary", "cho Nam", "phân công cho John"
    - ANY statement that adds or changes task information = MODIFY
    
 3. **CANCEL Intent**: User wants to stop the process
@@ -44,6 +45,11 @@ When extracting modifications, ensure values comply with these rules:
 - "Low" (for not urgent, không khẩn cấp, thấp)
 - "" (empty if not specified)
 
+**assigned_to_name** (string): Extract names when user mentions assignment:
+- "assign to John", "cho Minh", "phân công cho Nam"
+- "for Mary", "dành cho An", "giao cho"
+- Extract the actual name only (e.g., "John", "Minh", "Nguyen Van An")
+
 **DATE FIELDS** (exp_start_date, exp_end_date): Must be in YYYY-MM-DD format:
 - Examples: "2025-06-19", "2025-12-01", "2026-03-15"
 - Always convert from any input format to YYYY-MM-DD
@@ -62,7 +68,7 @@ Extract the specific modifications requested. CRITICAL: Always maintain the comp
 - If user says relative dates like "next week", calculate from current date
 
 **Examples:**
-- "assign to John" → modify assigned_to to "John"
+- "assign to John" → modify assigned_to_name to "John"
 - "set priority to high" → modify priority to "High"
 - "add description: UI design work" → modify description to "UI design work"
 - "change project to Website" → modify project to "Website"
@@ -71,6 +77,8 @@ Extract the specific modifications requested. CRITICAL: Always maintain the comp
 - "priority khẩn cấp" → modify priority to "High"
 - "đặt deadline ngày mai" → modify exp_end_date to calculated date in YYYY-MM-DD format
 - "bình thường thôi" → modify priority to "Medium"
+- "phân công cho Nam" → modify assigned_to_name to "Nam"
+- "change assignee to Mary" → modify assigned_to_name to "Mary"
 
 Respond with ONLY valid JSON:
 {

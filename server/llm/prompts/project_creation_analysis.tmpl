@@ -22,11 +22,17 @@ FIELD DEFINITIONS AND VALID VALUES:
 - "Other" (for other types, khác)
 - "" (empty if not specified)
 
+**assigned_to_name** (string): Extract names when user mentions assignment:
+- "assign to John", "cho Minh", "phân công cho Nam"
+- "for Mary", "dành cho An", "giao cho"
+- "John will handle this", "Minh sẽ làm"
+- Extract the actual name only (e.g., "John", "Minh", "Nguyen Van An")
+- Leave empty if no assignment mentioned
+
 **DATE FORMATTING RULES:**
 - Current date context: {{.Time}}
 - ALWAYS format dates as YYYY-MM-DD
 - If user mentions relative dates like "next week", calculate and convert to YYYY-MM-DD
-
 
 Extract the following information from the user's message and return it as JSON:
 
@@ -40,13 +46,15 @@ Optional fields (fill if you can determine from context):
 - expected_end_date: End date in YYYY-MM-DD format ONLY
 - department: Department if mentioned or can be inferred
 - customer: Customer/client name if mentioned
+- assigned_to_name: Name of person to assign project to
 
 User Message: "{{.Parameters.UserMessage}}"
 
 Examples:
 - "tạo project tên code máy in bắt đầu ngày 29/12/2026" → project_name: "Code máy in", expected_start_date: "2026-12-29"
-- "make urgent website project starting tomorrow" → project_name: "Website Project", priority: "High", expected_start_date: "2025-06-20"
-- "create marketing campaign for Q2" → project_name: "Marketing Campaign Q2"
+- "make urgent website project starting tomorrow assign to John" → project_name: "Website Project", priority: "High", expected_start_date: "2025-06-20", assigned_to_name: "John"
+- "create marketing campaign for Q2 cho Minh" → project_name: "Marketing Campaign Q2", assigned_to_name: "Minh"
+- "tạo dự án phát triển app phân công cho Nguyen Van An" → project_name: "Phát triển app", assigned_to_name: "Nguyen Van An"
 
 Return ONLY a JSON object with the extracted information. Do not include any explanatory text.
 
@@ -58,5 +66,6 @@ Return ONLY a JSON object with the extracted information. Do not include any exp
   "expected_start_date": "",
   "expected_end_date": "",
   "department": "",
-  "customer": ""
+  "customer": "",
+  "assigned_to_name": ""
 }
