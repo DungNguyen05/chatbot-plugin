@@ -15,10 +15,10 @@ import (
 type ProjectManagementModule struct {
 	config              ProjectManagementConfig
 	erpClient           *ERPClient
-	confirmationManager *ConfirmationManager
 	api                 PluginAPI
 	prompts             PromptsInterface
 	getLLM              func() llm.LanguageModel
+	confirmationManager *ConfirmationManager
 }
 
 // NewProjectManagementModule creates a new project management module
@@ -32,8 +32,7 @@ func NewProjectManagementModule(
 	// Validate configuration
 	if err := ValidateProjectManagementConfig(config); err != nil {
 		api.LogError("Invalid project management configuration", "error", err.Error())
-		// Continue with disabled module
-		config.Enabled = false
+		// Continue with disabled module - this matches attendance module pattern
 	}
 
 	// Create ERP client
@@ -45,10 +44,10 @@ func NewProjectManagementModule(
 	return &ProjectManagementModule{
 		config:              config,
 		erpClient:           erpClient,
-		confirmationManager: confirmationManager,
 		api:                 api,
 		prompts:             prompts,
 		getLLM:              getLLM,
+		confirmationManager: confirmationManager,
 	}
 }
 
@@ -64,10 +63,6 @@ func (m *ProjectManagementModule) GetSupportedActions() []string {
 
 // CanHandle determines if this module can handle the given intent
 func (m *ProjectManagementModule) CanHandle(intent *erp_modules.Intent) bool {
-	if !m.config.Enabled {
-		return false
-	}
-
 	if intent.Category != "project_management" {
 		return false
 	}
@@ -75,12 +70,8 @@ func (m *ProjectManagementModule) CanHandle(intent *erp_modules.Intent) bool {
 	return isValidAction(intent.Action)
 }
 
-// ProcessUserMessage handles user messages including confirmations
+// ProcessUserMessage handles user messages including confirmations and modifications
 func (m *ProjectManagementModule) ProcessUserMessage(ctx *erp_modules.ModuleContext, message string) (*erp_modules.ModuleResponse, error) {
-	if !m.config.Enabled {
-		return nil, nil
-	}
-
 	// Sanitize user input
 	message = sanitizeUserInput(message)
 
@@ -90,13 +81,13 @@ func (m *ProjectManagementModule) ProcessUserMessage(ctx *erp_modules.ModuleCont
 	}
 
 	// Parse user response using LLM
-	confirmed, err := m.parseConfirmationResponse(ctx, message)
+	userResponse, err := m.parseConfirmationResponse(ctx, message, pending)
 	if err != nil {
-		m.api.LogError("Failed to parse confirmation response", "error", err.Error())
+		m.api.LogError("Failed to parse user response", "error", err.Error())
 		isVietnamese := detectUserLanguage(ctx.User)
-		errorMsg := "⚠️ Không thể hiểu phản hồi của bạn. Vui lòng trả lời 'có' để xác nhận hoặc 'không' để hủy bỏ."
+		errorMsg := "⚠️ Không thể hiểu phản hồi của bạn. Vui lòng thử lại."
 		if !isVietnamese {
-			errorMsg = "⚠️ Cannot understand your response. Please reply 'yes' to confirm or 'no' to cancel."
+			errorMsg = "⚠️ Cannot understand your response. Please try again."
 		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
@@ -107,72 +98,50 @@ func (m *ProjectManagementModule) ProcessUserMessage(ctx *erp_modules.ModuleCont
 	// Clear pending confirmation
 	m.confirmationManager.ClearPendingConfirmation(ctx.User.Id)
 
-	if confirmed {
+	switch userResponse.Intent {
+	case "confirm":
 		return m.executeConfirmedAction(ctx, pending)
-	} else {
+	case "modify":
+		return m.handleModifyAction(ctx, pending, userResponse.Modifications)
+	case "cancel":
+		return m.handleCancelAction(ctx.User.Id)
+	default:
 		isVietnamese := detectUserLanguage(ctx.User)
-		cancelMsg := "Đã hủy bỏ yêu cầu."
+		errorMsg := "⚠️ Vui lòng xác nhận (có/yes), chỉnh sửa thông tin, hoặc hủy bỏ (không/cancel)."
 		if !isVietnamese {
-			cancelMsg = "Request cancelled."
-		}
-		return &erp_modules.ModuleResponse{
-			Success:     true,
-			Message:     cancelMsg,
-			ActionTaken: "cancel_confirmation",
-		}, nil
-	}
-}
-
-// Execute processes the project management intent
-func (m *ProjectManagementModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
-	if !m.config.Enabled {
-		isVietnamese := detectUserLanguage(ctx.User)
-		errorMsg := "Tính năng quản lý dự án hiện không khả dụng."
-		if !isVietnamese {
-			errorMsg = "Project management feature is currently not available."
+			errorMsg = "⚠️ Please confirm (yes), modify information, or cancel (no/cancel)."
 		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
 			Message: errorMsg,
 		}, nil
 	}
+}
 
+// Execute processes the project management intent
+func (m *ProjectManagementModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
 	isVietnamese := detectUserLanguage(ctx.User)
 
-	// Execute specific action based on intent.Action
+	// Get employee ID
+	employeeID, err := m.getEmployeeIDFromUser(ctx.User)
+	if err != nil {
+		errorMsg := "Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
+		if !isVietnamese {
+			errorMsg = "Cannot find your employee information in the ERP system. Please contact administrator."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	// Execute specific action
 	switch intent.Action {
 	case "create_project":
-		// Get employee ID for project creation
-		employeeID, err := m.getEmployeeIDFromUser(ctx.User)
-		if err != nil {
-			errorMsg := "Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
-			if !isVietnamese {
-				errorMsg = "Cannot find your employee information in the ERP system. Please contact administrator."
-			}
-			return &erp_modules.ModuleResponse{
-				Success: false,
-				Message: errorMsg,
-				Error:   err.Error(),
-			}, nil
-		}
 		return m.handleCreateProjectRequest(employeeID, ctx, intent)
-
 	case "create_task":
-		// Get employee ID for task creation
-		employeeID, err := m.getEmployeeIDFromUser(ctx.User)
-		if err != nil {
-			errorMsg := "Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
-			if !isVietnamese {
-				errorMsg = "Cannot find your employee information in the ERP system. Please contact administrator."
-			}
-			return &erp_modules.ModuleResponse{
-				Success: false,
-				Message: errorMsg,
-				Error:   err.Error(),
-			}, nil
-		}
 		return m.handleCreateTaskRequest(employeeID, ctx, intent)
-
 	default:
 		errorMsg := "Hành động không được hỗ trợ"
 		if !isVietnamese {
@@ -219,30 +188,48 @@ func (m *ProjectManagementModule) GetActionExamples() map[string][]string {
 	}
 }
 
-// getOriginalSchema returns the original schema for the given type
-func (m *ProjectManagementModule) getOriginalSchema(confirmationType string) map[string]interface{} {
-	if confirmationType == "project" {
-		return map[string]interface{}{
-			"project_name":        "",
-			"description":         "",
-			"priority":            "",
-			"project_type":        "",
-			"expected_start_date": "",
-			"expected_end_date":   "",
-			"department":          "",
-			"customer":            "",
-		}
-	} else if confirmationType == "task" {
-		return map[string]interface{}{
-			"subject":        "",
-			"description":    "",
-			"priority":       "",
-			"project":        "",
-			"assigned_to":    "",
-			"exp_start_date": "",
-			"exp_end_date":   "",
-			"department":     "",
-		}
+// handleModifyAction handles user modification requests
+func (m *ProjectManagementModule) handleModifyAction(ctx *erp_modules.ModuleContext, pending *ProjectManagementConfirmation, modifications map[string]interface{}) (*erp_modules.ModuleResponse, error) {
+	// Update the pending data with modifications
+	for key, value := range modifications {
+		pending.Data[key] = value
 	}
-	return make(map[string]interface{})
+
+	// Update the stored confirmation
+	m.confirmationManager.StorePendingConfirmation(ctx.User.Id, pending)
+
+	// Generate new confirmation message with updated data
+	confirmationMsg, err := m.generateConfirmationMessage(ctx, pending.Type, pending.Data)
+	if err != nil {
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Có lỗi xảy ra khi tạo tin nhắn xác nhận cập nhật."
+		if !isVietnamese {
+			errorMsg = "⚠️ An error occurred while creating updated confirmation message."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	return &erp_modules.ModuleResponse{
+		Success:     true,
+		Message:     confirmationMsg,
+		ActionTaken: "update_confirmation",
+		Data: map[string]interface{}{
+			"awaiting_confirmation": true,
+			"type":                  pending.Type,
+			"updated":               true,
+		},
+	}, nil
+}
+
+// handleCancelAction handles user cancellation
+func (m *ProjectManagementModule) handleCancelAction(userID string) (*erp_modules.ModuleResponse, error) {
+	return &erp_modules.ModuleResponse{
+		Success:     true,
+		Message:     "Đã hủy bỏ yêu cầu tạo dự án/task.",
+		ActionTaken: "cancel_confirmation",
+	}, nil
 }

@@ -16,7 +16,6 @@ type ProjectManagementConfig struct {
 	ERPDomain    string `json:"erpDomain"`
 	ERPAPIKey    string `json:"erpAPIKey"`
 	ERPAPISecret string `json:"erpAPISecret"`
-	Enabled      bool   `json:"enabled"`
 }
 
 // PromptsInterface interface for prompts
@@ -32,7 +31,6 @@ type PluginAPI interface {
 	LogInfo(message string, keyValuePairs ...interface{})
 	LogWarn(message string, keyValuePairs ...interface{})
 	GetUser(userID string) (*model.User, error)
-	GetConfig() *model.Config
 }
 
 // Project represents the data structure for ERPNext Project
@@ -97,6 +95,16 @@ type TaskCreationRequest struct {
 	ExpStartDate string `json:"exp_start_date,omitempty"`
 	ExpEndDate   string `json:"exp_end_date,omitempty"`
 	Department   string `json:"department,omitempty"`
+}
+
+// ProjectManagementConfirmation represents pending confirmation
+type ProjectManagementConfirmation struct {
+	UserID     string                 `json:"user_id"`
+	Type       string                 `json:"type"`   // "project" or "task"
+	Action     string                 `json:"action"` // "create_project", "create_task"
+	Data       map[string]interface{} `json:"data"`   // Complete schema data
+	CreatedAt  int64                  `json:"created_at"`
+	EmployeeID string                 `json:"employee_id"`
 }
 
 // UserResponse represents parsed user response to confirmation

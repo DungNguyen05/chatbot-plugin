@@ -136,13 +136,12 @@ func (c *ERPClient) CreateProject(projectData ProjectCreationRequest, creatorEmp
 		return "", err
 	}
 
-	// Validate project data
-	if err := validateProjectRequest(&projectData); err != nil {
-		return "", fmt.Errorf("invalid project data: %w", err)
-	}
-
 	if err := validateEmployeeID(creatorEmployeeID); err != nil {
 		return "", fmt.Errorf("invalid creator employee ID: %w", err)
+	}
+
+	if err := validateProjectName(projectData.ProjectName); err != nil {
+		return "", fmt.Errorf("invalid project name: %w", err)
 	}
 
 	erpToken := c.config.ERPAPIKey + ":" + c.config.ERPAPISecret
@@ -171,13 +170,12 @@ func (c *ERPClient) CreateTask(taskData TaskCreationRequest, creatorEmployeeID s
 		return "", err
 	}
 
-	// Validate task data
-	if err := validateTaskRequest(&taskData); err != nil {
-		return "", fmt.Errorf("invalid task data: %w", err)
-	}
-
 	if err := validateEmployeeID(creatorEmployeeID); err != nil {
 		return "", fmt.Errorf("invalid creator employee ID: %w", err)
+	}
+
+	if err := validateTaskSubject(taskData.Subject); err != nil {
+		return "", fmt.Errorf("invalid task subject: %w", err)
 	}
 
 	erpToken := c.config.ERPAPIKey + ":" + c.config.ERPAPISecret
@@ -196,6 +194,20 @@ func (c *ERPClient) CreateTask(taskData TaskCreationRequest, creatorEmployeeID s
 		"creator", creatorEmployeeID)
 
 	return task.Subject, nil
+}
+
+// validateConfig validates the ERP configuration
+func (c *ERPClient) validateConfig() error {
+	if c.config.ERPDomain == "" {
+		return fmt.Errorf("ERP domain not configured")
+	}
+	if c.config.ERPAPIKey == "" {
+		return fmt.Errorf("ERP API key not configured")
+	}
+	if c.config.ERPAPISecret == "" {
+		return fmt.Errorf("ERP API secret not configured")
+	}
+	return nil
 }
 
 // sendToERP sends data to ERP system
