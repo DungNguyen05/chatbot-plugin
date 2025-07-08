@@ -5,6 +5,7 @@ package project_management
 
 import (
 	"github.com/mattermost/mattermost-plugin-ai/server/llm"
+	"github.com/mattermost/mattermost/server/public/model"
 )
 
 // API endpoint for ERPNext
@@ -15,6 +16,7 @@ type ProjectManagementConfig struct {
 	ERPDomain    string `json:"erpDomain"`
 	ERPAPIKey    string `json:"erpAPIKey"`
 	ERPAPISecret string `json:"erpAPISecret"`
+	Enabled      bool   `json:"enabled"`
 }
 
 // PromptsInterface interface for prompts
@@ -29,6 +31,8 @@ type PluginAPI interface {
 	LogError(message string, keyValuePairs ...interface{})
 	LogInfo(message string, keyValuePairs ...interface{})
 	LogWarn(message string, keyValuePairs ...interface{})
+	GetUser(userID string) (*model.User, error)
+	GetConfig() *model.Config
 }
 
 // Project represents the data structure for ERPNext Project
@@ -95,23 +99,9 @@ type TaskCreationRequest struct {
 	Department   string `json:"department,omitempty"`
 }
 
-// PendingConfirmation represents a pending confirmation for project/task creation
-type PendingConfirmation struct {
-	UserID     string                 `json:"user_id"`
-	Type       string                 `json:"type"` // "project" or "task"
-	Data       map[string]interface{} `json:"data"` // Complete schema data
-	CreatedAt  int64                  `json:"created_at"`
-	EmployeeID string                 `json:"employee_id"`
-}
-
 // UserResponse represents parsed user response to confirmation
 type UserResponse struct {
 	Intent        string                 `json:"intent"`        // "confirm", "modify", "cancel"
 	Modifications map[string]interface{} `json:"modifications"` // Fields to modify
 	Reasoning     string                 `json:"reasoning"`     // LLM reasoning
-}
-
-// ConfirmationState manages confirmation states for users
-type ConfirmationState struct {
-	pendingConfirmations map[string]*PendingConfirmation
 }

@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 )
 
 // ERPClient handles all ERP system integration for project management
@@ -38,6 +37,11 @@ func (c *ERPClient) GetEmployeeByChatID(chatID string) (string, error) {
 	// Validate configuration
 	if err := c.validateConfig(); err != nil {
 		return "", err
+	}
+
+	// Validate input
+	if err := validateChatID(chatID); err != nil {
+		return "", fmt.Errorf("invalid chat ID: %w", err)
 	}
 
 	// Combine API key and secret for token
@@ -132,6 +136,15 @@ func (c *ERPClient) CreateProject(projectData ProjectCreationRequest, creatorEmp
 		return "", err
 	}
 
+	// Validate project data
+	if err := validateProjectRequest(&projectData); err != nil {
+		return "", fmt.Errorf("invalid project data: %w", err)
+	}
+
+	if err := validateEmployeeID(creatorEmployeeID); err != nil {
+		return "", fmt.Errorf("invalid creator employee ID: %w", err)
+	}
+
 	erpToken := c.config.ERPAPIKey + ":" + c.config.ERPAPISecret
 	erpEndpoint := strings.TrimSuffix(c.config.ERPDomain, "/") + ERPEndpointSuffix
 
@@ -158,6 +171,15 @@ func (c *ERPClient) CreateTask(taskData TaskCreationRequest, creatorEmployeeID s
 		return "", err
 	}
 
+	// Validate task data
+	if err := validateTaskRequest(&taskData); err != nil {
+		return "", fmt.Errorf("invalid task data: %w", err)
+	}
+
+	if err := validateEmployeeID(creatorEmployeeID); err != nil {
+		return "", fmt.Errorf("invalid creator employee ID: %w", err)
+	}
+
 	erpToken := c.config.ERPAPIKey + ":" + c.config.ERPAPISecret
 	erpEndpoint := strings.TrimSuffix(c.config.ERPDomain, "/") + ERPEndpointSuffix
 
@@ -174,20 +196,6 @@ func (c *ERPClient) CreateTask(taskData TaskCreationRequest, creatorEmployeeID s
 		"creator", creatorEmployeeID)
 
 	return task.Subject, nil
-}
-
-// validateConfig validates the ERP configuration
-func (c *ERPClient) validateConfig() error {
-	if c.config.ERPDomain == "" {
-		return fmt.Errorf("ERP domain not configured")
-	}
-	if c.config.ERPAPIKey == "" {
-		return fmt.Errorf("ERP API key not configured")
-	}
-	if c.config.ERPAPISecret == "" {
-		return fmt.Errorf("ERP API secret not configured")
-	}
-	return nil
 }
 
 // sendToERP sends data to ERP system
@@ -333,23 +341,4 @@ func NewTask(data TaskCreationRequest, creatorEmployeeID string) *Task {
 	}
 
 	return task
-}
-
-// generateUniqueID creates a simple unique ID
-func generateUniqueID() string {
-	const letters = "abcdefghijklmnopqrstuvwxyz"
-	result := make([]byte, 10)
-	for i := range result {
-		result[i] = letters[time.Now().UnixNano()%int64(len(letters))]
-	}
-	return string(result)
-}
-
-// GetVietnamTime returns the current time in Vietnam timezone (Asia/Ho_Chi_Minh)
-func GetVietnamTime() (time.Time, error) {
-	loc, err := time.LoadLocation("Asia/Ho_Chi_Minh")
-	if err != nil {
-		return time.Time{}, err
-	}
-	return time.Now().In(loc), nil
 }
