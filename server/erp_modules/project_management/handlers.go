@@ -81,8 +81,15 @@ func (m *ProjectManagementModule) handleCreateProjectRequest(employeeID string, 
 	// Process assignee if provided (using dedicated function)
 	m.processAssigneeForProject(projectRequest)
 
+	// Get creator's email for assignment
+	creatorEmail, err := m.getEmployeeEmailFromUser(ctx.User)
+	if err != nil {
+		m.api.LogWarn("Failed to get creator email", "error", err.Error())
+		creatorEmail = "demo@example.com" // Fallback
+	}
+
 	// Request confirmation
-	return m.requestConfirmation(ctx, "create_project", "project", projectRequest, employeeID)
+	return m.requestConfirmation(ctx, "create_project", "project", projectRequest, employeeID, creatorEmail)
 }
 
 // handleCreateTaskRequest processes task creation request
@@ -118,25 +125,44 @@ func (m *ProjectManagementModule) handleCreateTaskRequest(employeeID string, ctx
 	// Process assignee if provided (using dedicated function)
 	m.processAssigneeForTask(taskRequest)
 
+	// Get creator's email for assignment
+	creatorEmail, err := m.getEmployeeEmailFromUser(ctx.User)
+	if err != nil {
+		m.api.LogWarn("Failed to get creator email", "error", err.Error())
+		creatorEmail = "demo@example.com" // Fallback
+	}
+
 	// Request confirmation
-	return m.requestConfirmation(ctx, "create_task", "task", taskRequest, employeeID)
+	return m.requestConfirmation(ctx, "create_task", "task", taskRequest, employeeID, creatorEmail)
 }
 
-// requestConfirmation requests confirmation from user
-func (m *ProjectManagementModule) requestConfirmation(ctx *erp_modules.ModuleContext, action, confirmationType string, data interface{}, employeeID string) (*erp_modules.ModuleResponse, error) {
+// requestConfirmation requests confirmation from user (UPDATED)
+func (m *ProjectManagementModule) requestConfirmation(ctx *erp_modules.ModuleContext, action, confirmationType string, data interface{}, employeeID, creatorEmail string) (*erp_modules.ModuleResponse, error) {
 	// Convert data to map for consistent storage
 	dataMap := make(map[string]interface{})
 	dataBytes, _ := json.Marshal(data)
 	json.Unmarshal(dataBytes, &dataMap)
 
-	// Store pending confirmation
+	// Extract assignee information for confirmation
+	var assignedToEmail, assignedToName string
+	if email, ok := dataMap["assigned_to_email"].(string); ok {
+		assignedToEmail = email
+	}
+	if name, ok := dataMap["assigned_to_name"].(string); ok {
+		assignedToName = name
+	}
+
+	// Store pending confirmation with additional email info
 	m.confirmationManager.StorePendingConfirmation(ctx.User.Id, &ProjectManagementConfirmation{
-		UserID:     ctx.User.Id,
-		Type:       confirmationType,
-		Action:     action,
-		Data:       dataMap,
-		CreatedAt:  time.Now().UnixMilli(),
-		EmployeeID: employeeID,
+		UserID:          ctx.User.Id,
+		Type:            confirmationType,
+		Action:          action,
+		Data:            dataMap,
+		CreatedAt:       time.Now().UnixMilli(),
+		EmployeeID:      employeeID,
+		CreatorEmail:    creatorEmail,
+		AssignedToEmail: assignedToEmail,
+		AssignedToName:  assignedToName,
 	})
 
 	// Generate confirmation message
@@ -169,9 +195,9 @@ func (m *ProjectManagementModule) requestConfirmation(ctx *erp_modules.ModuleCon
 func (m *ProjectManagementModule) executeConfirmedAction(ctx *erp_modules.ModuleContext, pending *ProjectManagementConfirmation) (*erp_modules.ModuleResponse, error) {
 	switch pending.Action {
 	case "create_project":
-		return m.handleCreateProject(pending.EmployeeID, ctx.User.Id, pending.Data)
+		return m.handleCreateProject(pending.EmployeeID, ctx.User.Id, pending.Data, pending.CreatorEmail)
 	case "create_task":
-		return m.handleCreateTask(pending.EmployeeID, ctx.User.Id, pending.Data)
+		return m.handleCreateTask(pending.EmployeeID, ctx.User.Id, pending.Data, pending.CreatorEmail)
 	default:
 		isVietnamese := detectUserLanguage(ctx.User)
 		errorMsg := "Hành động không hợp lệ"
@@ -185,13 +211,14 @@ func (m *ProjectManagementModule) executeConfirmedAction(ctx *erp_modules.Module
 	}
 }
 
-// handleCreateProject processes project creation
-func (m *ProjectManagementModule) handleCreateProject(employeeID, userID string, data map[string]interface{}) (*erp_modules.ModuleResponse, error) {
+// handleCreateProject processes project creation (UPDATED for two-step process)
+func (m *ProjectManagementModule) handleCreateProject(employeeID, userID string, data map[string]interface{}, creatorEmail string) (*erp_modules.ModuleResponse, error) {
 	var projectRequest ProjectCreationRequest
 	dataBytes, _ := json.Marshal(data)
 	json.Unmarshal(dataBytes, &projectRequest)
 
-	projectName, err := m.erpClient.CreateProject(projectRequest, employeeID)
+	// Use the new two-step creation method
+	projectID, err := m.erpClient.CreateProjectWithAssignment(projectRequest, employeeID, creatorEmail)
 	if err != nil {
 		user, _ := m.api.GetUser(userID)
 		isVietnamese := detectUserLanguage(user)
@@ -210,17 +237,17 @@ func (m *ProjectManagementModule) handleCreateProject(employeeID, userID string,
 	isVietnamese := detectUserLanguage(user)
 
 	var successMsg string
-	if projectRequest.AssignedToEmployeeID != "" {
+	if projectRequest.AssignedToEmployeeID != "" && projectRequest.AssignedToEmail != "" {
 		if isVietnamese {
-			successMsg = fmt.Sprintf("Đã tạo dự án mới thành công: **%s** và phân công cho nhân viên!", projectName)
+			successMsg = fmt.Sprintf("✅ Đã tạo dự án thành công: **%s** và phân công cho **%s**!", projectID, projectRequest.AssignedToName)
 		} else {
-			successMsg = fmt.Sprintf("Successfully created new project: **%s** and assigned to employee!", projectName)
+			successMsg = fmt.Sprintf("✅ Successfully created project: **%s** and assigned to **%s**!", projectID, projectRequest.AssignedToName)
 		}
 	} else {
 		if isVietnamese {
-			successMsg = fmt.Sprintf("Đã tạo dự án mới thành công: **%s**!", projectName)
+			successMsg = fmt.Sprintf("✅ Đã tạo dự án thành công: **%s**!", projectID)
 		} else {
-			successMsg = fmt.Sprintf("Successfully created new project: **%s**!", projectName)
+			successMsg = fmt.Sprintf("✅ Successfully created project: **%s**!", projectID)
 		}
 	}
 
@@ -229,21 +256,25 @@ func (m *ProjectManagementModule) handleCreateProject(employeeID, userID string,
 		Message:     successMsg,
 		ActionTaken: "create_project",
 		Data: map[string]interface{}{
-			"project_name":            projectName,
+			"project_id":              projectID,
+			"project_name":            projectRequest.ProjectName,
 			"description":             projectRequest.Description,
 			"priority":                projectRequest.Priority,
 			"assigned_to_employee_id": projectRequest.AssignedToEmployeeID,
+			"assigned_to_email":       projectRequest.AssignedToEmail,
+			"assigned_to_name":        projectRequest.AssignedToName,
 		},
 	}, nil
 }
 
-// handleCreateTask processes task creation
-func (m *ProjectManagementModule) handleCreateTask(employeeID, userID string, data map[string]interface{}) (*erp_modules.ModuleResponse, error) {
+// handleCreateTask processes task creation (UPDATED for two-step process)
+func (m *ProjectManagementModule) handleCreateTask(employeeID, userID string, data map[string]interface{}, creatorEmail string) (*erp_modules.ModuleResponse, error) {
 	var taskRequest TaskCreationRequest
 	dataBytes, _ := json.Marshal(data)
 	json.Unmarshal(dataBytes, &taskRequest)
 
-	taskName, err := m.erpClient.CreateTask(taskRequest, employeeID)
+	// Use the new two-step creation method
+	taskID, err := m.erpClient.CreateTaskWithAssignment(taskRequest, employeeID, creatorEmail)
 	if err != nil {
 		user, _ := m.api.GetUser(userID)
 		isVietnamese := detectUserLanguage(user)
@@ -262,17 +293,17 @@ func (m *ProjectManagementModule) handleCreateTask(employeeID, userID string, da
 	isVietnamese := detectUserLanguage(user)
 
 	var successMsg string
-	if taskRequest.AssignedToEmployeeID != "" {
+	if taskRequest.AssignedToEmployeeID != "" && taskRequest.AssignedToEmail != "" {
 		if isVietnamese {
-			successMsg = fmt.Sprintf("Đã tạo task mới thành công: **%s** và phân công cho nhân viên!", taskName)
+			successMsg = fmt.Sprintf("✅ Đã tạo task thành công: **%s** và phân công cho **%s**!", taskID, taskRequest.AssignedToName)
 		} else {
-			successMsg = fmt.Sprintf("Successfully created new task: **%s** and assigned to employee!", taskName)
+			successMsg = fmt.Sprintf("✅ Successfully created task: **%s** and assigned to **%s**!", taskID, taskRequest.AssignedToName)
 		}
 	} else {
 		if isVietnamese {
-			successMsg = fmt.Sprintf("Đã tạo task mới thành công: **%s**!", taskName)
+			successMsg = fmt.Sprintf("✅ Đã tạo task thành công: **%s**!", taskID)
 		} else {
-			successMsg = fmt.Sprintf("Successfully created new task: **%s**!", taskName)
+			successMsg = fmt.Sprintf("✅ Successfully created task: **%s**!", taskID)
 		}
 	}
 
@@ -281,9 +312,12 @@ func (m *ProjectManagementModule) handleCreateTask(employeeID, userID string, da
 		Message:     successMsg,
 		ActionTaken: "create_task",
 		Data: map[string]interface{}{
-			"task_name":               taskName,
+			"task_id":                 taskID,
+			"task_name":               taskRequest.Subject,
 			"description":             taskRequest.Description,
 			"assigned_to_employee_id": taskRequest.AssignedToEmployeeID,
+			"assigned_to_email":       taskRequest.AssignedToEmail,
+			"assigned_to_name":        taskRequest.AssignedToName,
 			"priority":                taskRequest.Priority,
 			"project":                 taskRequest.Project,
 		},
@@ -301,4 +335,21 @@ func (m *ProjectManagementModule) getEmployeeIDFromUser(user *model.User) (strin
 	}
 
 	return employeeID, nil
+}
+
+// getEmployeeEmailFromUser gets employee email from user - NEW METHOD
+func (m *ProjectManagementModule) getEmployeeEmailFromUser(user *model.User) (string, error) {
+	// First get employee ID
+	employeeID, err := m.getEmployeeIDFromUser(user)
+	if err != nil {
+		return "", err
+	}
+
+	// Then get email from employee ID
+	email, err := m.erpClient.GetEmployeeEmail(employeeID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get email for employee %s: %w", employeeID, err)
+	}
+
+	return email, nil
 }

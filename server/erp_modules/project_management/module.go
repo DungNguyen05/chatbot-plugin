@@ -157,7 +157,7 @@ func (m *ProjectManagementModule) Execute(ctx *erp_modules.ModuleContext, intent
 
 // GetDescription returns a description of what this module does
 func (m *ProjectManagementModule) GetDescription() string {
-	return "Quản lý dự án và công việc: tạo dự án mới, tạo task, phân công công việc"
+	return "Quản lý dự án và công việc: tạo dự án mới, tạo task, phân công công việc với khả năng gán nhân viên tự động"
 }
 
 // GetActionExamples returns examples of user messages for each action
@@ -174,6 +174,8 @@ func (m *ProjectManagementModule) GetActionExamples() map[string][]string {
 			"new project",
 			"tạo dự án cho Minh",
 			"create project assign to John",
+			"tạo dự án phân công cho Nguyễn Văn An",
+			"create marketing project assign to Mary",
 		},
 		"create_task": {
 			"tạo task mới",
@@ -188,11 +190,13 @@ func (m *ProjectManagementModule) GetActionExamples() map[string][]string {
 			"create job",
 			"tạo task cho Nam",
 			"create task assign to Mary",
+			"tạo task thiết kế giao diện cho developer",
+			"create API development task assign to backend team",
 		},
 	}
 }
 
-// handleModifyAction handles user modification requests
+// handleModifyAction handles user modification requests (UPDATED)
 func (m *ProjectManagementModule) handleModifyAction(ctx *erp_modules.ModuleContext, pending *ProjectManagementConfirmation, modifications map[string]interface{}) (*erp_modules.ModuleResponse, error) {
 	// Handle assignee modification using dedicated function
 	m.handleAssigneeModification(modifications)
@@ -200,6 +204,14 @@ func (m *ProjectManagementModule) handleModifyAction(ctx *erp_modules.ModuleCont
 	// Update the pending data with modifications
 	for key, value := range modifications {
 		pending.Data[key] = value
+	}
+
+	// Update assignee info in confirmation if modified
+	if email, ok := modifications["assigned_to_email"].(string); ok {
+		pending.AssignedToEmail = email
+	}
+	if name, ok := modifications["assigned_to_name"].(string); ok {
+		pending.AssignedToName = name
 	}
 
 	// Update the stored confirmation

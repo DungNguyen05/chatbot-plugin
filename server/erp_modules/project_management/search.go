@@ -28,9 +28,10 @@ func (c *ERPClient) SearchEmployeesByName(searchName string) ([]Employee, error)
 		employeeNameLower := strings.ToLower(employee.EmployeeName)
 		employeeIDLower := strings.ToLower(employee.Name)
 		employeeNumberLower := strings.ToLower(employee.EmployeeNumber)
+		employeeEmailLower := strings.ToLower(employee.CompanyEmail) // UPDATED to use CompanyEmail
 
-		// Calculate confidence score
-		confidence := calculateNameMatchConfidence(searchNameLower, employeeNameLower, employeeIDLower, employeeNumberLower)
+		// Calculate confidence score (UPDATED to include company email)
+		confidence := calculateNameMatchConfidence(searchNameLower, employeeNameLower, employeeIDLower, employeeNumberLower, employeeEmailLower)
 
 		// Only include employees with confidence above threshold
 		if confidence >= 0.8 { // 80% confidence threshold
@@ -64,8 +65,8 @@ func removeDuplicateEmployees(employees []Employee) []Employee {
 	return unique
 }
 
-// calculateNameMatchConfidence calculates name matching confidence
-func calculateNameMatchConfidence(searchName, employeeName, employeeID, employeeNumber string) float64 {
+// calculateNameMatchConfidence calculates name matching confidence (UPDATED to include email)
+func calculateNameMatchConfidence(searchName, employeeName, employeeID, employeeNumber, employeeEmail string) float64 {
 	var maxConfidence float64
 
 	// Exact match
@@ -103,13 +104,18 @@ func calculateNameMatchConfidence(searchName, employeeName, employeeID, employee
 	}
 
 	// Check employee ID match
-	if strings.Contains(strings.ToLower(employeeID), searchName) {
+	if strings.Contains(employeeID, searchName) {
 		maxConfidence = math.Max(maxConfidence, 0.95)
 	}
 
 	// Check employee number match
-	if employeeNumber != "" && strings.Contains(strings.ToLower(employeeNumber), searchName) {
+	if employeeNumber != "" && strings.Contains(employeeNumber, searchName) {
 		maxConfidence = math.Max(maxConfidence, 0.95)
+	}
+
+	// Check employee company email match (UPDATED field name)
+	if employeeEmail != "" && strings.Contains(employeeEmail, searchName) {
+		maxConfidence = math.Max(maxConfidence, 0.9)
 	}
 
 	// Fuzzy string matching using Levenshtein distance
