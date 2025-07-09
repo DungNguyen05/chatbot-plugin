@@ -333,7 +333,7 @@ func (m *ProjectManagementModule) processAssigneeForTask(taskRequest *TaskCreati
 	}
 }
 
-// handleAssigneeModification handles assignee changes during modification
+// handleAssigneeModification handles assignee changes during modification - ENHANCED FOR DISAMBIGUATION
 func (m *ProjectManagementModule) handleAssigneeModification(modifications map[string]interface{}) {
 	assigneeName, hasAssignee := modifications["assigned_to_name"]
 	if !hasAssignee {
@@ -347,6 +347,10 @@ func (m *ProjectManagementModule) handleAssigneeModification(modifications map[s
 		m.api.LogDebug("Cleared assignee")
 		return
 	}
+
+	// Note: This method is now primarily used for fallback cases
+	// The main modification logic with disambiguation is handled in handleModifyAction
+	// This method handles cases where disambiguation is not needed or has already been resolved
 
 	// Resolve the new assignee
 	assigneeResult, err := m.resolveAssignee(assigneeName.(string))

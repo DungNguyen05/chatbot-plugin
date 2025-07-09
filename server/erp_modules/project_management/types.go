@@ -145,6 +145,17 @@ type EmployeeDisambiguationConfirmation struct {
 	AvailableEmployees []Employee             `json:"available_employees"`  // List of matching employees
 }
 
+// ModificationDisambiguationConfirmation represents pending employee selection during modification - NEW
+type ModificationDisambiguationConfirmation struct {
+	UserID               string                         `json:"user_id"`
+	OriginalConfirmation *ProjectManagementConfirmation `json:"original_confirmation"` // The original confirmation being modified
+	ModificationField    string                         `json:"modification_field"`    // Which field is being modified ("assigned_to_name")
+	OriginalSearchName   string                         `json:"original_search_name"`  // The ambiguous name user provided
+	AvailableEmployees   []Employee                     `json:"available_employees"`   // List of matching employees
+	PendingModifications map[string]interface{}         `json:"pending_modifications"` // Other modifications that were being applied
+	CreatedAt            int64                          `json:"created_at"`
+}
+
 // UserResponse represents parsed user response to confirmation
 type UserResponse struct {
 	Intent        string                 `json:"intent"`        // "confirm", "modify", "cancel"

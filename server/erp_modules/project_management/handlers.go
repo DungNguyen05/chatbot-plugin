@@ -16,16 +16,18 @@ import (
 
 // ConfirmationManager handles confirmation state
 type ConfirmationManager struct {
-	confirmationState   map[string]*ProjectManagementConfirmation
-	disambiguationState map[string]*EmployeeDisambiguationConfirmation
-	confirmationMutex   sync.RWMutex
+	confirmationState               map[string]*ProjectManagementConfirmation
+	disambiguationState             map[string]*EmployeeDisambiguationConfirmation
+	modificationDisambiguationState map[string]*ModificationDisambiguationConfirmation // NEW
+	confirmationMutex               sync.RWMutex
 }
 
 // NewConfirmationManager creates a new confirmation manager
 func NewConfirmationManager() *ConfirmationManager {
 	return &ConfirmationManager{
-		confirmationState:   make(map[string]*ProjectManagementConfirmation),
-		disambiguationState: make(map[string]*EmployeeDisambiguationConfirmation),
+		confirmationState:               make(map[string]*ProjectManagementConfirmation),
+		disambiguationState:             make(map[string]*EmployeeDisambiguationConfirmation),
+		modificationDisambiguationState: make(map[string]*ModificationDisambiguationConfirmation),
 	}
 }
 
@@ -34,8 +36,9 @@ func (cm *ConfirmationManager) StorePendingConfirmation(userID string, confirmat
 	cm.confirmationMutex.Lock()
 	defer cm.confirmationMutex.Unlock()
 	cm.confirmationState[userID] = confirmation
-	// Clear disambiguation state when storing regular confirmation
+	// Clear disambiguation states when storing regular confirmation
 	delete(cm.disambiguationState, userID)
+	delete(cm.modificationDisambiguationState, userID)
 }
 
 // GetPendingConfirmation retrieves a pending confirmation
@@ -52,6 +55,7 @@ func (cm *ConfirmationManager) ClearPendingConfirmation(userID string) {
 	defer cm.confirmationMutex.Unlock()
 	delete(cm.confirmationState, userID)
 	delete(cm.disambiguationState, userID)
+	delete(cm.modificationDisambiguationState, userID)
 }
 
 // StorePendingDisambiguation stores a pending employee disambiguation
@@ -59,8 +63,9 @@ func (cm *ConfirmationManager) StorePendingDisambiguation(userID string, disambi
 	cm.confirmationMutex.Lock()
 	defer cm.confirmationMutex.Unlock()
 	cm.disambiguationState[userID] = disambiguation
-	// Clear regular confirmation state when storing disambiguation
+	// Clear other states when storing disambiguation
 	delete(cm.confirmationState, userID)
+	delete(cm.modificationDisambiguationState, userID)
 }
 
 // GetPendingDisambiguation retrieves a pending employee disambiguation
@@ -68,6 +73,24 @@ func (cm *ConfirmationManager) GetPendingDisambiguation(userID string) (*Employe
 	cm.confirmationMutex.RLock()
 	defer cm.confirmationMutex.RUnlock()
 	disambiguation, exists := cm.disambiguationState[userID]
+	return disambiguation, exists
+}
+
+// StorePendingModificationDisambiguation stores a pending modification disambiguation - NEW
+func (cm *ConfirmationManager) StorePendingModificationDisambiguation(userID string, disambiguation *ModificationDisambiguationConfirmation) {
+	cm.confirmationMutex.Lock()
+	defer cm.confirmationMutex.Unlock()
+	cm.modificationDisambiguationState[userID] = disambiguation
+	// Clear other states when storing modification disambiguation
+	delete(cm.confirmationState, userID)
+	delete(cm.disambiguationState, userID)
+}
+
+// GetPendingModificationDisambiguation retrieves a pending modification disambiguation - NEW
+func (cm *ConfirmationManager) GetPendingModificationDisambiguation(userID string) (*ModificationDisambiguationConfirmation, bool) {
+	cm.confirmationMutex.RLock()
+	defer cm.confirmationMutex.RUnlock()
+	disambiguation, exists := cm.modificationDisambiguationState[userID]
 	return disambiguation, exists
 }
 

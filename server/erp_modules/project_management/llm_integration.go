@@ -71,7 +71,7 @@ func (m *ProjectManagementModule) generateConfirmationMessage(ctx *erp_modules.M
 	return strings.TrimSpace(response), nil
 }
 
-// parseConfirmationResponse parses user confirmation response using LLM
+// parseConfirmationResponse parses user confirmation response using LLM - ENHANCED FOR DISAMBIGUATION
 func (m *ProjectManagementModule) parseConfirmationResponse(ctx *erp_modules.ModuleContext, message string, pending *ProjectManagementConfirmation) (*UserResponse, error) {
 	// Create LLM context
 	llmContext := &llm.Context{

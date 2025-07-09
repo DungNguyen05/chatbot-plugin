@@ -76,7 +76,13 @@ func (m *ProjectManagementModule) ProcessUserMessage(ctx *erp_modules.ModuleCont
 	// Sanitize user input
 	message = sanitizeUserInput(message)
 
-	// Check for pending disambiguation first
+	// Check for pending modification disambiguation first - NEW
+	modificationDisambiguation, hasModificationDisambiguation := m.confirmationManager.GetPendingModificationDisambiguation(ctx.User.Id)
+	if hasModificationDisambiguation {
+		return m.handleModificationDisambiguationResponse(ctx, message, modificationDisambiguation)
+	}
+
+	// Check for pending disambiguation
 	disambiguation, hasDisambiguation := m.confirmationManager.GetPendingDisambiguation(ctx.User.Id)
 	if hasDisambiguation {
 		return m.handleEmployeeDisambiguationResponse(ctx, message, disambiguation)
@@ -124,6 +130,121 @@ func (m *ProjectManagementModule) ProcessUserMessage(ctx *erp_modules.ModuleCont
 			Message: errorMsg,
 		}, nil
 	}
+}
+
+// handleModificationDisambiguationResponse handles user response to modification employee selection - NEW
+func (m *ProjectManagementModule) handleModificationDisambiguationResponse(ctx *erp_modules.ModuleContext, message string, modificationDisambiguation *ModificationDisambiguationConfirmation) (*erp_modules.ModuleResponse, error) {
+	// Parse disambiguation response using LLM - we can reuse the same parsing logic
+	disambiguationResponse, err := m.parseEmployeeDisambiguationResponse(ctx, message, &EmployeeDisambiguationConfirmation{
+		AvailableEmployees: modificationDisambiguation.AvailableEmployees,
+	})
+	if err != nil {
+		m.api.LogError("Failed to parse modification disambiguation response", "error", err.Error())
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Không thể hiểu lựa chọn của bạn. Vui lòng chọn số thứ tự (1, 2, 3, ...)."
+		if !isVietnamese {
+			errorMsg = "⚠️ Cannot understand your selection. Please choose by number (1, 2, 3, ...)."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+		}, nil
+	}
+
+	// Clear pending modification disambiguation
+	m.confirmationManager.ClearPendingConfirmation(ctx.User.Id)
+
+	// Process the selection
+	assigneeResult, err := m.resolveDisambiguatedEmployee(
+		modificationDisambiguation.AvailableEmployees,
+		disambiguationResponse.SelectedIndex,
+		disambiguationResponse.ClarificationText,
+		disambiguationResponse.Intent,
+	)
+
+	if err != nil {
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Có lỗi xảy ra khi xử lý lựa chọn nhân viên."
+		if !isVietnamese {
+			errorMsg = "⚠️ An error occurred while processing employee selection."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	if !assigneeResult.Found {
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := assigneeResult.Error
+		if errorMsg == "" {
+			if isVietnamese {
+				errorMsg = "Không thể chọn nhân viên."
+			} else {
+				errorMsg = "Unable to select employee."
+			}
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+		}, nil
+	}
+
+	// Apply the selected employee to the pending modifications
+	modificationDisambiguation.PendingModifications["assigned_to_employee_id"] = assigneeResult.EmployeeID
+	modificationDisambiguation.PendingModifications["assigned_to_email"] = assigneeResult.EmployeeEmail
+	modificationDisambiguation.PendingModifications["assigned_to_name"] = assigneeResult.EmployeeName
+
+	// Now apply all modifications to the original confirmation
+	originalConfirmation := modificationDisambiguation.OriginalConfirmation
+
+	// Update the pending data with all modifications
+	for key, value := range modificationDisambiguation.PendingModifications {
+		originalConfirmation.Data[key] = value
+	}
+
+	// Update assignee info in confirmation
+	originalConfirmation.AssignedToEmail = assigneeResult.EmployeeEmail
+	originalConfirmation.AssignedToName = assigneeResult.EmployeeName
+
+	// Store the updated confirmation
+	m.confirmationManager.StorePendingConfirmation(ctx.User.Id, originalConfirmation)
+
+	// Generate new confirmation message with updated data
+	confirmationMsg, err := m.generateConfirmationMessage(ctx, originalConfirmation.Type, originalConfirmation.Data)
+	if err != nil {
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Có lỗi xảy ra khi tạo tin nhắn xác nhận cập nhật."
+		if !isVietnamese {
+			errorMsg = "⚠️ An error occurred while creating updated confirmation message."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	isVietnamese := detectUserLanguage(ctx.User)
+	var selectedMsg string
+	if isVietnamese {
+		selectedMsg = fmt.Sprintf("**Đã chọn nhân viên:** %s (%s)\n\n", assigneeResult.EmployeeName, assigneeResult.EmployeeEmail)
+	} else {
+		selectedMsg = fmt.Sprintf("**Selected employee:** %s (%s)\n\n", assigneeResult.EmployeeName, assigneeResult.EmployeeEmail)
+	}
+
+	return &erp_modules.ModuleResponse{
+		Success:     true,
+		Message:     selectedMsg + confirmationMsg,
+		ActionTaken: "modification_employee_selected_proceed_confirmation",
+		Data: map[string]interface{}{
+			"awaiting_confirmation": true,
+			"type":                  originalConfirmation.Type,
+			"selected_employee":     assigneeResult.EmployeeName,
+			"updated":               true,
+		},
+	}, nil
 }
 
 // handleEmployeeDisambiguationResponse handles user response to employee selection - NEW
@@ -227,9 +348,9 @@ func (m *ProjectManagementModule) proceedWithConfirmationAfterDisambiguation(ctx
 	isVietnamese := detectUserLanguage(ctx.User)
 	var selectedMsg string
 	if isVietnamese {
-		selectedMsg = fmt.Sprintf("✅ **Đã chọn nhân viên:** %s (%s)\n\n", assigneeResult.EmployeeName, assigneeResult.EmployeeEmail)
+		selectedMsg = fmt.Sprintf("**Đã chọn nhân viên:** %s (%s)\n\n", assigneeResult.EmployeeName, assigneeResult.EmployeeEmail)
 	} else {
-		selectedMsg = fmt.Sprintf("✅ **Selected employee:** %s (%s)\n\n", assigneeResult.EmployeeName, assigneeResult.EmployeeEmail)
+		selectedMsg = fmt.Sprintf("**Selected employee:** %s (%s)\n\n", assigneeResult.EmployeeName, assigneeResult.EmployeeEmail)
 	}
 
 	return &erp_modules.ModuleResponse{
@@ -322,10 +443,70 @@ func (m *ProjectManagementModule) GetActionExamples() map[string][]string {
 	}
 }
 
-// handleModifyAction handles user modification requests
+// handleModifyAction handles user modification requests - ENHANCED WITH DISAMBIGUATION
 func (m *ProjectManagementModule) handleModifyAction(ctx *erp_modules.ModuleContext, pending *ProjectManagementConfirmation, modifications map[string]interface{}) (*erp_modules.ModuleResponse, error) {
-	// Handle assignee modification using dedicated function
-	m.handleAssigneeModification(modifications)
+	// Check if the modification involves an assignee change that might need disambiguation
+	if assigneeName, ok := modifications["assigned_to_name"].(string); ok && assigneeName != "" {
+		// Try to resolve the assignee
+		assigneeResult, err := m.resolveAssignee(assigneeName)
+		if err != nil {
+			m.api.LogError("Failed to resolve modified assignee", "error", err.Error())
+			// Continue with regular modification handling (clear assignee)
+			modifications["assigned_to_employee_id"] = ""
+			modifications["assigned_to_email"] = ""
+		} else if assigneeResult.RequiresDisambiguation {
+			// Store modification disambiguation state
+			modificationDisambiguation := &ModificationDisambiguationConfirmation{
+				UserID:               ctx.User.Id,
+				OriginalConfirmation: pending,
+				ModificationField:    "assigned_to_name",
+				OriginalSearchName:   assigneeName,
+				AvailableEmployees:   assigneeResult.MatchingEmployees,
+				PendingModifications: modifications,
+				CreatedAt:            time.Now().UnixMilli(),
+			}
+
+			m.confirmationManager.StorePendingModificationDisambiguation(ctx.User.Id, modificationDisambiguation)
+
+			// Generate disambiguation message
+			disambiguationMsg, err := m.generateDisambiguationMessage(ctx, assigneeResult.MatchingEmployees)
+			if err != nil {
+				isVietnamese := detectUserLanguage(ctx.User)
+				errorMsg := "⚠️ Có lỗi xảy ra khi tạo tin nhắn lựa chọn nhân viên."
+				if !isVietnamese {
+					errorMsg = "⚠️ An error occurred while creating employee selection message."
+				}
+				return &erp_modules.ModuleResponse{
+					Success: false,
+					Message: errorMsg,
+					Error:   err.Error(),
+				}, nil
+			}
+
+			return &erp_modules.ModuleResponse{
+				Success:     true,
+				Message:     disambiguationMsg,
+				ActionTaken: "request_modification_employee_disambiguation",
+				Data: map[string]interface{}{
+					"awaiting_disambiguation": true,
+					"type":                    "modification",
+					"employee_count":          len(assigneeResult.MatchingEmployees),
+				},
+			}, nil
+		} else if assigneeResult.Found {
+			// Single match found, proceed with regular modification
+			modifications["assigned_to_employee_id"] = assigneeResult.EmployeeID
+			modifications["assigned_to_email"] = assigneeResult.EmployeeEmail
+			modifications["assigned_to_name"] = assigneeResult.EmployeeName
+		} else {
+			// No match found, clear assignee fields
+			modifications["assigned_to_employee_id"] = ""
+			modifications["assigned_to_email"] = ""
+		}
+	} else {
+		// Handle other assignee modifications using existing logic
+		m.handleAssigneeModification(modifications)
+	}
 
 	// Update the pending data with modifications
 	for key, value := range modifications {
