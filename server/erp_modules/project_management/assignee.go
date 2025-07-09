@@ -112,12 +112,10 @@ func (m *ProjectManagementModule) resolveMultipleAssignees(assigneeNames []strin
 	return result, nil
 }
 
-// resolveDisambiguatedEmployees resolves employee selections from multi-disambiguation response
 func (m *ProjectManagementModule) resolveDisambiguatedEmployees(
 	unresolvedMatches []UnresolvedEmployeeMatch,
 	selectedIndexes []int,
 ) ([]AssignedEmployee, error) {
-
 	var resolvedEmployees []AssignedEmployee
 
 	// Build a map of global index to employee
@@ -133,13 +131,33 @@ func (m *ProjectManagementModule) resolveDisambiguatedEmployees(
 		}
 	}
 
+	// Validate that we have at least one selection
+	if len(selectedIndexes) == 0 {
+		return nil, fmt.Errorf("no employees selected")
+	}
+
+	// Track which employees we've already added to avoid duplicates
+	addedEmployees := make(map[string]bool)
+
 	// Validate and resolve selected indexes
 	for _, selectedIndex := range selectedIndexes {
 		if selectedIndex < 1 || selectedIndex >= currentIndex {
-			return nil, fmt.Errorf("invalid selection index: %d", selectedIndex)
+			return nil, fmt.Errorf("invalid selection index: %d (valid range: 1-%d)", selectedIndex, currentIndex-1)
 		}
 
-		emp := globalIndexToEmployee[selectedIndex]
+		emp, exists := globalIndexToEmployee[selectedIndex]
+		if !exists {
+			return nil, fmt.Errorf("employee not found for index: %d", selectedIndex)
+		}
+
+		// Avoid duplicate employees (in case user selects same person multiple times)
+		if addedEmployees[emp.Name] {
+			m.api.LogInfo("Skipping duplicate employee selection",
+				"employee_id", emp.Name,
+				"employee_name", emp.EmployeeName)
+			continue
+		}
+
 		originalName := globalIndexToOriginalName[selectedIndex]
 
 		resolvedEmployees = append(resolvedEmployees, AssignedEmployee{
@@ -149,6 +167,8 @@ func (m *ProjectManagementModule) resolveDisambiguatedEmployees(
 			OriginalName: originalName,
 		})
 
+		addedEmployees[emp.Name] = true
+
 		m.api.LogInfo("Employee selected by index",
 			"selected_index", selectedIndex,
 			"original_name", originalName,
@@ -156,11 +176,13 @@ func (m *ProjectManagementModule) resolveDisambiguatedEmployees(
 			"employee_name", emp.EmployeeName)
 	}
 
-	// Validate that all unresolved matches have been addressed
-	expectedSelections := len(unresolvedMatches)
-	if len(selectedIndexes) != expectedSelections {
-		return nil, fmt.Errorf("expected %d selections but got %d", expectedSelections, len(selectedIndexes))
+	if len(resolvedEmployees) == 0 {
+		return nil, fmt.Errorf("no valid employees were resolved from the selected indexes")
 	}
+
+	m.api.LogInfo("Successfully resolved employees",
+		"total_selected", len(resolvedEmployees),
+		"original_unresolved_count", len(unresolvedMatches))
 
 	return resolvedEmployees, nil
 }
