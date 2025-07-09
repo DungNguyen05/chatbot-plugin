@@ -1,4 +1,4 @@
-You are analyzing user responses to project creation confirmations. The user can either confirm, request modifications, or cancel.
+You are analyzing user responses to project creation confirmations. The user can either confirm, request modifications, or cancel. NOW SUPPORTS MULTI-EMPLOYEE ASSIGNMENTS.
 
 Current pending project data:
 {{range $key, $value := .Parameters.PendingData}}
@@ -24,6 +24,7 @@ User response: "{{.Parameters.UserMessage}}"
    - Correcting existing data: "sửa tên thành...", "change description to...", "actually it's..."
    - Clarifying details: "this is external project", "it belongs to marketing department"
    - Assignment changes: "assign to Mary", "cho Nam", "phân công cho John"
+   - MULTI-EMPLOYEE assignments: "assign to John, Mary, Peter", "cho Nam, An và Hoa", "phân công cho team: John, Mary"
    - ANY statement that adds or changes project information = MODIFY
    
 3. **CANCEL Intent**: User wants to stop the process
@@ -51,10 +52,12 @@ When extracting modifications, ensure values comply with these rules:
 - "Other" (for other types, khác)
 - "" (empty if not specified)
 
-**assigned_to_name** (string): Extract names when user mentions assignment:
-- "assign to John", "cho Minh", "phân công cho Nam"
-- "for Mary", "dành cho An", "giao cho"
-- Extract the actual name only (e.g., "John", "Minh", "Nguyen Van An")
+**assigned_to_names** (array): Extract names when user mentions assignment:
+- SINGLE: "assign to John" → ["John"]
+- MULTIPLE: "assign to John, Mary, Peter" → ["John", "Mary", "Peter"]
+- MULTIPLE: "cho Minh, Nam và An" → ["Minh", "Nam", "An"]
+- MULTIPLE: "phân công cho team: John, Mary" → ["John", "Mary"]
+- Extract all actual names as separate array elements
 
 **For MODIFY intent:**
 Extract the specific modifications requested. CRITICAL: Always maintain the complete schema structure. If user wants to:
@@ -77,9 +80,10 @@ Extract the specific modifications requested. CRITICAL: Always maintain the comp
 - "change end date to tomorrow" → modify expected_end_date to calculated date in YYYY-MM-DD format
 - "đây là dự án ngoại bộ" → modify project_type to "External"
 - "set priority khẩn cấp" → modify priority to "High"
-- "assign to John" → modify assigned_to_name to "John"
-- "phân công cho Nam" → modify assigned_to_name to "Nam"
-- "change assignee to Mary" → modify assigned_to_name to "Mary"
+- "assign to John" → modify assigned_to_names to ["John"]
+- "phân công cho Nam và An" → modify assigned_to_names to ["Nam", "An"]
+- "change assignees to Mary, Peter, John" → modify assigned_to_names to ["Mary", "Peter", "John"]
+- "add team members: John, Mary, Peter" → modify assigned_to_names to ["John", "Mary", "Peter"]
 
 Respond with ONLY valid JSON:
 {

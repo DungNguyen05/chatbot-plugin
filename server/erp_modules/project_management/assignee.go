@@ -9,192 +9,256 @@ import (
 	"strings"
 )
 
-// resolveAssignee resolves an assignee name to an employee ID and email with disambiguation support
-func (m *ProjectManagementModule) resolveAssignee(assigneeName string) (*AssigneeResolutionResult, error) {
-	// If no assignee name provided, return empty result (not an error)
-	if assigneeName == "" {
-		m.api.LogDebug("No assignee name provided, skipping resolution")
-		return &AssigneeResolutionResult{Found: false}, nil
-	}
-
-	m.api.LogDebug("Resolving assignee", "assignee_name", assigneeName)
-
-	// Search for employees by name
-	employees, err := m.erpClient.SearchEmployeesByName(assigneeName)
-	if err != nil {
+// resolveMultipleAssignees resolves multiple assignee names with comprehensive disambiguation support
+func (m *ProjectManagementModule) resolveMultipleAssignees(assigneeNames []string) (*AssigneeResolutionResult, error) {
+	if len(assigneeNames) == 0 {
+		m.api.LogDebug("No assignee names provided, skipping resolution")
 		return &AssigneeResolutionResult{
-			Found: false,
-			Error: fmt.Sprintf("Failed to search employees: %v", err),
-		}, err
-	}
-
-	if len(employees) == 0 {
-		return &AssigneeResolutionResult{
-			Found: false,
-			Error: fmt.Sprintf("No employee found matching '%s'", assigneeName),
+			ResolvedEmployees:         []AssignedEmployee{},
+			UnresolvedEmployeeMatches: []UnresolvedEmployeeMatch{},
+			RequiresDisambiguation:    false,
 		}, nil
 	}
 
-	// Filter employees above the confidence threshold
-	var highConfidenceMatches []Employee
-	for _, emp := range employees {
-		if emp.MatchConfidence >= EmployeeMatchThreshold {
-			highConfidenceMatches = append(highConfidenceMatches, emp)
-		}
-	}
+	m.api.LogDebug("Resolving multiple assignees", "assignee_names", assigneeNames)
 
-	// If no high confidence matches, check if we have reasonable matches
-	if len(highConfidenceMatches) == 0 {
-		// Look for matches above 0.7 threshold for disambiguation
-		var moderateMatches []Employee
+	var resolvedEmployees []AssignedEmployee
+	var unresolvedMatches []UnresolvedEmployeeMatch
+	displayIndex := 1
+
+	for _, assigneeName := range assigneeNames {
+		assigneeName = strings.TrimSpace(assigneeName)
+		if assigneeName == "" {
+			continue
+		}
+
+		// Search for employees by name
+		employees, err := m.erpClient.SearchEmployeesByName(assigneeName)
+		if err != nil {
+			m.api.LogError("Failed to search employees", "assignee_name", assigneeName, "error", err.Error())
+			continue
+		}
+
+		if len(employees) == 0 {
+			m.api.LogWarn("No employee found", "assignee_name", assigneeName)
+			continue
+		}
+
+		// Filter employees above the confidence threshold
+		var highConfidenceMatches []Employee
 		for _, emp := range employees {
-			if emp.MatchConfidence >= 0.7 {
-				moderateMatches = append(moderateMatches, emp)
+			if emp.MatchConfidence >= EmployeeMatchThreshold {
+				highConfidenceMatches = append(highConfidenceMatches, emp)
 			}
 		}
 
-		if len(moderateMatches) == 0 {
-			return &AssigneeResolutionResult{
-				Found: false,
-				Error: fmt.Sprintf("No employee found matching '%s' with sufficient confidence", assigneeName),
-			}, nil
+		// If exactly one high confidence match, resolve it
+		if len(highConfidenceMatches) == 1 {
+			emp := highConfidenceMatches[0]
+			resolvedEmployees = append(resolvedEmployees, AssignedEmployee{
+				EmployeeID:   emp.Name,
+				EmployeeName: emp.EmployeeName,
+				Email:        emp.CompanyEmail,
+				OriginalName: assigneeName,
+			})
+			m.api.LogDebug("Resolved employee with high confidence",
+				"original_name", assigneeName,
+				"employee_id", emp.Name,
+				"employee_name", emp.EmployeeName,
+				"confidence", emp.MatchConfidence)
+		} else {
+			// Multiple matches or no high confidence matches - needs disambiguation
+			var candidateEmployees []Employee
+			if len(highConfidenceMatches) > 1 {
+				// Multiple high confidence matches
+				candidateEmployees = highConfidenceMatches
+			} else {
+				// No high confidence matches, check for moderate confidence
+				for _, emp := range employees {
+					if emp.MatchConfidence >= 0.7 {
+						candidateEmployees = append(candidateEmployees, emp)
+					}
+				}
+			}
+
+			if len(candidateEmployees) > 0 {
+				unresolvedMatches = append(unresolvedMatches, UnresolvedEmployeeMatch{
+					OriginalName:      assigneeName,
+					MatchingEmployees: candidateEmployees,
+					Index:             displayIndex,
+				})
+				displayIndex += len(candidateEmployees)
+				m.api.LogDebug("Employee requires disambiguation",
+					"original_name", assigneeName,
+					"candidate_count", len(candidateEmployees))
+			} else {
+				m.api.LogWarn("No suitable candidates found for employee",
+					"assignee_name", assigneeName)
+			}
 		}
-
-		// Multiple moderate matches - require disambiguation
-		if len(moderateMatches) > 1 {
-			m.api.LogDebug("Multiple moderate confidence matches found",
-				"search_name", assigneeName,
-				"match_count", len(moderateMatches))
-
-			return &AssigneeResolutionResult{
-				Found:                  false,
-				MultipleMatches:        true,
-				RequiresDisambiguation: true,
-				MatchingEmployees:      moderateMatches,
-				Error:                  fmt.Sprintf("Multiple employees found matching '%s'", assigneeName),
-			}, nil
-		}
-
-		// Single moderate match - use it but with lower confidence
-		bestMatch := moderateMatches[0]
-		m.api.LogDebug("Single moderate confidence match found",
-			"input_name", assigneeName,
-			"matched_employee_id", bestMatch.Name,
-			"matched_employee_name", bestMatch.EmployeeName,
-			"matched_employee_email", bestMatch.CompanyEmail,
-			"confidence", bestMatch.MatchConfidence)
-
-		return &AssigneeResolutionResult{
-			Found:         true,
-			EmployeeID:    bestMatch.Name,
-			EmployeeName:  bestMatch.EmployeeName,
-			EmployeeEmail: bestMatch.CompanyEmail,
-		}, nil
 	}
 
-	// If exactly one high confidence match, use it
-	if len(highConfidenceMatches) == 1 {
-		bestMatch := highConfidenceMatches[0]
-		m.api.LogDebug("Single high confidence match found",
-			"input_name", assigneeName,
-			"matched_employee_id", bestMatch.Name,
-			"matched_employee_name", bestMatch.EmployeeName,
-			"matched_employee_email", bestMatch.CompanyEmail,
-			"confidence", bestMatch.MatchConfidence)
-
-		return &AssigneeResolutionResult{
-			Found:         true,
-			EmployeeID:    bestMatch.Name,
-			EmployeeName:  bestMatch.EmployeeName,
-			EmployeeEmail: bestMatch.CompanyEmail,
-		}, nil
+	result := &AssigneeResolutionResult{
+		ResolvedEmployees:         resolvedEmployees,
+		UnresolvedEmployeeMatches: unresolvedMatches,
+		RequiresDisambiguation:    len(unresolvedMatches) > 0,
 	}
 
-	// Multiple high confidence matches - require disambiguation
-	m.api.LogDebug("Multiple high confidence matches found",
-		"search_name", assigneeName,
-		"match_count", len(highConfidenceMatches))
+	m.api.LogInfo("Multi-assignee resolution completed",
+		"resolved_count", len(resolvedEmployees),
+		"unresolved_count", len(unresolvedMatches),
+		"requires_disambiguation", result.RequiresDisambiguation)
 
-	return &AssigneeResolutionResult{
-		Found:                  false,
-		MultipleMatches:        true,
-		RequiresDisambiguation: true,
-		MatchingEmployees:      highConfidenceMatches,
-		Error:                  fmt.Sprintf("Multiple employees found matching '%s'", assigneeName),
-	}, nil
+	return result, nil
 }
 
-// resolveDisambiguatedEmployee resolves employee selection from disambiguation response
-func (m *ProjectManagementModule) resolveDisambiguatedEmployee(
-	availableEmployees []Employee,
-	selectedIndex int,
-	clarificationText string,
-	intent string,
-) (*AssigneeResolutionResult, error) {
+// resolveDisambiguatedEmployees resolves employee selections from multi-disambiguation response
+func (m *ProjectManagementModule) resolveDisambiguatedEmployees(
+	unresolvedMatches []UnresolvedEmployeeMatch,
+	selectedIndexes []int,
+) ([]AssignedEmployee, error) {
 
-	switch intent {
-	case "index_selection":
-		// Validate index range (1-based)
-		if selectedIndex < 1 || selectedIndex > len(availableEmployees) {
-			return &AssigneeResolutionResult{
-				Found: false,
-				Error: fmt.Sprintf("Invalid selection. Please choose between 1 and %d", len(availableEmployees)),
-			}, nil
+	var resolvedEmployees []AssignedEmployee
+
+	// Build a map of global index to employee
+	globalIndexToEmployee := make(map[int]Employee)
+	globalIndexToOriginalName := make(map[int]string)
+
+	currentIndex := 1
+	for _, unresolvedMatch := range unresolvedMatches {
+		for _, emp := range unresolvedMatch.MatchingEmployees {
+			globalIndexToEmployee[currentIndex] = emp
+			globalIndexToOriginalName[currentIndex] = unresolvedMatch.OriginalName
+			currentIndex++
+		}
+	}
+
+	// Validate and resolve selected indexes
+	for _, selectedIndex := range selectedIndexes {
+		if selectedIndex < 1 || selectedIndex >= currentIndex {
+			return nil, fmt.Errorf("invalid selection index: %d", selectedIndex)
 		}
 
-		// Get selected employee (convert to 0-based index)
-		selectedEmployee := availableEmployees[selectedIndex-1]
+		emp := globalIndexToEmployee[selectedIndex]
+		originalName := globalIndexToOriginalName[selectedIndex]
+
+		resolvedEmployees = append(resolvedEmployees, AssignedEmployee{
+			EmployeeID:   emp.Name,
+			EmployeeName: emp.EmployeeName,
+			Email:        emp.CompanyEmail,
+			OriginalName: originalName,
+		})
 
 		m.api.LogInfo("Employee selected by index",
 			"selected_index", selectedIndex,
-			"employee_id", selectedEmployee.Name,
-			"employee_name", selectedEmployee.EmployeeName,
-			"employee_email", selectedEmployee.CompanyEmail)
-
-		return &AssigneeResolutionResult{
-			Found:         true,
-			EmployeeID:    selectedEmployee.Name,
-			EmployeeName:  selectedEmployee.EmployeeName,
-			EmployeeEmail: selectedEmployee.CompanyEmail,
-		}, nil
-
-	case "name_clarification":
-		// Try to match clarification text against available employees
-		bestMatch, bestScore := m.findBestMatchFromClarification(availableEmployees, clarificationText)
-
-		if bestScore < 0.8 {
-			return &AssigneeResolutionResult{
-				Found: false,
-				Error: fmt.Sprintf("Could not clearly identify employee from '%s'. Please select by number (1, 2, 3, etc.)", clarificationText),
-			}, nil
-		}
-
-		m.api.LogInfo("Employee selected by clarification",
-			"clarification", clarificationText,
-			"employee_id", bestMatch.Name,
-			"employee_name", bestMatch.EmployeeName,
-			"employee_email", bestMatch.CompanyEmail,
-			"match_score", bestScore)
-
-		return &AssigneeResolutionResult{
-			Found:         true,
-			EmployeeID:    bestMatch.Name,
-			EmployeeName:  bestMatch.EmployeeName,
-			EmployeeEmail: bestMatch.CompanyEmail,
-		}, nil
-
-	case "cancel":
-		return &AssigneeResolutionResult{
-			Found: false,
-			Error: "Assignment cancelled by user",
-		}, nil
-
-	default:
-		return &AssigneeResolutionResult{
-			Found: false,
-			Error: "Invalid response. Please select by number (1, 2, 3, etc.) or provide more specific details",
-		}, nil
+			"original_name", originalName,
+			"employee_id", emp.Name,
+			"employee_name", emp.EmployeeName)
 	}
+
+	// Validate that all unresolved matches have been addressed
+	expectedSelections := len(unresolvedMatches)
+	if len(selectedIndexes) != expectedSelections {
+		return nil, fmt.Errorf("expected %d selections but got %d", expectedSelections, len(selectedIndexes))
+	}
+
+	return resolvedEmployees, nil
+}
+
+// processAssigneesForProject resolves assignees for project creation
+func (m *ProjectManagementModule) processAssigneesForProject(projectRequest *ProjectCreationRequest) {
+	if len(projectRequest.AssignedToNames) == 0 {
+		m.api.LogDebug("No assignees specified for project")
+		return
+	}
+
+	assigneeResult, err := m.resolveMultipleAssignees(projectRequest.AssignedToNames)
+	if err != nil {
+		m.api.LogError("Failed to resolve project assignees", "error", err.Error())
+		return
+	}
+
+	// Set resolved employees
+	projectRequest.AssignedToEmployees = assigneeResult.ResolvedEmployees
+
+	m.api.LogInfo("Processed project assignees",
+		"input_names", projectRequest.AssignedToNames,
+		"resolved_count", len(assigneeResult.ResolvedEmployees),
+		"requires_disambiguation", assigneeResult.RequiresDisambiguation)
+}
+
+// processAssigneesForTask resolves assignees for task creation
+func (m *ProjectManagementModule) processAssigneesForTask(taskRequest *TaskCreationRequest) {
+	if len(taskRequest.AssignedToNames) == 0 {
+		m.api.LogDebug("No assignees specified for task")
+		return
+	}
+
+	assigneeResult, err := m.resolveMultipleAssignees(taskRequest.AssignedToNames)
+	if err != nil {
+		m.api.LogError("Failed to resolve task assignees", "error", err.Error())
+		return
+	}
+
+	// Set resolved employees
+	taskRequest.AssignedToEmployees = assigneeResult.ResolvedEmployees
+
+	m.api.LogInfo("Processed task assignees",
+		"input_names", taskRequest.AssignedToNames,
+		"resolved_count", len(assigneeResult.ResolvedEmployees),
+		"requires_disambiguation", assigneeResult.RequiresDisambiguation)
+}
+
+// handleAssigneesModification handles assignee changes during modification
+func (m *ProjectManagementModule) handleAssigneesModification(modifications map[string]interface{}) {
+	assigneeNamesInterface, hasAssignees := modifications["assigned_to_names"]
+	if !hasAssignees {
+		return
+	}
+
+	// Handle empty assignment
+	if assigneeNamesInterface == nil {
+		modifications["assigned_to_employees"] = []AssignedEmployee{}
+		m.api.LogDebug("Cleared assignees")
+		return
+	}
+
+	// Convert to string slice
+	var assigneeNames []string
+	switch v := assigneeNamesInterface.(type) {
+	case []string:
+		assigneeNames = v
+	case []interface{}:
+		for _, name := range v {
+			if nameStr, ok := name.(string); ok {
+				assigneeNames = append(assigneeNames, nameStr)
+			}
+		}
+	default:
+		m.api.LogError("Invalid assignee names format in modification")
+		modifications["assigned_to_employees"] = []AssignedEmployee{}
+		return
+	}
+
+	if len(assigneeNames) == 0 {
+		modifications["assigned_to_employees"] = []AssignedEmployee{}
+		m.api.LogDebug("No assignee names provided in modification")
+		return
+	}
+
+	// Resolve the new assignees
+	assigneeResult, err := m.resolveMultipleAssignees(assigneeNames)
+	if err != nil {
+		m.api.LogError("Failed to resolve modified assignees", "error", err.Error())
+		modifications["assigned_to_employees"] = []AssignedEmployee{}
+		return
+	}
+
+	modifications["assigned_to_employees"] = assigneeResult.ResolvedEmployees
+	m.api.LogInfo("Resolved modified assignees",
+		"input_names", assigneeNames,
+		"resolved_count", len(assigneeResult.ResolvedEmployees),
+		"requires_disambiguation", assigneeResult.RequiresDisambiguation)
 }
 
 // findBestMatchFromClarification finds the best employee match from clarification text
@@ -265,117 +329,4 @@ func (m *ProjectManagementModule) calculateClarificationMatchScore(emp Employee,
 	}
 
 	return maxScore
-}
-
-// processAssigneeForProject resolves assignee for project creation
-func (m *ProjectManagementModule) processAssigneeForProject(projectRequest *ProjectCreationRequest) {
-	if projectRequest.AssignedToName == "" {
-		m.api.LogDebug("No assignee specified for project")
-		return
-	}
-
-	assigneeResult, err := m.resolveAssignee(projectRequest.AssignedToName)
-	if err != nil {
-		m.api.LogError("Failed to resolve project assignee", "error", err.Error())
-		return
-	}
-
-	if assigneeResult.Found {
-		projectRequest.AssignedToEmployeeID = assigneeResult.EmployeeID
-		projectRequest.AssignedToEmail = assigneeResult.EmployeeEmail
-		m.api.LogInfo("Resolved project assignee",
-			"input_name", projectRequest.AssignedToName,
-			"resolved_employee_id", assigneeResult.EmployeeID,
-			"resolved_employee_name", assigneeResult.EmployeeName,
-			"resolved_employee_email", assigneeResult.EmployeeEmail)
-	} else {
-		// Log warning but continue - assignee resolution is optional
-		m.api.LogWarn("Could not resolve project assignee",
-			"input_name", projectRequest.AssignedToName,
-			"error", assigneeResult.Error,
-			"requires_disambiguation", assigneeResult.RequiresDisambiguation)
-		// Clear both employee ID and email if resolution failed
-		projectRequest.AssignedToEmployeeID = ""
-		projectRequest.AssignedToEmail = ""
-	}
-}
-
-// processAssigneeForTask resolves assignee for task creation
-func (m *ProjectManagementModule) processAssigneeForTask(taskRequest *TaskCreationRequest) {
-	if taskRequest.AssignedToName == "" {
-		m.api.LogDebug("No assignee specified for task")
-		return
-	}
-
-	assigneeResult, err := m.resolveAssignee(taskRequest.AssignedToName)
-	if err != nil {
-		m.api.LogError("Failed to resolve task assignee", "error", err.Error())
-		return
-	}
-
-	if assigneeResult.Found {
-		taskRequest.AssignedToEmployeeID = assigneeResult.EmployeeID
-		taskRequest.AssignedToEmail = assigneeResult.EmployeeEmail
-		m.api.LogInfo("Resolved task assignee",
-			"input_name", taskRequest.AssignedToName,
-			"resolved_employee_id", assigneeResult.EmployeeID,
-			"resolved_employee_name", assigneeResult.EmployeeName,
-			"resolved_employee_email", assigneeResult.EmployeeEmail)
-	} else {
-		// Log warning but continue - assignee resolution is optional
-		m.api.LogWarn("Could not resolve task assignee",
-			"input_name", taskRequest.AssignedToName,
-			"error", assigneeResult.Error,
-			"requires_disambiguation", assigneeResult.RequiresDisambiguation)
-		// Clear both employee ID and email if resolution failed
-		taskRequest.AssignedToEmployeeID = ""
-		taskRequest.AssignedToEmail = ""
-	}
-}
-
-// handleAssigneeModification handles assignee changes during modification - ENHANCED FOR DISAMBIGUATION
-func (m *ProjectManagementModule) handleAssigneeModification(modifications map[string]interface{}) {
-	assigneeName, hasAssignee := modifications["assigned_to_name"]
-	if !hasAssignee {
-		return
-	}
-
-	// If empty string, clear the employee ID and email
-	if assigneeName == "" || assigneeName == nil {
-		modifications["assigned_to_employee_id"] = ""
-		modifications["assigned_to_email"] = ""
-		m.api.LogDebug("Cleared assignee")
-		return
-	}
-
-	// Note: This method is now primarily used for fallback cases
-	// The main modification logic with disambiguation is handled in handleModifyAction
-	// This method handles cases where disambiguation is not needed or has already been resolved
-
-	// Resolve the new assignee
-	assigneeResult, err := m.resolveAssignee(assigneeName.(string))
-	if err != nil {
-		m.api.LogError("Failed to resolve modified assignee", "error", err.Error())
-		modifications["assigned_to_employee_id"] = ""
-		modifications["assigned_to_email"] = ""
-		return
-	}
-
-	if assigneeResult.Found {
-		modifications["assigned_to_employee_id"] = assigneeResult.EmployeeID
-		modifications["assigned_to_email"] = assigneeResult.EmployeeEmail
-		m.api.LogInfo("Resolved modified assignee",
-			"input_name", assigneeName,
-			"resolved_employee_id", assigneeResult.EmployeeID,
-			"resolved_employee_name", assigneeResult.EmployeeName,
-			"resolved_employee_email", assigneeResult.EmployeeEmail)
-	} else {
-		// Clear both employee ID and email if resolution failed
-		modifications["assigned_to_employee_id"] = ""
-		modifications["assigned_to_email"] = ""
-		m.api.LogWarn("Could not resolve modified assignee",
-			"input_name", assigneeName,
-			"error", assigneeResult.Error,
-			"requires_disambiguation", assigneeResult.RequiresDisambiguation)
-	}
 }

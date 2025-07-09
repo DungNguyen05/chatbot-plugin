@@ -1,43 +1,52 @@
-You are analyzing user responses to employee selection requests. The user has been presented with multiple employee options and needs to select one.
+You are analyzing user responses to multi-employee selection requests. The user has been presented with multiple employee options and needs to select employees.
 
-The user was shown a numbered list of employees (1, 2, 3, etc.) and asked to select one.
+The user was shown a numbered list of employees and asked to select one or more employees.
 
 User response: "{{.Parameters.UserMessage}}"
 Use Vietnamese: {{.Parameters.IsVietnamese}}
 
 **ANALYSIS RULES:**
-1. **INDEX_SELECTION**: User provides a number (1, 2, 3, etc.) referring to the list
-   - Examples: "1", "2", "3", "number 2", "option 1", "chọn 2", "số 3"
-   - Extract the index number (1-based)
+1. **INDEX_SELECTION**: User provides one or more numbers referring to the list
+   - SINGLE: "5", "chọn 5", "select 3" → [5] or [3]
+   - MULTIPLE: "1, 3, 5", "2,4", "1 và 3", "chọn 1, 2, 3", "select 2, 4, 6" → [1,3,5] or [2,4] etc.
+   - Extract all index numbers (1-based)
+   - Handle various separators: commas, spaces, "and", "và"
    
-2. **NAME_CLARIFICATION**: User provides additional name details to clarify
-   - Examples: "Duy Anh", "the one with duyanh@...", "Hanh from HR"
-   - Match against employee details (name, email, department)
-   
-3. **CANCEL**: User wants to cancel the assignment
+2. **CANCEL**: User wants to cancel the assignment
    - Examples: "cancel", "none", "skip", "hủy", "không", "bỏ qua"
 
-**IMPORTANT:**
-- Look for ANY number in the user's response (1, 2, 3, etc.)
-- Numbers like "2" should be classified as index_selection with selected_index: 2
-- Be very flexible - even just "2" alone should work
+**SELECTION PARSING:**
+- Look for ANY numbers in the user's response (1, 2, 3, etc.)
+- Handle single and multiple formats:
+  - "5" → [5]
+  - "1, 3, 5" → [1, 3, 5]  
+  - "2 4 6" → [2, 4, 6]
+  - "1 và 3" → [1, 3]
+  - "select 2, 4" → [2, 4]
+  - "chọn số 1, 3, 5" → [1, 3, 5]
+  - "3" → [3]
+- Be very flexible with separators and format
 - Handle Vietnamese and English responses
-- If unclear, prefer index_selection over name_clarification
+
+**IMPORTANT:**
+- Extract ALL numbers mentioned in the response
+- Even a single number like "5" should be classified as index_selection with selected_indexes: [5]
+- If unclear, prefer index_selection over cancel
 
 **Response Examples:**
-- User says "2" → {"intent": "index_selection", "selected_index": 2, "clarification_text": "", "reasoning": "User selected option 2"}
-- User says "chọn số 1" → {"intent": "index_selection", "selected_index": 1, "clarification_text": "", "reasoning": "User selected option 1 in Vietnamese"}
-- User says "Duy Anh" → {"intent": "name_clarification", "selected_index": 0, "clarification_text": "Duy Anh", "reasoning": "User provided specific name"}
-- User says "cancel" → {"intent": "cancel", "selected_index": 0, "clarification_text": "", "reasoning": "User wants to cancel"}
+- User says "5" → {"intent": "index_selection", "selected_indexes": [5], "reasoning": "User selected employee 5"}
+- User says "1, 3, 5" → {"intent": "index_selection", "selected_indexes": [1, 3, 5], "reasoning": "User selected employees 1, 3, and 5"}
+- User says "chọn 2, 4" → {"intent": "index_selection", "selected_indexes": [2, 4], "reasoning": "User selected employees 2 and 4 in Vietnamese"}
+- User says "2 4 6" → {"intent": "index_selection", "selected_indexes": [2, 4, 6], "reasoning": "User selected employees 2, 4, and 6"}
+- User says "3" → {"intent": "index_selection", "selected_indexes": [3], "reasoning": "User selected employee 3"}
+- User says "cancel" → {"intent": "cancel", "selected_indexes": [], "reasoning": "User wants to cancel"}
 
 Respond with ONLY valid JSON:
 {
-  "intent": "index_selection|name_clarification|cancel",
-  "selected_index": 0,
-  "clarification_text": "",
+  "intent": "index_selection|cancel",
+  "selected_indexes": [],
   "reasoning": "Brief explanation"
 }
 
-For index_selection: set selected_index to the number, leave clarification_text empty
-For name_clarification: set clarification_text, leave selected_index as 0  
-For cancel: leave both as empty/0
+For index_selection: set selected_indexes to the array of numbers (even if just one number)
+For cancel: leave selected_indexes as empty array []

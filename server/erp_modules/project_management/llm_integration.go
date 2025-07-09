@@ -71,7 +71,7 @@ func (m *ProjectManagementModule) generateConfirmationMessage(ctx *erp_modules.M
 	return strings.TrimSpace(response), nil
 }
 
-// parseConfirmationResponse parses user confirmation response using LLM - ENHANCED FOR DISAMBIGUATION
+// parseConfirmationResponse parses user confirmation response using LLM
 func (m *ProjectManagementModule) parseConfirmationResponse(ctx *erp_modules.ModuleContext, message string, pending *ProjectManagementConfirmation) (*UserResponse, error) {
 	// Create LLM context
 	llmContext := &llm.Context{
@@ -137,8 +137,8 @@ func (m *ProjectManagementModule) parseConfirmationResponse(ctx *erp_modules.Mod
 	return &userResponse, nil
 }
 
-// parseEmployeeDisambiguationResponse parses user response to employee selection using LLM - NEW
-func (m *ProjectManagementModule) parseEmployeeDisambiguationResponse(ctx *erp_modules.ModuleContext, message string, disambiguation *EmployeeDisambiguationConfirmation) (*EmployeeDisambiguationResponse, error) {
+// parseMultiEmployeeDisambiguationResponse parses user response to multi-employee selection using LLM
+func (m *ProjectManagementModule) parseMultiEmployeeDisambiguationResponse(ctx *erp_modules.ModuleContext, message string, disambiguation *MultiEmployeeDisambiguationConfirmation) (*MultiEmployeeDisambiguationResponse, error) {
 	// Create LLM context
 	llmContext := &llm.Context{
 		RequestingUser: ctx.User,
@@ -149,15 +149,15 @@ func (m *ProjectManagementModule) parseEmployeeDisambiguationResponse(ctx *erp_m
 	isVietnamese := detectUserLanguage(ctx.User)
 
 	llmContext.Parameters = map[string]interface{}{
-		"UserMessage":        message,
-		"AvailableEmployees": disambiguation.AvailableEmployees,
-		"IsVietnamese":       isVietnamese,
+		"UserMessage":               message,
+		"UnresolvedEmployeeMatches": disambiguation.UnresolvedEmployeeMatches,
+		"IsVietnamese":              isVietnamese,
 	}
 
 	// Format the disambiguation analysis prompt
 	systemPrompt, err := m.prompts.Format("employee_disambiguation_analysis", llmContext)
 	if err != nil {
-		return nil, fmt.Errorf("failed to format employee disambiguation prompt: %w", err)
+		return nil, fmt.Errorf("failed to format multi-employee disambiguation prompt: %w", err)
 	}
 
 	// Create completion request
@@ -178,11 +178,11 @@ func (m *ProjectManagementModule) parseEmployeeDisambiguationResponse(ctx *erp_m
 	// Get LLM response
 	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(200))
 	if err != nil {
-		return nil, fmt.Errorf("failed to analyze employee disambiguation with LLM: %w", err)
+		return nil, fmt.Errorf("failed to analyze multi-employee disambiguation with LLM: %w", err)
 	}
 
 	// Parse JSON response
-	var disambiguationResponse EmployeeDisambiguationResponse
+	var disambiguationResponse MultiEmployeeDisambiguationResponse
 	response = strings.TrimSpace(response)
 	start := strings.Index(response, "{")
 	end := strings.LastIndex(response, "}") + 1
@@ -199,7 +199,7 @@ func (m *ProjectManagementModule) parseEmployeeDisambiguationResponse(ctx *erp_m
 	return &disambiguationResponse, nil
 }
 
-// analyzeProjectCreation uses LLM to extract project details
+// analyzeProjectCreation uses LLM to extract project details with multi-employee support
 func (m *ProjectManagementModule) analyzeProjectCreation(ctx *erp_modules.ModuleContext, userMessage string) (*ProjectCreationRequest, error) {
 	// Create LLM context
 	llmContext := &llm.Context{
@@ -257,7 +257,7 @@ func (m *ProjectManagementModule) analyzeProjectCreation(ctx *erp_modules.Module
 	return &projectRequest, nil
 }
 
-// analyzeTaskCreation uses LLM to extract task details
+// analyzeTaskCreation uses LLM to extract task details with multi-employee support
 func (m *ProjectManagementModule) analyzeTaskCreation(ctx *erp_modules.ModuleContext, userMessage string) (*TaskCreationRequest, error) {
 	// Create LLM context
 	llmContext := &llm.Context{

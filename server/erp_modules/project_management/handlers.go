@@ -14,20 +14,18 @@ import (
 	"github.com/mattermost/mattermost/server/public/model"
 )
 
-// ConfirmationManager handles confirmation state
+// ConfirmationManager handles confirmation state with multi-employee disambiguation
 type ConfirmationManager struct {
-	confirmationState               map[string]*ProjectManagementConfirmation
-	disambiguationState             map[string]*EmployeeDisambiguationConfirmation
-	modificationDisambiguationState map[string]*ModificationDisambiguationConfirmation // NEW
-	confirmationMutex               sync.RWMutex
+	confirmationState                map[string]*ProjectManagementConfirmation
+	multiEmployeeDisambiguationState map[string]*MultiEmployeeDisambiguationConfirmation
+	confirmationMutex                sync.RWMutex
 }
 
 // NewConfirmationManager creates a new confirmation manager
 func NewConfirmationManager() *ConfirmationManager {
 	return &ConfirmationManager{
-		confirmationState:               make(map[string]*ProjectManagementConfirmation),
-		disambiguationState:             make(map[string]*EmployeeDisambiguationConfirmation),
-		modificationDisambiguationState: make(map[string]*ModificationDisambiguationConfirmation),
+		confirmationState:                make(map[string]*ProjectManagementConfirmation),
+		multiEmployeeDisambiguationState: make(map[string]*MultiEmployeeDisambiguationConfirmation),
 	}
 }
 
@@ -36,9 +34,7 @@ func (cm *ConfirmationManager) StorePendingConfirmation(userID string, confirmat
 	cm.confirmationMutex.Lock()
 	defer cm.confirmationMutex.Unlock()
 	cm.confirmationState[userID] = confirmation
-	// Clear disambiguation states when storing regular confirmation
-	delete(cm.disambiguationState, userID)
-	delete(cm.modificationDisambiguationState, userID)
+	delete(cm.multiEmployeeDisambiguationState, userID)
 }
 
 // GetPendingConfirmation retrieves a pending confirmation
@@ -54,47 +50,26 @@ func (cm *ConfirmationManager) ClearPendingConfirmation(userID string) {
 	cm.confirmationMutex.Lock()
 	defer cm.confirmationMutex.Unlock()
 	delete(cm.confirmationState, userID)
-	delete(cm.disambiguationState, userID)
-	delete(cm.modificationDisambiguationState, userID)
+	delete(cm.multiEmployeeDisambiguationState, userID)
 }
 
-// StorePendingDisambiguation stores a pending employee disambiguation
-func (cm *ConfirmationManager) StorePendingDisambiguation(userID string, disambiguation *EmployeeDisambiguationConfirmation) {
+// StorePendingMultiEmployeeDisambiguation stores a pending multi-employee disambiguation
+func (cm *ConfirmationManager) StorePendingMultiEmployeeDisambiguation(userID string, disambiguation *MultiEmployeeDisambiguationConfirmation) {
 	cm.confirmationMutex.Lock()
 	defer cm.confirmationMutex.Unlock()
-	cm.disambiguationState[userID] = disambiguation
-	// Clear other states when storing disambiguation
+	cm.multiEmployeeDisambiguationState[userID] = disambiguation
 	delete(cm.confirmationState, userID)
-	delete(cm.modificationDisambiguationState, userID)
 }
 
-// GetPendingDisambiguation retrieves a pending employee disambiguation
-func (cm *ConfirmationManager) GetPendingDisambiguation(userID string) (*EmployeeDisambiguationConfirmation, bool) {
+// GetPendingMultiEmployeeDisambiguation retrieves a pending multi-employee disambiguation
+func (cm *ConfirmationManager) GetPendingMultiEmployeeDisambiguation(userID string) (*MultiEmployeeDisambiguationConfirmation, bool) {
 	cm.confirmationMutex.RLock()
 	defer cm.confirmationMutex.RUnlock()
-	disambiguation, exists := cm.disambiguationState[userID]
+	disambiguation, exists := cm.multiEmployeeDisambiguationState[userID]
 	return disambiguation, exists
 }
 
-// StorePendingModificationDisambiguation stores a pending modification disambiguation - NEW
-func (cm *ConfirmationManager) StorePendingModificationDisambiguation(userID string, disambiguation *ModificationDisambiguationConfirmation) {
-	cm.confirmationMutex.Lock()
-	defer cm.confirmationMutex.Unlock()
-	cm.modificationDisambiguationState[userID] = disambiguation
-	// Clear other states when storing modification disambiguation
-	delete(cm.confirmationState, userID)
-	delete(cm.disambiguationState, userID)
-}
-
-// GetPendingModificationDisambiguation retrieves a pending modification disambiguation - NEW
-func (cm *ConfirmationManager) GetPendingModificationDisambiguation(userID string) (*ModificationDisambiguationConfirmation, bool) {
-	cm.confirmationMutex.RLock()
-	defer cm.confirmationMutex.RUnlock()
-	disambiguation, exists := cm.modificationDisambiguationState[userID]
-	return disambiguation, exists
-}
-
-// handleCreateProjectRequest processes project creation request with disambiguation support
+// handleCreateProjectRequest processes project creation request with multi-employee disambiguation support
 func (m *ProjectManagementModule) handleCreateProjectRequest(employeeID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
 	isVietnamese := detectUserLanguage(ctx.User)
 
@@ -124,17 +99,16 @@ func (m *ProjectManagementModule) handleCreateProjectRequest(employeeID string, 
 		}, nil
 	}
 
-	// Process assignee if provided - NEW: Check for disambiguation
-	if projectRequest.AssignedToName != "" {
-		assigneeResult, err := m.resolveAssignee(projectRequest.AssignedToName)
+	// Process assignees if provided
+	if len(projectRequest.AssignedToNames) > 0 {
+		assigneeResult, err := m.resolveMultipleAssignees(projectRequest.AssignedToNames)
 		if err != nil {
-			m.api.LogError("Failed to resolve project assignee", "error", err.Error())
+			m.api.LogError("Failed to resolve project assignees", "error", err.Error())
 		} else if assigneeResult.RequiresDisambiguation {
 			// Return disambiguation request
-			return m.requestEmployeeDisambiguation(ctx, "create_project", "project", projectRequest, employeeID, assigneeResult)
-		} else if assigneeResult.Found {
-			projectRequest.AssignedToEmployeeID = assigneeResult.EmployeeID
-			projectRequest.AssignedToEmail = assigneeResult.EmployeeEmail
+			return m.requestMultiEmployeeDisambiguation(ctx, "create_project", "project", projectRequest, employeeID, assigneeResult)
+		} else {
+			projectRequest.AssignedToEmployees = assigneeResult.ResolvedEmployees
 		}
 	}
 
@@ -142,14 +116,14 @@ func (m *ProjectManagementModule) handleCreateProjectRequest(employeeID string, 
 	creatorEmail, err := m.getEmployeeEmailFromUser(ctx.User)
 	if err != nil {
 		m.api.LogWarn("Failed to get creator email", "error", err.Error())
-		creatorEmail = "demo@example.com" // Fallback
+		creatorEmail = "demo@example.com"
 	}
 
 	// Request confirmation
 	return m.requestConfirmation(ctx, "create_project", "project", projectRequest, employeeID, creatorEmail)
 }
 
-// handleCreateTaskRequest processes task creation request with disambiguation support
+// handleCreateTaskRequest processes task creation request with multi-employee disambiguation support
 func (m *ProjectManagementModule) handleCreateTaskRequest(employeeID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
 	isVietnamese := detectUserLanguage(ctx.User)
 
@@ -179,17 +153,16 @@ func (m *ProjectManagementModule) handleCreateTaskRequest(employeeID string, ctx
 		}, nil
 	}
 
-	// Process assignee if provided - NEW: Check for disambiguation
-	if taskRequest.AssignedToName != "" {
-		assigneeResult, err := m.resolveAssignee(taskRequest.AssignedToName)
+	// Process assignees if provided
+	if len(taskRequest.AssignedToNames) > 0 {
+		assigneeResult, err := m.resolveMultipleAssignees(taskRequest.AssignedToNames)
 		if err != nil {
-			m.api.LogError("Failed to resolve task assignee", "error", err.Error())
+			m.api.LogError("Failed to resolve task assignees", "error", err.Error())
 		} else if assigneeResult.RequiresDisambiguation {
 			// Return disambiguation request
-			return m.requestEmployeeDisambiguation(ctx, "create_task", "task", taskRequest, employeeID, assigneeResult)
-		} else if assigneeResult.Found {
-			taskRequest.AssignedToEmployeeID = assigneeResult.EmployeeID
-			taskRequest.AssignedToEmail = assigneeResult.EmployeeEmail
+			return m.requestMultiEmployeeDisambiguation(ctx, "create_task", "task", taskRequest, employeeID, assigneeResult)
+		} else {
+			taskRequest.AssignedToEmployees = assigneeResult.ResolvedEmployees
 		}
 	}
 
@@ -197,15 +170,15 @@ func (m *ProjectManagementModule) handleCreateTaskRequest(employeeID string, ctx
 	creatorEmail, err := m.getEmployeeEmailFromUser(ctx.User)
 	if err != nil {
 		m.api.LogWarn("Failed to get creator email", "error", err.Error())
-		creatorEmail = "demo@example.com" // Fallback
+		creatorEmail = "demo@example.com"
 	}
 
 	// Request confirmation
 	return m.requestConfirmation(ctx, "create_task", "task", taskRequest, employeeID, creatorEmail)
 }
 
-// requestEmployeeDisambiguation requests user to choose from multiple employees - NEW
-func (m *ProjectManagementModule) requestEmployeeDisambiguation(
+// requestMultiEmployeeDisambiguation requests user to choose from multiple employees for multiple assignees
+func (m *ProjectManagementModule) requestMultiEmployeeDisambiguation(
 	ctx *erp_modules.ModuleContext,
 	action, confirmationType string,
 	data interface{},
@@ -222,31 +195,27 @@ func (m *ProjectManagementModule) requestEmployeeDisambiguation(
 	creatorEmail, err := m.getEmployeeEmailFromUser(ctx.User)
 	if err != nil {
 		m.api.LogWarn("Failed to get creator email for disambiguation", "error", err.Error())
-		creatorEmail = "demo@example.com" // Fallback
+		creatorEmail = "demo@example.com"
 	}
 
 	// Store pending disambiguation
-	disambiguation := &EmployeeDisambiguationConfirmation{
-		UserID:             ctx.User.Id,
-		Type:               confirmationType,
-		Action:             action,
-		Data:               dataMap,
-		CreatedAt:          time.Now().UnixMilli(),
-		EmployeeID:         employeeID,
-		CreatorEmail:       creatorEmail,
-		OriginalSearchName: assigneeResult.MatchingEmployees[0].Name, // Store original search
-		AvailableEmployees: assigneeResult.MatchingEmployees,
+	disambiguation := &MultiEmployeeDisambiguationConfirmation{
+		UserID:                    ctx.User.Id,
+		Type:                      confirmationType,
+		Action:                    action,
+		Data:                      dataMap,
+		CreatedAt:                 time.Now().UnixMilli(),
+		EmployeeID:                employeeID,
+		CreatorEmail:              creatorEmail,
+		UnresolvedEmployeeMatches: assigneeResult.UnresolvedEmployeeMatches,
+		ResolvedEmployees:         assigneeResult.ResolvedEmployees,
+		IsModification:            false,
 	}
 
-	// Extract original search name from data
-	if assignedToName, ok := dataMap["assigned_to_name"].(string); ok {
-		disambiguation.OriginalSearchName = assignedToName
-	}
-
-	m.confirmationManager.StorePendingDisambiguation(ctx.User.Id, disambiguation)
+	m.confirmationManager.StorePendingMultiEmployeeDisambiguation(ctx.User.Id, disambiguation)
 
 	// Generate disambiguation message
-	disambiguationMsg, err := m.generateDisambiguationMessage(ctx, assigneeResult.MatchingEmployees)
+	disambiguationMsg, err := m.generateMultiEmployeeDisambiguationMessage(ctx, assigneeResult)
 	if err != nil {
 		isVietnamese := detectUserLanguage(ctx.User)
 		errorMsg := "⚠️ Có lỗi xảy ra khi tạo tin nhắn lựa chọn nhân viên."
@@ -263,41 +232,67 @@ func (m *ProjectManagementModule) requestEmployeeDisambiguation(
 	return &erp_modules.ModuleResponse{
 		Success:     true,
 		Message:     disambiguationMsg,
-		ActionTaken: "request_employee_disambiguation",
+		ActionTaken: "request_multi_employee_disambiguation",
 		Data: map[string]interface{}{
 			"awaiting_disambiguation": true,
 			"type":                    confirmationType,
-			"employee_count":          len(assigneeResult.MatchingEmployees),
+			"unresolved_count":        len(assigneeResult.UnresolvedEmployeeMatches),
+			"resolved_count":          len(assigneeResult.ResolvedEmployees),
 		},
 	}, nil
 }
 
-// generateDisambiguationMessage generates message asking user to choose employee - NEW
-func (m *ProjectManagementModule) generateDisambiguationMessage(ctx *erp_modules.ModuleContext, employees []Employee) (string, error) {
+// generateMultiEmployeeDisambiguationMessage generates message asking user to choose employees
+func (m *ProjectManagementModule) generateMultiEmployeeDisambiguationMessage(ctx *erp_modules.ModuleContext, assigneeResult *AssigneeResolutionResult) (string, error) {
 	isVietnamese := detectUserLanguage(ctx.User)
 
 	var message strings.Builder
 
-	if isVietnamese {
-		message.WriteString("👥 **Tìm thấy nhiều nhân viên có tên tương tự:**\n\n")
-	} else {
-		message.WriteString("👥 **Found multiple employees with similar names:**\n\n")
+	// Show successfully resolved employees if any
+	if len(assigneeResult.ResolvedEmployees) > 0 {
+		if isVietnamese {
+			message.WriteString("✅ **Đã xác định thành công:**\n")
+		} else {
+			message.WriteString("✅ **Successfully identified:**\n")
+		}
+		for _, emp := range assigneeResult.ResolvedEmployees {
+			message.WriteString(fmt.Sprintf("- **%s** (%s)\n", emp.EmployeeName, emp.Email))
+		}
+		message.WriteString("\n")
 	}
 
-	// List employees with numbers
-	for i, emp := range employees {
-		message.WriteString(fmt.Sprintf("%d. **%s** (%s, %s)\n",
-			i+1,
-			emp.EmployeeName,
-			emp.CompanyEmail,
-			emp.Name))
+	// Show employees that need disambiguation
+	if isVietnamese {
+		message.WriteString("❓ **Cần làm rõ cho các nhân viên sau:**\n\n")
+	} else {
+		message.WriteString("❓ **Need clarification for the following employees:**\n\n")
 	}
 
-	message.WriteString("\n")
+	globalIndex := 1
+	for _, unresolvedMatch := range assigneeResult.UnresolvedEmployeeMatches {
+		if isVietnamese {
+			message.WriteString(fmt.Sprintf("**Tên '%s'** có thể là:\n", unresolvedMatch.OriginalName))
+		} else {
+			message.WriteString(fmt.Sprintf("**Name '%s'** could be:\n", unresolvedMatch.OriginalName))
+		}
+
+		for _, emp := range unresolvedMatch.MatchingEmployees {
+			message.WriteString(fmt.Sprintf("%d. **%s** (%s, %s)\n",
+				globalIndex,
+				emp.EmployeeName,
+				emp.CompanyEmail,
+				emp.Name))
+			globalIndex++
+		}
+		message.WriteString("\n")
+	}
+
 	if isVietnamese {
-		message.WriteString("Vui lòng chọn nhân viên bằng cách trả lời số thứ tự (1, 2, 3, ...) hoặc cung cấp thêm thông tin cụ thể.")
+		message.WriteString("Vui lòng chọn nhân viên bằng cách trả lời các số thứ tự tương ứng.\n")
+		message.WriteString("**Ví dụ:** `1, 3, 5` để chọn nhân viên thứ 1, 3 và 5.")
 	} else {
-		message.WriteString("Please select an employee by replying with the number (1, 2, 3, ...) or provide more specific details.")
+		message.WriteString("Please select employees by replying with the corresponding numbers.\n")
+		message.WriteString("**Example:** `1, 3, 5` to select employees 1, 3, and 5.")
 	}
 
 	return message.String(), nil
@@ -310,26 +305,15 @@ func (m *ProjectManagementModule) requestConfirmation(ctx *erp_modules.ModuleCon
 	dataBytes, _ := json.Marshal(data)
 	json.Unmarshal(dataBytes, &dataMap)
 
-	// Extract assignee information for confirmation
-	var assignedToEmail, assignedToName string
-	if email, ok := dataMap["assigned_to_email"].(string); ok {
-		assignedToEmail = email
-	}
-	if name, ok := dataMap["assigned_to_name"].(string); ok {
-		assignedToName = name
-	}
-
-	// Store pending confirmation with additional email info
+	// Store pending confirmation
 	m.confirmationManager.StorePendingConfirmation(ctx.User.Id, &ProjectManagementConfirmation{
-		UserID:          ctx.User.Id,
-		Type:            confirmationType,
-		Action:          action,
-		Data:            dataMap,
-		CreatedAt:       time.Now().UnixMilli(),
-		EmployeeID:      employeeID,
-		CreatorEmail:    creatorEmail,
-		AssignedToEmail: assignedToEmail,
-		AssignedToName:  assignedToName,
+		UserID:       ctx.User.Id,
+		Type:         confirmationType,
+		Action:       action,
+		Data:         dataMap,
+		CreatedAt:    time.Now().UnixMilli(),
+		EmployeeID:   employeeID,
+		CreatorEmail: creatorEmail,
 	})
 
 	// Generate confirmation message
@@ -378,14 +362,14 @@ func (m *ProjectManagementModule) executeConfirmedAction(ctx *erp_modules.Module
 	}
 }
 
-// handleCreateProject processes project creation
+// handleCreateProject processes project creation with multi-employee assignment
 func (m *ProjectManagementModule) handleCreateProject(employeeID, userID string, data map[string]interface{}, creatorEmail string) (*erp_modules.ModuleResponse, error) {
 	var projectRequest ProjectCreationRequest
 	dataBytes, _ := json.Marshal(data)
 	json.Unmarshal(dataBytes, &projectRequest)
 
-	// Use the new two-step creation method
-	projectID, err := m.erpClient.CreateProjectWithAssignment(projectRequest, employeeID, creatorEmail)
+	// Create project first
+	projectID, err := m.erpClient.CreateProject(projectRequest, employeeID)
 	if err != nil {
 		user, _ := m.api.GetUser(userID)
 		isVietnamese := detectUserLanguage(user)
@@ -400,15 +384,48 @@ func (m *ProjectManagementModule) handleCreateProject(employeeID, userID string,
 		}, nil
 	}
 
+	// Assign to multiple employees if any
+	var assignmentErrors []string
+	for _, assignedEmployee := range projectRequest.AssignedToEmployees {
+		err := m.erpClient.AssignProjectToEmployee(projectID, creatorEmail, assignedEmployee.Email, projectRequest.Priority)
+		if err != nil {
+			m.api.LogWarn("Project created but assignment failed",
+				"project_id", projectID,
+				"assignee", assignedEmployee.EmployeeName,
+				"error", err.Error())
+			assignmentErrors = append(assignmentErrors, assignedEmployee.EmployeeName)
+		} else {
+			m.api.LogInfo("Project assigned successfully",
+				"project_id", projectID,
+				"assignee", assignedEmployee.EmployeeName)
+		}
+	}
+
 	user, _ := m.api.GetUser(userID)
 	isVietnamese := detectUserLanguage(user)
 
 	var successMsg string
-	if projectRequest.AssignedToEmployeeID != "" && projectRequest.AssignedToEmail != "" {
-		if isVietnamese {
-			successMsg = fmt.Sprintf("✅ Đã tạo dự án thành công: **%s** và phân công cho **%s**!", projectID, projectRequest.AssignedToName)
+	if len(projectRequest.AssignedToEmployees) > 0 {
+		assigneeNames := make([]string, len(projectRequest.AssignedToEmployees))
+		for i, emp := range projectRequest.AssignedToEmployees {
+			assigneeNames[i] = emp.EmployeeName
+		}
+		assigneesStr := strings.Join(assigneeNames, ", ")
+
+		if len(assignmentErrors) == 0 {
+			if isVietnamese {
+				successMsg = fmt.Sprintf("✅ Đã tạo dự án thành công: **%s** và phân công cho **%s**!", projectID, assigneesStr)
+			} else {
+				successMsg = fmt.Sprintf("✅ Successfully created project: **%s** and assigned to **%s**!", projectID, assigneesStr)
+			}
 		} else {
-			successMsg = fmt.Sprintf("✅ Successfully created project: **%s** and assigned to **%s**!", projectID, projectRequest.AssignedToName)
+			if isVietnamese {
+				successMsg = fmt.Sprintf("✅ Đã tạo dự án: **%s**. Phân công thành công cho **%s**. Lỗi phân công: **%s**.",
+					projectID, assigneesStr, strings.Join(assignmentErrors, ", "))
+			} else {
+				successMsg = fmt.Sprintf("✅ Created project: **%s**. Successfully assigned to **%s**. Assignment failed for: **%s**.",
+					projectID, assigneesStr, strings.Join(assignmentErrors, ", "))
+			}
 		}
 	} else {
 		if isVietnamese {
@@ -423,25 +440,24 @@ func (m *ProjectManagementModule) handleCreateProject(employeeID, userID string,
 		Message:     successMsg,
 		ActionTaken: "create_project",
 		Data: map[string]interface{}{
-			"project_id":              projectID,
-			"project_name":            projectRequest.ProjectName,
-			"description":             projectRequest.Description,
-			"priority":                projectRequest.Priority,
-			"assigned_to_employee_id": projectRequest.AssignedToEmployeeID,
-			"assigned_to_email":       projectRequest.AssignedToEmail,
-			"assigned_to_name":        projectRequest.AssignedToName,
+			"project_id":         projectID,
+			"project_name":       projectRequest.ProjectName,
+			"description":        projectRequest.Description,
+			"priority":           projectRequest.Priority,
+			"assigned_employees": projectRequest.AssignedToEmployees,
+			"assignment_errors":  assignmentErrors,
 		},
 	}, nil
 }
 
-// handleCreateTask processes task creation
+// handleCreateTask processes task creation with multi-employee assignment
 func (m *ProjectManagementModule) handleCreateTask(employeeID, userID string, data map[string]interface{}, creatorEmail string) (*erp_modules.ModuleResponse, error) {
 	var taskRequest TaskCreationRequest
 	dataBytes, _ := json.Marshal(data)
 	json.Unmarshal(dataBytes, &taskRequest)
 
-	// Use the new two-step creation method
-	taskID, err := m.erpClient.CreateTaskWithAssignment(taskRequest, employeeID, creatorEmail)
+	// Create task first
+	taskID, err := m.erpClient.CreateTask(taskRequest, employeeID)
 	if err != nil {
 		user, _ := m.api.GetUser(userID)
 		isVietnamese := detectUserLanguage(user)
@@ -456,15 +472,48 @@ func (m *ProjectManagementModule) handleCreateTask(employeeID, userID string, da
 		}, nil
 	}
 
+	// Assign to multiple employees if any
+	var assignmentErrors []string
+	for _, assignedEmployee := range taskRequest.AssignedToEmployees {
+		err := m.erpClient.AssignTaskToEmployee(taskID, creatorEmail, assignedEmployee.Email, taskRequest.Priority)
+		if err != nil {
+			m.api.LogWarn("Task created but assignment failed",
+				"task_id", taskID,
+				"assignee", assignedEmployee.EmployeeName,
+				"error", err.Error())
+			assignmentErrors = append(assignmentErrors, assignedEmployee.EmployeeName)
+		} else {
+			m.api.LogInfo("Task assigned successfully",
+				"task_id", taskID,
+				"assignee", assignedEmployee.EmployeeName)
+		}
+	}
+
 	user, _ := m.api.GetUser(userID)
 	isVietnamese := detectUserLanguage(user)
 
 	var successMsg string
-	if taskRequest.AssignedToEmployeeID != "" && taskRequest.AssignedToEmail != "" {
-		if isVietnamese {
-			successMsg = fmt.Sprintf("✅ Đã tạo task thành công: **%s** và phân công cho **%s**!", taskID, taskRequest.AssignedToName)
+	if len(taskRequest.AssignedToEmployees) > 0 {
+		assigneeNames := make([]string, len(taskRequest.AssignedToEmployees))
+		for i, emp := range taskRequest.AssignedToEmployees {
+			assigneeNames[i] = emp.EmployeeName
+		}
+		assigneesStr := strings.Join(assigneeNames, ", ")
+
+		if len(assignmentErrors) == 0 {
+			if isVietnamese {
+				successMsg = fmt.Sprintf("✅ Đã tạo task thành công: **%s** và phân công cho **%s**!", taskID, assigneesStr)
+			} else {
+				successMsg = fmt.Sprintf("✅ Successfully created task: **%s** and assigned to **%s**!", taskID, assigneesStr)
+			}
 		} else {
-			successMsg = fmt.Sprintf("✅ Successfully created task: **%s** and assigned to **%s**!", taskID, taskRequest.AssignedToName)
+			if isVietnamese {
+				successMsg = fmt.Sprintf("✅ Đã tạo task: **%s**. Phân công thành công cho **%s**. Lỗi phân công: **%s**.",
+					taskID, assigneesStr, strings.Join(assignmentErrors, ", "))
+			} else {
+				successMsg = fmt.Sprintf("✅ Created task: **%s**. Successfully assigned to **%s**. Assignment failed for: **%s**.",
+					taskID, assigneesStr, strings.Join(assignmentErrors, ", "))
+			}
 		}
 	} else {
 		if isVietnamese {
@@ -479,44 +528,36 @@ func (m *ProjectManagementModule) handleCreateTask(employeeID, userID string, da
 		Message:     successMsg,
 		ActionTaken: "create_task",
 		Data: map[string]interface{}{
-			"task_id":                 taskID,
-			"task_name":               taskRequest.Subject,
-			"description":             taskRequest.Description,
-			"assigned_to_employee_id": taskRequest.AssignedToEmployeeID,
-			"assigned_to_email":       taskRequest.AssignedToEmail,
-			"assigned_to_name":        taskRequest.AssignedToName,
-			"priority":                taskRequest.Priority,
-			"project":                 taskRequest.Project,
+			"task_id":            taskID,
+			"task_name":          taskRequest.Subject,
+			"description":        taskRequest.Description,
+			"assigned_employees": taskRequest.AssignedToEmployees,
+			"assignment_errors":  assignmentErrors,
+			"priority":           taskRequest.Priority,
+			"project":            taskRequest.Project,
 		},
 	}, nil
 }
 
 // getEmployeeIDFromUser gets employee ID from user
 func (m *ProjectManagementModule) getEmployeeIDFromUser(user *model.User) (string, error) {
-	// Use the user's ID as the chat ID to lookup in ERPNext
 	chatID := user.Id
-
 	employeeID, err := m.erpClient.GetEmployeeByChatID(chatID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get employee by chat ID %s: %w", chatID, err)
 	}
-
 	return employeeID, nil
 }
 
 // getEmployeeEmailFromUser gets employee email from user
 func (m *ProjectManagementModule) getEmployeeEmailFromUser(user *model.User) (string, error) {
-	// First get employee ID
 	employeeID, err := m.getEmployeeIDFromUser(user)
 	if err != nil {
 		return "", err
 	}
-
-	// Then get email from employee ID
 	email, err := m.erpClient.GetEmployeeEmail(employeeID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get email for employee %s: %w", employeeID, err)
 	}
-
 	return email, nil
 }

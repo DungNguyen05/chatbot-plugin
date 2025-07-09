@@ -88,72 +88,75 @@ type Task struct {
 	Company      string `json:"company,omitempty"`
 }
 
-// ProjectCreationRequest represents parsed project creation intent
+// ProjectCreationRequest represents parsed project creation intent with multi-employee support
 type ProjectCreationRequest struct {
-	ProjectName          string `json:"project_name"`
-	Description          string `json:"description,omitempty"`
-	Priority             string `json:"priority,omitempty"`
-	ProjectType          string `json:"project_type,omitempty"`
-	ExpectedStartDate    string `json:"expected_start_date,omitempty"`
-	ExpectedEndDate      string `json:"expected_end_date,omitempty"`
-	Department           string `json:"department,omitempty"`
-	Customer             string `json:"customer,omitempty"`
-	Company              string `json:"company,omitempty"`
-	AssignedToName       string `json:"assigned_to_name,omitempty"`        // Name extracted from user input
-	AssignedToEmployeeID string `json:"assigned_to_employee_id,omitempty"` // Resolved employee ID
-	AssignedToEmail      string `json:"assigned_to_email,omitempty"`       // Resolved employee email
+	ProjectName         string             `json:"project_name"`
+	Description         string             `json:"description,omitempty"`
+	Priority            string             `json:"priority,omitempty"`
+	ProjectType         string             `json:"project_type,omitempty"`
+	ExpectedStartDate   string             `json:"expected_start_date,omitempty"`
+	ExpectedEndDate     string             `json:"expected_end_date,omitempty"`
+	Department          string             `json:"department,omitempty"`
+	Customer            string             `json:"customer,omitempty"`
+	Company             string             `json:"company,omitempty"`
+	AssignedToNames     []string           `json:"assigned_to_names,omitempty"`     // Multiple names extracted from user input
+	AssignedToEmployees []AssignedEmployee `json:"assigned_to_employees,omitempty"` // Resolved employees
 }
 
-// TaskCreationRequest represents parsed task creation intent
+// TaskCreationRequest represents parsed task creation intent with multi-employee support
 type TaskCreationRequest struct {
-	Subject              string `json:"subject"`
-	Description          string `json:"description,omitempty"`
-	Priority             string `json:"priority,omitempty"`
-	Project              string `json:"project,omitempty"`
-	AssignedToName       string `json:"assigned_to_name,omitempty"`        // Name extracted from user input
-	AssignedToEmployeeID string `json:"assigned_to_employee_id,omitempty"` // Resolved employee ID
-	AssignedToEmail      string `json:"assigned_to_email,omitempty"`       // Resolved employee email
-	ExpStartDate         string `json:"exp_start_date,omitempty"`
-	ExpEndDate           string `json:"exp_end_date,omitempty"`
-	Department           string `json:"department,omitempty"`
-	Company              string `json:"company,omitempty"`
+	Subject             string             `json:"subject"`
+	Description         string             `json:"description,omitempty"`
+	Priority            string             `json:"priority,omitempty"`
+	Project             string             `json:"project,omitempty"`
+	AssignedToNames     []string           `json:"assigned_to_names,omitempty"`     // Multiple names extracted from user input
+	AssignedToEmployees []AssignedEmployee `json:"assigned_to_employees,omitempty"` // Resolved employees
+	ExpStartDate        string             `json:"exp_start_date,omitempty"`
+	ExpEndDate          string             `json:"exp_end_date,omitempty"`
+	Department          string             `json:"department,omitempty"`
+	Company             string             `json:"company,omitempty"`
+}
+
+// AssignedEmployee represents a resolved employee assignment
+type AssignedEmployee struct {
+	EmployeeID   string `json:"employee_id"`
+	EmployeeName string `json:"employee_name"`
+	Email        string `json:"email"`
+	OriginalName string `json:"original_name"` // The original name from user input
 }
 
 // ProjectManagementConfirmation represents pending confirmation
 type ProjectManagementConfirmation struct {
-	UserID          string                 `json:"user_id"`
-	Type            string                 `json:"type"`   // "project" or "task"
-	Action          string                 `json:"action"` // "create_project", "create_task"
-	Data            map[string]interface{} `json:"data"`   // Complete schema data
-	CreatedAt       int64                  `json:"created_at"`
-	EmployeeID      string                 `json:"employee_id"`
-	CreatorEmail    string                 `json:"creator_email"`     // Creator's email
-	AssignedToEmail string                 `json:"assigned_to_email"` // Assignee's email
-	AssignedToName  string                 `json:"assigned_to_name"`  // Assignee's name
+	UserID       string                 `json:"user_id"`
+	Type         string                 `json:"type"`   // "project" or "task"
+	Action       string                 `json:"action"` // "create_project", "create_task"
+	Data         map[string]interface{} `json:"data"`   // Complete schema data
+	CreatedAt    int64                  `json:"created_at"`
+	EmployeeID   string                 `json:"employee_id"`
+	CreatorEmail string                 `json:"creator_email"`
 }
 
-// EmployeeDisambiguationConfirmation represents pending employee selection - NEW
-type EmployeeDisambiguationConfirmation struct {
-	UserID             string                 `json:"user_id"`
-	Type               string                 `json:"type"`   // "project" or "task"
-	Action             string                 `json:"action"` // "create_project", "create_task"
-	Data               map[string]interface{} `json:"data"`   // Complete schema data
-	CreatedAt          int64                  `json:"created_at"`
-	EmployeeID         string                 `json:"employee_id"`
-	CreatorEmail       string                 `json:"creator_email"`
-	OriginalSearchName string                 `json:"original_search_name"` // The ambiguous name user provided
-	AvailableEmployees []Employee             `json:"available_employees"`  // List of matching employees
+// MultiEmployeeDisambiguationConfirmation represents pending multiple employee selection
+type MultiEmployeeDisambiguationConfirmation struct {
+	UserID                    string                         `json:"user_id"`
+	Type                      string                         `json:"type"`   // "project" or "task"
+	Action                    string                         `json:"action"` // "create_project", "create_task"
+	Data                      map[string]interface{}         `json:"data"`   // Complete schema data
+	CreatedAt                 int64                          `json:"created_at"`
+	EmployeeID                string                         `json:"employee_id"`
+	CreatorEmail              string                         `json:"creator_email"`
+	UnresolvedEmployeeMatches []UnresolvedEmployeeMatch      `json:"unresolved_employee_matches"`     // All unresolved employees
+	ResolvedEmployees         []AssignedEmployee             `json:"resolved_employees"`              // Successfully resolved employees
+	IsModification            bool                           `json:"is_modification"`                 // Whether this is during modification
+	OriginalConfirmation      *ProjectManagementConfirmation `json:"original_confirmation,omitempty"` // For modifications
+	PendingModifications      map[string]interface{}         `json:"pending_modifications,omitempty"` // For modifications
 }
 
-// ModificationDisambiguationConfirmation represents pending employee selection during modification - NEW
-type ModificationDisambiguationConfirmation struct {
-	UserID               string                         `json:"user_id"`
-	OriginalConfirmation *ProjectManagementConfirmation `json:"original_confirmation"` // The original confirmation being modified
-	ModificationField    string                         `json:"modification_field"`    // Which field is being modified ("assigned_to_name")
-	OriginalSearchName   string                         `json:"original_search_name"`  // The ambiguous name user provided
-	AvailableEmployees   []Employee                     `json:"available_employees"`   // List of matching employees
-	PendingModifications map[string]interface{}         `json:"pending_modifications"` // Other modifications that were being applied
-	CreatedAt            int64                          `json:"created_at"`
+// UnresolvedEmployeeMatch represents an employee name that needs disambiguation
+type UnresolvedEmployeeMatch struct {
+	OriginalName      string     `json:"original_name"`
+	MatchingEmployees []Employee `json:"matching_employees"`
+	Index             int        `json:"index"` // Display index for user selection (1-based)
 }
 
 // UserResponse represents parsed user response to confirmation
@@ -163,24 +166,19 @@ type UserResponse struct {
 	Reasoning     string                 `json:"reasoning"`     // LLM reasoning
 }
 
-// EmployeeDisambiguationResponse represents parsed user response to employee selection - NEW
-type EmployeeDisambiguationResponse struct {
-	Intent            string `json:"intent"`             // "index_selection", "name_clarification", "cancel"
-	SelectedIndex     int    `json:"selected_index"`     // 1-based index selection
-	ClarificationText string `json:"clarification_text"` // Additional name details provided
-	Reasoning         string `json:"reasoning"`          // LLM reasoning
+// MultiEmployeeDisambiguationResponse represents parsed user response to multiple employee selection
+type MultiEmployeeDisambiguationResponse struct {
+	Intent          string `json:"intent"`           // "index_selection", "cancel"
+	SelectedIndexes []int  `json:"selected_indexes"` // Multiple 1-based index selections
+	Reasoning       string `json:"reasoning"`        // LLM reasoning
 }
 
-// AssigneeResolutionResult represents the result of resolving an assignee name
+// AssigneeResolutionResult represents the result of resolving multiple assignee names
 type AssigneeResolutionResult struct {
-	Found                  bool       `json:"found"`
-	EmployeeID             string     `json:"employee_id"`
-	EmployeeName           string     `json:"employee_name"`
-	EmployeeEmail          string     `json:"employee_email"`
-	Error                  string     `json:"error,omitempty"`
-	MultipleMatches        bool       `json:"multiple_matches"`        // NEW: indicates multiple matches found
-	MatchingEmployees      []Employee `json:"matching_employees"`      // NEW: list of matching employees
-	RequiresDisambiguation bool       `json:"requires_disambiguation"` // NEW: indicates need for user selection
+	ResolvedEmployees         []AssignedEmployee        `json:"resolved_employees"`
+	UnresolvedEmployeeMatches []UnresolvedEmployeeMatch `json:"unresolved_employee_matches"`
+	RequiresDisambiguation    bool                      `json:"requires_disambiguation"`
+	Error                     string                    `json:"error,omitempty"`
 }
 
 // ERPCreateResponse represents the response from ERP creation requests

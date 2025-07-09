@@ -458,7 +458,35 @@ func (p *Plugin) processERPRequest(bot *Bot, user *model.User, channel *model.Ch
 		"message", post.Message,
 		"channel_id", channel.Id)
 
-	// Check if this is an ERP-related request by trying to process it
+	// CRITICAL: Check for pending states FIRST before any intent analysis
+	// This ensures that ongoing flows (like disambiguation) are handled properly
+	moduleContext := &erp_modules.ModuleContext{
+		Context:      context.Background(),
+		User:         user,
+		Channel:      channel,
+		LLMContext:   llmContext,
+		OriginalPost: post,
+	}
+
+	// Try each module's ProcessUserMessage first (for pending states)
+	for _, module := range p.moduleRegistry.GetAllModules() {
+		response, err := module.ProcessUserMessage(moduleContext, post.Message)
+		if err != nil {
+			p.API.LogError("Error in module ProcessUserMessage",
+				"module", module.GetCategory(),
+				"error", err.Error())
+			continue
+		}
+		if response != nil {
+			p.API.LogInfo("ERP message handled by module",
+				"module", module.GetCategory(),
+				"success", response.Success,
+				"action_taken", response.ActionTaken)
+			return response, nil
+		}
+	}
+
+	// If no module handled it as a pending state, then analyze as new intent
 	response, err := p.moduleManager.ProcessUserRequest(
 		context.Background(),
 		post.Message,
@@ -491,6 +519,12 @@ func (p *Plugin) processERPRequest(bot *Bot, user *model.User, channel *model.Ch
 		// Check if this is a confirmation request (any type)
 		if data, ok := response.Data["awaiting_confirmation"]; ok && data.(bool) {
 			p.API.LogInfo("This is a confirmation request")
+			return response, nil
+		}
+
+		// Check if this is a disambiguation request
+		if data, ok := response.Data["awaiting_disambiguation"]; ok && data.(bool) {
+			p.API.LogInfo("This is a disambiguation request")
 			return response, nil
 		}
 
