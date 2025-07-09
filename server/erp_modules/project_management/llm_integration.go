@@ -137,6 +137,68 @@ func (m *ProjectManagementModule) parseConfirmationResponse(ctx *erp_modules.Mod
 	return &userResponse, nil
 }
 
+// parseEmployeeDisambiguationResponse parses user response to employee selection using LLM - NEW
+func (m *ProjectManagementModule) parseEmployeeDisambiguationResponse(ctx *erp_modules.ModuleContext, message string, disambiguation *EmployeeDisambiguationConfirmation) (*EmployeeDisambiguationResponse, error) {
+	// Create LLM context
+	llmContext := &llm.Context{
+		RequestingUser: ctx.User,
+		Time:           time.Now().Format(time.RFC1123),
+	}
+
+	// Detect user language
+	isVietnamese := detectUserLanguage(ctx.User)
+
+	llmContext.Parameters = map[string]interface{}{
+		"UserMessage":        message,
+		"AvailableEmployees": disambiguation.AvailableEmployees,
+		"IsVietnamese":       isVietnamese,
+	}
+
+	// Format the disambiguation analysis prompt
+	systemPrompt, err := m.prompts.Format("employee_disambiguation_analysis", llmContext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to format employee disambiguation prompt: %w", err)
+	}
+
+	// Create completion request
+	completionRequest := llm.CompletionRequest{
+		Posts: []llm.Post{
+			{
+				Role:    llm.PostRoleSystem,
+				Message: systemPrompt,
+			},
+			{
+				Role:    llm.PostRoleUser,
+				Message: message,
+			},
+		},
+		Context: llmContext,
+	}
+
+	// Get LLM response
+	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(200))
+	if err != nil {
+		return nil, fmt.Errorf("failed to analyze employee disambiguation with LLM: %w", err)
+	}
+
+	// Parse JSON response
+	var disambiguationResponse EmployeeDisambiguationResponse
+	response = strings.TrimSpace(response)
+	start := strings.Index(response, "{")
+	end := strings.LastIndex(response, "}") + 1
+
+	if start == -1 || end <= start {
+		return nil, fmt.Errorf("no valid JSON found in LLM response: %s", response)
+	}
+
+	jsonStr := response[start:end]
+	if err := json.Unmarshal([]byte(jsonStr), &disambiguationResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse LLM disambiguation response as JSON: %w", err)
+	}
+
+	return &disambiguationResponse, nil
+}
+
 // analyzeProjectCreation uses LLM to extract project details
 func (m *ProjectManagementModule) analyzeProjectCreation(ctx *erp_modules.ModuleContext, userMessage string) (*ProjectCreationRequest, error) {
 	// Create LLM context

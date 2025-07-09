@@ -11,6 +11,7 @@ const (
 	PromptAttendanceUnifiedAnalysis        = "attendance_unified_analysis"
 	PromptDirectMessageQuestionSystem      = "direct_message_question_system"
 	PromptEmojiSelectSystem                = "emoji_select_system"
+	PromptEmployeeDisambiguationAnalysis   = "employee_disambiguation_analysis"
 	PromptErpActionClassification          = "erp_action_classification"
 	PromptErpModuleClassification          = "erp_module_classification"
 	PromptFindActionItemsSystem            = "find_action_items_system"

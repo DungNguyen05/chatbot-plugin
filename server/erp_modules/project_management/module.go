@@ -6,6 +6,7 @@ package project_management
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/mattermost/mattermost-plugin-ai/server/erp_modules"
 	"github.com/mattermost/mattermost-plugin-ai/server/llm"
@@ -70,11 +71,18 @@ func (m *ProjectManagementModule) CanHandle(intent *erp_modules.Intent) bool {
 	return isValidAction(intent.Action)
 }
 
-// ProcessUserMessage handles user messages including confirmations and modifications
+// ProcessUserMessage handles user messages including confirmations, modifications, and disambiguations - UPDATED
 func (m *ProjectManagementModule) ProcessUserMessage(ctx *erp_modules.ModuleContext, message string) (*erp_modules.ModuleResponse, error) {
 	// Sanitize user input
 	message = sanitizeUserInput(message)
 
+	// Check for pending disambiguation first
+	disambiguation, hasDisambiguation := m.confirmationManager.GetPendingDisambiguation(ctx.User.Id)
+	if hasDisambiguation {
+		return m.handleEmployeeDisambiguationResponse(ctx, message, disambiguation)
+	}
+
+	// Check for pending confirmation
 	pending, hasPending := m.confirmationManager.GetPendingConfirmation(ctx.User.Id)
 	if !hasPending {
 		return nil, nil // Not handling this message
@@ -118,6 +126,124 @@ func (m *ProjectManagementModule) ProcessUserMessage(ctx *erp_modules.ModuleCont
 	}
 }
 
+// handleEmployeeDisambiguationResponse handles user response to employee selection - NEW
+func (m *ProjectManagementModule) handleEmployeeDisambiguationResponse(ctx *erp_modules.ModuleContext, message string, disambiguation *EmployeeDisambiguationConfirmation) (*erp_modules.ModuleResponse, error) {
+	// Parse disambiguation response using LLM
+	disambiguationResponse, err := m.parseEmployeeDisambiguationResponse(ctx, message, disambiguation)
+	if err != nil {
+		m.api.LogError("Failed to parse disambiguation response", "error", err.Error())
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Không thể hiểu lựa chọn của bạn. Vui lòng chọn số thứ tự (1, 2, 3, ...)."
+		if !isVietnamese {
+			errorMsg = "⚠️ Cannot understand your selection. Please choose by number (1, 2, 3, ...)."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+		}, nil
+	}
+
+	// Clear pending disambiguation
+	m.confirmationManager.ClearPendingConfirmation(ctx.User.Id)
+
+	// Process the selection
+	assigneeResult, err := m.resolveDisambiguatedEmployee(
+		disambiguation.AvailableEmployees,
+		disambiguationResponse.SelectedIndex,
+		disambiguationResponse.ClarificationText,
+		disambiguationResponse.Intent,
+	)
+
+	if err != nil {
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Có lỗi xảy ra khi xử lý lựa chọn nhân viên."
+		if !isVietnamese {
+			errorMsg = "⚠️ An error occurred while processing employee selection."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	if !assigneeResult.Found {
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := assigneeResult.Error
+		if errorMsg == "" {
+			if isVietnamese {
+				errorMsg = "Không thể chọn nhân viên."
+			} else {
+				errorMsg = "Unable to select employee."
+			}
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+		}, nil
+	}
+
+	// Update the data with selected employee
+	disambiguation.Data["assigned_to_employee_id"] = assigneeResult.EmployeeID
+	disambiguation.Data["assigned_to_email"] = assigneeResult.EmployeeEmail
+	disambiguation.Data["assigned_to_name"] = assigneeResult.EmployeeName
+
+	// Convert back to proper request structure and proceed with confirmation
+	return m.proceedWithConfirmationAfterDisambiguation(ctx, disambiguation, assigneeResult)
+}
+
+// proceedWithConfirmationAfterDisambiguation proceeds with confirmation after employee selection - NEW
+func (m *ProjectManagementModule) proceedWithConfirmationAfterDisambiguation(ctx *erp_modules.ModuleContext, disambiguation *EmployeeDisambiguationConfirmation, assigneeResult *AssigneeResolutionResult) (*erp_modules.ModuleResponse, error) {
+	// Store regular confirmation with selected employee
+	confirmation := &ProjectManagementConfirmation{
+		UserID:          disambiguation.UserID,
+		Type:            disambiguation.Type,
+		Action:          disambiguation.Action,
+		Data:            disambiguation.Data,
+		CreatedAt:       time.Now().UnixMilli(),
+		EmployeeID:      disambiguation.EmployeeID,
+		CreatorEmail:    disambiguation.CreatorEmail,
+		AssignedToEmail: assigneeResult.EmployeeEmail,
+		AssignedToName:  assigneeResult.EmployeeName,
+	}
+
+	m.confirmationManager.StorePendingConfirmation(ctx.User.Id, confirmation)
+
+	// Generate confirmation message
+	confirmationMsg, err := m.generateConfirmationMessage(ctx, disambiguation.Type, disambiguation.Data)
+	if err != nil {
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Có lỗi xảy ra khi tạo tin nhắn xác nhận."
+		if !isVietnamese {
+			errorMsg = "⚠️ An error occurred while creating confirmation message."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	isVietnamese := detectUserLanguage(ctx.User)
+	var selectedMsg string
+	if isVietnamese {
+		selectedMsg = fmt.Sprintf("✅ **Đã chọn nhân viên:** %s (%s)\n\n", assigneeResult.EmployeeName, assigneeResult.EmployeeEmail)
+	} else {
+		selectedMsg = fmt.Sprintf("✅ **Selected employee:** %s (%s)\n\n", assigneeResult.EmployeeName, assigneeResult.EmployeeEmail)
+	}
+
+	return &erp_modules.ModuleResponse{
+		Success:     true,
+		Message:     selectedMsg + confirmationMsg,
+		ActionTaken: "employee_selected_proceed_confirmation",
+		Data: map[string]interface{}{
+			"awaiting_confirmation": true,
+			"type":                  disambiguation.Type,
+			"selected_employee":     assigneeResult.EmployeeName,
+		},
+	}, nil
+}
+
 // Execute processes the project management intent
 func (m *ProjectManagementModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
 	isVietnamese := detectUserLanguage(ctx.User)
@@ -157,7 +283,7 @@ func (m *ProjectManagementModule) Execute(ctx *erp_modules.ModuleContext, intent
 
 // GetDescription returns a description of what this module does
 func (m *ProjectManagementModule) GetDescription() string {
-	return "Quản lý dự án và công việc: tạo dự án mới, tạo task, phân công công việc với khả năng gán nhân viên tự động"
+	return "Quản lý dự án và công việc: tạo dự án mới, tạo task, phân công công việc với khả năng gán nhân viên tự động và xử lý trường hợp trùng tên"
 }
 
 // GetActionExamples returns examples of user messages for each action
@@ -196,7 +322,7 @@ func (m *ProjectManagementModule) GetActionExamples() map[string][]string {
 	}
 }
 
-// handleModifyAction handles user modification requests (UPDATED)
+// handleModifyAction handles user modification requests
 func (m *ProjectManagementModule) handleModifyAction(ctx *erp_modules.ModuleContext, pending *ProjectManagementConfirmation, modifications map[string]interface{}) (*erp_modules.ModuleResponse, error) {
 	// Handle assignee modification using dedicated function
 	m.handleAssigneeModification(modifications)

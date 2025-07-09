@@ -11,6 +11,9 @@ import (
 // API endpoint for ERPNext
 const ERPEndpointSuffix = "/api/method/frappe.desk.form.save.savedocs"
 
+// Confidence threshold for automatic employee assignment
+const EmployeeMatchThreshold = 0.85
+
 // ProjectManagementConfig represents the configuration for project management module
 type ProjectManagementConfig struct {
 	ERPDomain    string `json:"erpDomain"`
@@ -37,7 +40,7 @@ type PluginAPI interface {
 type Employee struct {
 	Name            string  `json:"name"`             // Employee ID
 	EmployeeName    string  `json:"employee_name"`    // Full name
-	CompanyEmail    string  `json:"company_email"`    // Company email - UPDATED FIELD NAME
+	CompanyEmail    string  `json:"company_email"`    // Company email
 	CustomChatID    string  `json:"custom_chat_id"`   // Chat ID for integration
 	Status          string  `json:"status"`           // Active/Inactive
 	Department      string  `json:"department"`       // Department
@@ -64,7 +67,6 @@ type Project struct {
 	Department        string `json:"department,omitempty"`
 	Customer          string `json:"customer,omitempty"`
 	Company           string `json:"company,omitempty"`
-	// Removed ProjectManager field as we'll use ToDo for assignment
 }
 
 // Task represents the data structure for ERPNext Task
@@ -84,7 +86,6 @@ type Task struct {
 	ExpEndDate   string `json:"exp_end_date,omitempty"`
 	Department   string `json:"department,omitempty"`
 	Company      string `json:"company,omitempty"`
-	// Removed AssignedTo field as we'll use ToDo for assignment
 }
 
 // ProjectCreationRequest represents parsed project creation intent
@@ -100,7 +101,7 @@ type ProjectCreationRequest struct {
 	Company              string `json:"company,omitempty"`
 	AssignedToName       string `json:"assigned_to_name,omitempty"`        // Name extracted from user input
 	AssignedToEmployeeID string `json:"assigned_to_employee_id,omitempty"` // Resolved employee ID
-	AssignedToEmail      string `json:"assigned_to_email,omitempty"`       // Resolved employee email - ADDED
+	AssignedToEmail      string `json:"assigned_to_email,omitempty"`       // Resolved employee email
 }
 
 // TaskCreationRequest represents parsed task creation intent
@@ -111,7 +112,7 @@ type TaskCreationRequest struct {
 	Project              string `json:"project,omitempty"`
 	AssignedToName       string `json:"assigned_to_name,omitempty"`        // Name extracted from user input
 	AssignedToEmployeeID string `json:"assigned_to_employee_id,omitempty"` // Resolved employee ID
-	AssignedToEmail      string `json:"assigned_to_email,omitempty"`       // Resolved employee email - ADDED
+	AssignedToEmail      string `json:"assigned_to_email,omitempty"`       // Resolved employee email
 	ExpStartDate         string `json:"exp_start_date,omitempty"`
 	ExpEndDate           string `json:"exp_end_date,omitempty"`
 	Department           string `json:"department,omitempty"`
@@ -126,9 +127,22 @@ type ProjectManagementConfirmation struct {
 	Data            map[string]interface{} `json:"data"`   // Complete schema data
 	CreatedAt       int64                  `json:"created_at"`
 	EmployeeID      string                 `json:"employee_id"`
-	CreatorEmail    string                 `json:"creator_email"`     // Creator's email - ADDED
-	AssignedToEmail string                 `json:"assigned_to_email"` // Assignee's email - ADDED
-	AssignedToName  string                 `json:"assigned_to_name"`  // Assignee's name - ADDED
+	CreatorEmail    string                 `json:"creator_email"`     // Creator's email
+	AssignedToEmail string                 `json:"assigned_to_email"` // Assignee's email
+	AssignedToName  string                 `json:"assigned_to_name"`  // Assignee's name
+}
+
+// EmployeeDisambiguationConfirmation represents pending employee selection - NEW
+type EmployeeDisambiguationConfirmation struct {
+	UserID             string                 `json:"user_id"`
+	Type               string                 `json:"type"`   // "project" or "task"
+	Action             string                 `json:"action"` // "create_project", "create_task"
+	Data               map[string]interface{} `json:"data"`   // Complete schema data
+	CreatedAt          int64                  `json:"created_at"`
+	EmployeeID         string                 `json:"employee_id"`
+	CreatorEmail       string                 `json:"creator_email"`
+	OriginalSearchName string                 `json:"original_search_name"` // The ambiguous name user provided
+	AvailableEmployees []Employee             `json:"available_employees"`  // List of matching employees
 }
 
 // UserResponse represents parsed user response to confirmation
@@ -138,16 +152,27 @@ type UserResponse struct {
 	Reasoning     string                 `json:"reasoning"`     // LLM reasoning
 }
 
-// AssigneeResolutionResult represents the result of resolving an assignee name
-type AssigneeResolutionResult struct {
-	Found         bool   `json:"found"`
-	EmployeeID    string `json:"employee_id"`
-	EmployeeName  string `json:"employee_name"`
-	EmployeeEmail string `json:"employee_email"` // ADDED
-	Error         string `json:"error,omitempty"`
+// EmployeeDisambiguationResponse represents parsed user response to employee selection - NEW
+type EmployeeDisambiguationResponse struct {
+	Intent            string `json:"intent"`             // "index_selection", "name_clarification", "cancel"
+	SelectedIndex     int    `json:"selected_index"`     // 1-based index selection
+	ClarificationText string `json:"clarification_text"` // Additional name details provided
+	Reasoning         string `json:"reasoning"`          // LLM reasoning
 }
 
-// ERPCreateResponse represents the response from ERP creation requests - ADDED
+// AssigneeResolutionResult represents the result of resolving an assignee name
+type AssigneeResolutionResult struct {
+	Found                  bool       `json:"found"`
+	EmployeeID             string     `json:"employee_id"`
+	EmployeeName           string     `json:"employee_name"`
+	EmployeeEmail          string     `json:"employee_email"`
+	Error                  string     `json:"error,omitempty"`
+	MultipleMatches        bool       `json:"multiple_matches"`        // NEW: indicates multiple matches found
+	MatchingEmployees      []Employee `json:"matching_employees"`      // NEW: list of matching employees
+	RequiresDisambiguation bool       `json:"requires_disambiguation"` // NEW: indicates need for user selection
+}
+
+// ERPCreateResponse represents the response from ERP creation requests
 type ERPCreateResponse struct {
 	Message struct {
 		Name string `json:"name"` // The created document name/ID
@@ -157,7 +182,7 @@ type ERPCreateResponse struct {
 	} `json:"docs"`
 }
 
-// ToDoAssignment represents the structure for ToDo assignment - ADDED
+// ToDoAssignment represents the structure for ToDo assignment
 type ToDoAssignment struct {
 	AssignedBy    string `json:"assigned_by"`    // Creator's email
 	AllocatedTo   string `json:"allocated_to"`   // Assignee's email

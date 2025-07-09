@@ -46,17 +46,18 @@ func (m *ProjectManagementModule) getOriginalSchema(confirmationType string) map
 			"expected_end_date":   "",
 			"department":          "",
 			"customer":            "",
+			"assigned_to_name":    "",
 		}
 	} else if confirmationType == "task" {
 		return map[string]interface{}{
-			"subject":        "",
-			"description":    "",
-			"priority":       "",
-			"project":        "",
-			"assigned_to":    "",
-			"exp_start_date": "",
-			"exp_end_date":   "",
-			"department":     "",
+			"subject":          "",
+			"description":      "",
+			"priority":         "",
+			"project":          "",
+			"assigned_to_name": "",
+			"exp_start_date":   "",
+			"exp_end_date":     "",
+			"department":       "",
 		}
 	}
 	return make(map[string]interface{})

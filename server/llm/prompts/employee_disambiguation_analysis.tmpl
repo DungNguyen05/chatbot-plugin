@@ -1,0 +1,43 @@
+You are analyzing user responses to employee selection requests. The user has been presented with multiple employee options and needs to select one.
+
+The user was shown a numbered list of employees (1, 2, 3, etc.) and asked to select one.
+
+User response: "{{.Parameters.UserMessage}}"
+Use Vietnamese: {{.Parameters.IsVietnamese}}
+
+**ANALYSIS RULES:**
+1. **INDEX_SELECTION**: User provides a number (1, 2, 3, etc.) referring to the list
+   - Examples: "1", "2", "3", "number 2", "option 1", "chọn 2", "số 3"
+   - Extract the index number (1-based)
+   
+2. **NAME_CLARIFICATION**: User provides additional name details to clarify
+   - Examples: "Duy Anh", "the one with duyanh@...", "Hanh from HR"
+   - Match against employee details (name, email, department)
+   
+3. **CANCEL**: User wants to cancel the assignment
+   - Examples: "cancel", "none", "skip", "hủy", "không", "bỏ qua"
+
+**IMPORTANT:**
+- Look for ANY number in the user's response (1, 2, 3, etc.)
+- Numbers like "2" should be classified as index_selection with selected_index: 2
+- Be very flexible - even just "2" alone should work
+- Handle Vietnamese and English responses
+- If unclear, prefer index_selection over name_clarification
+
+**Response Examples:**
+- User says "2" → {"intent": "index_selection", "selected_index": 2, "clarification_text": "", "reasoning": "User selected option 2"}
+- User says "chọn số 1" → {"intent": "index_selection", "selected_index": 1, "clarification_text": "", "reasoning": "User selected option 1 in Vietnamese"}
+- User says "Duy Anh" → {"intent": "name_clarification", "selected_index": 0, "clarification_text": "Duy Anh", "reasoning": "User provided specific name"}
+- User says "cancel" → {"intent": "cancel", "selected_index": 0, "clarification_text": "", "reasoning": "User wants to cancel"}
+
+Respond with ONLY valid JSON:
+{
+  "intent": "index_selection|name_clarification|cancel",
+  "selected_index": 0,
+  "clarification_text": "",
+  "reasoning": "Brief explanation"
+}
+
+For index_selection: set selected_index to the number, leave clarification_text empty
+For name_clarification: set clarification_text, leave selected_index as 0  
+For cancel: leave both as empty/0
