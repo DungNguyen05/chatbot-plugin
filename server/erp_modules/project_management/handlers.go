@@ -18,8 +18,9 @@ import (
 type ConfirmationManager struct {
 	confirmationState                 map[string]*ProjectManagementConfirmation
 	multiEmployeeDisambiguationState  map[string]*MultiEmployeeDisambiguationConfirmation
-	existingEntityDisambiguationState map[string]*ExistingEntityDisambiguationConfirmation // NEW
-	projectTaskDisambiguationState    map[string]*ProjectTaskDisambiguationConfirmation    // NEW
+	existingEntityDisambiguationState map[string]*ExistingEntityDisambiguationConfirmation
+	projectTaskDisambiguationState    map[string]*ProjectTaskDisambiguationConfirmation
+	processingStates                  map[string]*ProcessingState // NEW
 	confirmationMutex                 sync.RWMutex
 }
 
@@ -30,6 +31,39 @@ func NewConfirmationManager() *ConfirmationManager {
 		multiEmployeeDisambiguationState:  make(map[string]*MultiEmployeeDisambiguationConfirmation),
 		existingEntityDisambiguationState: make(map[string]*ExistingEntityDisambiguationConfirmation),
 		projectTaskDisambiguationState:    make(map[string]*ProjectTaskDisambiguationConfirmation),
+	}
+}
+
+// Extended ConfirmationManager methods for processing states
+func (cm *ConfirmationManager) StoreProcessingState(userID string, state *ProcessingState) {
+	cm.confirmationMutex.Lock()
+	defer cm.confirmationMutex.Unlock()
+	if cm.processingStates == nil {
+		cm.processingStates = make(map[string]*ProcessingState)
+	}
+	cm.processingStates[userID] = state
+	// Clear other states
+	delete(cm.confirmationState, userID)
+	delete(cm.multiEmployeeDisambiguationState, userID)
+	delete(cm.existingEntityDisambiguationState, userID)
+	delete(cm.projectTaskDisambiguationState, userID)
+}
+
+func (cm *ConfirmationManager) GetProcessingState(userID string) (*ProcessingState, bool) {
+	cm.confirmationMutex.RLock()
+	defer cm.confirmationMutex.RUnlock()
+	if cm.processingStates == nil {
+		return nil, false
+	}
+	state, exists := cm.processingStates[userID]
+	return state, exists
+}
+
+func (cm *ConfirmationManager) ClearProcessingState(userID string) {
+	cm.confirmationMutex.Lock()
+	defer cm.confirmationMutex.Unlock()
+	if cm.processingStates != nil {
+		delete(cm.processingStates, userID)
 	}
 }
 
@@ -49,7 +83,7 @@ func (cm *ConfirmationManager) GetPendingConfirmation(userID string) (*ProjectMa
 	return confirmation, exists
 }
 
-// ClearPendingConfirmation clears pending confirmation for a user
+// Update ClearPendingConfirmation to also clear processing states
 func (cm *ConfirmationManager) ClearPendingConfirmation(userID string) {
 	cm.confirmationMutex.Lock()
 	defer cm.confirmationMutex.Unlock()
@@ -57,6 +91,9 @@ func (cm *ConfirmationManager) ClearPendingConfirmation(userID string) {
 	delete(cm.multiEmployeeDisambiguationState, userID)
 	delete(cm.existingEntityDisambiguationState, userID)
 	delete(cm.projectTaskDisambiguationState, userID)
+	if cm.processingStates != nil {
+		delete(cm.processingStates, userID)
+	}
 }
 
 // StorePendingMultiEmployeeDisambiguation stores a pending multi-employee disambiguation

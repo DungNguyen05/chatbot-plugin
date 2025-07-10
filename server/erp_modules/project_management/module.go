@@ -22,6 +22,8 @@ type ProjectManagementModule struct {
 	prompts             PromptsInterface
 	getLLM              func() llm.LanguageModel
 	confirmationManager *ConfirmationManager
+	processor           *MultiStepProcessor             // NEW
+	responseHandler     *ProcessingStateResponseHandler // NEW
 }
 
 // NewProjectManagementModule creates a new project management module
@@ -43,7 +45,8 @@ func NewProjectManagementModule(
 	// Create confirmation manager
 	confirmationManager := NewConfirmationManager()
 
-	return &ProjectManagementModule{
+	// Create the module instance
+	module := &ProjectManagementModule{
 		config:              config,
 		erpClient:           erpClient,
 		api:                 api,
@@ -51,6 +54,12 @@ func NewProjectManagementModule(
 		getLLM:              getLLM,
 		confirmationManager: confirmationManager,
 	}
+
+	// Initialize processor and response handler
+	module.processor = NewMultiStepProcessor(module)
+	module.responseHandler = NewProcessingStateResponseHandler(module, module.processor)
+
+	return module
 }
 
 // GetCategory returns the category this module handles
@@ -78,72 +87,49 @@ func (m *ProjectManagementModule) ProcessUserMessage(ctx *erp_modules.ModuleCont
 	// Sanitize user input
 	message = sanitizeUserInput(message)
 
-	// Check for pending existing entity disambiguation FIRST
+	// PRIORITY 1: Check for processing states FIRST
+	if processingState, hasProcessingState := m.confirmationManager.GetProcessingState(ctx.User.Id); hasProcessingState {
+		m.api.LogDebug("Found processing state", "user_id", ctx.User.Id, "step", processingState.Step)
+		response, err := m.responseHandler.HandleProcessingStateResponse(ctx, message, processingState)
+		if err != nil {
+			m.api.LogError("Error handling processing state response", "error", err.Error())
+			// Clear state on error
+			m.confirmationManager.ClearProcessingState(ctx.User.Id)
+		}
+		return response, err
+	}
+
+	// PRIORITY 2: Check for existing entity disambiguation
 	existingEntityDisambiguation, hasExistingEntityDisambiguation := m.confirmationManager.GetPendingExistingEntityDisambiguation(ctx.User.Id)
 	if hasExistingEntityDisambiguation {
 		m.api.LogDebug("Found pending existing entity disambiguation", "user_id", ctx.User.Id)
 		return m.handleExistingEntityDisambiguationResponse(ctx, message, existingEntityDisambiguation)
 	}
 
-	// Check for pending project task disambiguation
+	// PRIORITY 3: Check for project task disambiguation
 	projectTaskDisambiguation, hasProjectTaskDisambiguation := m.confirmationManager.GetPendingProjectTaskDisambiguation(ctx.User.Id)
 	if hasProjectTaskDisambiguation {
 		m.api.LogDebug("Found pending project task disambiguation", "user_id", ctx.User.Id)
 		return m.handleProjectTaskDisambiguationResponse(ctx, message, projectTaskDisambiguation)
 	}
 
-	// Check for pending multi-employee disambiguation
+	// PRIORITY 4: Check for multi-employee disambiguation
 	multiDisambiguation, hasMultiDisambiguation := m.confirmationManager.GetPendingMultiEmployeeDisambiguation(ctx.User.Id)
 	if hasMultiDisambiguation {
 		m.api.LogDebug("Found pending multi-employee disambiguation", "user_id", ctx.User.Id)
 		return m.handleMultiEmployeeDisambiguationResponse(ctx, message, multiDisambiguation)
 	}
 
-	// Check for pending confirmation
+	// PRIORITY 5: Check for regular confirmation
 	pending, hasPending := m.confirmationManager.GetPendingConfirmation(ctx.User.Id)
 	if hasPending {
 		m.api.LogDebug("Found pending confirmation", "user_id", ctx.User.Id)
-	} else {
-		m.api.LogDebug("No pending confirmation found", "user_id", ctx.User.Id)
-		return nil, nil // Not handling this message
+		return m.handleRegularConfirmationResponse(ctx, message, pending)
 	}
 
-	// Parse user response using LLM
-	userResponse, err := m.parseConfirmationResponse(ctx, message, pending)
-	if err != nil {
-		m.api.LogError("Failed to parse user response", "error", err.Error())
-		isVietnamese := detectUserLanguage(ctx.User)
-		errorMsg := "⚠️ Không thể hiểu phản hồi của bạn. Vui lòng thử lại."
-		if !isVietnamese {
-			errorMsg = "⚠️ Cannot understand your response. Please try again."
-		}
-		return &erp_modules.ModuleResponse{
-			Success: false,
-			Message: errorMsg,
-		}, nil
-	}
-
-	// Clear pending confirmation
-	m.confirmationManager.ClearPendingConfirmation(ctx.User.Id)
-
-	switch userResponse.Intent {
-	case "confirm":
-		return m.executeConfirmedAction(ctx, pending)
-	case "modify":
-		return m.handleModifyAction(ctx, pending, userResponse.Modifications)
-	case "cancel":
-		return m.handleCancelAction(ctx.User.Id)
-	default:
-		isVietnamese := detectUserLanguage(ctx.User)
-		errorMsg := "⚠️ Vui lòng xác nhận (có/yes), chỉnh sửa thông tin, hoặc hủy bỏ (không/cancel)."
-		if !isVietnamese {
-			errorMsg = "⚠️ Please confirm (yes), modify information, or cancel (no/cancel)."
-		}
-		return &erp_modules.ModuleResponse{
-			Success: false,
-			Message: errorMsg,
-		}, nil
-	}
+	// No pending states - not handling this message
+	m.api.LogDebug("No pending confirmation found", "user_id", ctx.User.Id)
+	return nil, nil
 }
 
 // handleExistingEntityDisambiguationResponse handles user response to existing entity selection
@@ -731,6 +717,46 @@ func (m *ProjectManagementModule) handleMultiEmployeeDisambiguationResponse(ctx 
 	}
 }
 
+// Helper method to handle regular confirmation responses (legacy support)
+func (m *ProjectManagementModule) handleRegularConfirmationResponse(ctx *erp_modules.ModuleContext, message string, pending *ProjectManagementConfirmation) (*erp_modules.ModuleResponse, error) {
+	// Parse user response using LLM
+	userResponse, err := m.parseConfirmationResponse(ctx, message, pending)
+	if err != nil {
+		m.api.LogError("Failed to parse user response", "error", err.Error())
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Không thể hiểu phản hồi của bạn. Vui lòng thử lại."
+		if !isVietnamese {
+			errorMsg = "⚠️ Cannot understand your response. Please try again."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+		}, nil
+	}
+
+	// Clear pending confirmation
+	m.confirmationManager.ClearPendingConfirmation(ctx.User.Id)
+
+	switch userResponse.Intent {
+	case "confirm":
+		return m.executeConfirmedAction(ctx, pending)
+	case "modify":
+		return m.handleModifyAction(ctx, pending, userResponse.Modifications)
+	case "cancel":
+		return m.handleCancelAction(ctx.User.Id)
+	default:
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Vui lòng xác nhận (có/yes), chỉnh sửa thông tin, hoặc hủy bỏ (không/cancel)."
+		if !isVietnamese {
+			errorMsg = "⚠️ Please confirm (yes), modify information, or cancel (no/cancel)."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+		}, nil
+	}
+}
+
 // Execute processes the project management intent
 func (m *ProjectManagementModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
 	isVietnamese := detectUserLanguage(ctx.User)
@@ -749,12 +775,12 @@ func (m *ProjectManagementModule) Execute(ctx *erp_modules.ModuleContext, intent
 		}, nil
 	}
 
-	// Execute specific action
+	// Execute specific action using state machine
 	switch intent.Action {
 	case "create_project":
-		return m.handleCreateProjectRequest(employeeID, ctx, intent)
+		return m.processor.ProcessProjectCreation(employeeID, ctx, intent)
 	case "create_task":
-		return m.handleCreateTaskRequest(employeeID, ctx, intent)
+		return m.processor.ProcessTaskCreation(employeeID, ctx, intent)
 	default:
 		errorMsg := "Hành động không được hỗ trợ"
 		if !isVietnamese {

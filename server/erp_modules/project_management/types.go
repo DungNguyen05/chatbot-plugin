@@ -243,3 +243,40 @@ type ProjectSelectionResponse struct {
 	SelectedIndex int    `json:"selected_index"` // 1-based index for select_project
 	Reasoning     string `json:"reasoning"`      // LLM reasoning
 }
+
+// ProcessingStep represents a step in the multi-step processing workflow
+type ProcessingStep string
+
+const (
+	StepAnalyzeExistingTask    ProcessingStep = "analyze_existing_task"
+	StepAnalyzeExistingProject ProcessingStep = "analyze_existing_project"
+	StepResolveEmployees       ProcessingStep = "resolve_employees"
+	StepResolveProject         ProcessingStep = "resolve_project_selection"
+	StepFinalConfirmation      ProcessingStep = "final_confirmation"
+	StepComplete               ProcessingStep = "complete"
+)
+
+// ProcessingState holds the complete state for multi-step processing
+type ProcessingState struct {
+	UserID          string                 `json:"user_id"`
+	Step            ProcessingStep         `json:"step"`
+	Type            string                 `json:"type"`   // "task" or "project"
+	Action          string                 `json:"action"` // "create_task", "create_project"
+	OriginalRequest map[string]interface{} `json:"original_request"`
+	EmployeeID      string                 `json:"employee_id"`
+	CreatorEmail    string                 `json:"creator_email"`
+	CreatedAt       int64                  `json:"created_at"`
+
+	// Step-specific data
+	PendingEmployeeResolution *AssigneeResolutionResult `json:"pending_employee_resolution,omitempty"`
+	PendingExistingEntities   []interface{}             `json:"pending_existing_entities,omitempty"`
+	PendingProjectSelection   []Project                 `json:"pending_project_selection,omitempty"`
+
+	// Resolved data that carries forward
+	ResolvedEmployees      []AssignedEmployee     `json:"resolved_employees"`
+	SelectedExistingEntity map[string]interface{} `json:"selected_existing_entity,omitempty"`
+	SelectedProject        string                 `json:"selected_project,omitempty"`
+
+	// Completion tracking
+	CompletedSteps map[ProcessingStep]bool `json:"completed_steps"`
+}
