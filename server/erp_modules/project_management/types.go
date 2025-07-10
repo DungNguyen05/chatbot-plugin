@@ -67,7 +67,7 @@ type Project struct {
 	Department        string  `json:"department,omitempty"`
 	Customer          string  `json:"customer,omitempty"`
 	Company           string  `json:"company,omitempty"`
-	MatchConfidence   float64 `json:"match_confidence"` // NEW FIELD
+	MatchConfidence   float64 `json:"match_confidence"`
 }
 
 // Task represents the data structure for ERPNext Task

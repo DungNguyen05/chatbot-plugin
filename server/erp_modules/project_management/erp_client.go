@@ -540,7 +540,7 @@ func (c *ERPClient) GetAllProjects() ([]Project, error) {
 	}
 
 	query := reqURL.Query()
-	query.Add("fields", `["name","project_name","status","priority","description","customer","department"]`)
+	query.Add("fields", `["name","project_name","status","priority","customer","department"]`)
 	query.Add("filters", `[["status","in",["Open","Completed","Cancelled"]]]`) // Get all status projects
 	query.Add("limit_page_length", "1000")
 	reqURL.RawQuery = query.Encode()
