@@ -128,38 +128,7 @@ func (p *MultiStepProcessor) ProcessNextStep(ctx *erp_modules.ModuleContext, sta
 func (p *MultiStepProcessor) handleAnalyzeExistingTask(ctx *erp_modules.ModuleContext, state *ProcessingState) (*erp_modules.ModuleResponse, error) {
 	subject := state.OriginalRequest["subject"].(string)
 
-	// FIRST: Resolve employees if any are specified
-	assigneeNamesInterface, hasAssignees := state.OriginalRequest["assigned_to_names"]
-	if hasAssignees {
-		var assigneeNames []string
-		if names, ok := assigneeNamesInterface.([]interface{}); ok {
-			for _, name := range names {
-				if nameStr, ok := name.(string); ok {
-					assigneeNames = append(assigneeNames, nameStr)
-				}
-			}
-		}
-
-		if len(assigneeNames) > 0 {
-			// Try to resolve employees first
-			assigneeResult, err := p.module.resolveMultipleAssignees(assigneeNames)
-			if err != nil {
-				p.module.api.LogError("Failed to resolve employees during existing task analysis", "error", err.Error())
-			} else if assigneeResult.RequiresDisambiguation {
-				// Store the result and request employee disambiguation
-				state.PendingEmployeeResolution = assigneeResult
-				state.ResolvedEmployees = assigneeResult.ResolvedEmployees
-				state.Step = StepResolveEmployees
-				p.module.confirmationManager.StoreProcessingState(ctx.User.Id, state)
-				return p.requestEmployeeDisambiguation(ctx, state, assigneeResult)
-			} else {
-				// All employees resolved successfully
-				state.ResolvedEmployees = assigneeResult.ResolvedEmployees
-			}
-		}
-	}
-
-	// SECOND: Check for existing tasks
+	// Check for existing tasks FIRST
 	existingTasks, err := p.module.erpClient.SearchTasksByName(subject)
 	if err != nil {
 		p.module.api.LogError("Failed to search existing tasks", "error", err.Error())
@@ -188,7 +157,7 @@ func (p *MultiStepProcessor) handleAnalyzeExistingTask(ctx *erp_modules.ModuleCo
 		return p.requestExistingEntityDisambiguation(ctx, state, "task", entities)
 	}
 
-	// No existing matches, move to next step
+	// No existing matches, move to resolve employees or create new
 	state.CompletedSteps[StepAnalyzeExistingTask] = true
 	return p.moveToNextStep(ctx, state, p.getNextStepAfterExistingAnalysis(state))
 }
@@ -197,38 +166,7 @@ func (p *MultiStepProcessor) handleAnalyzeExistingTask(ctx *erp_modules.ModuleCo
 func (p *MultiStepProcessor) handleAnalyzeExistingProject(ctx *erp_modules.ModuleContext, state *ProcessingState) (*erp_modules.ModuleResponse, error) {
 	projectName := state.OriginalRequest["project_name"].(string)
 
-	// FIRST: Resolve employees if any are specified
-	assigneeNamesInterface, hasAssignees := state.OriginalRequest["assigned_to_names"]
-	if hasAssignees {
-		var assigneeNames []string
-		if names, ok := assigneeNamesInterface.([]interface{}); ok {
-			for _, name := range names {
-				if nameStr, ok := name.(string); ok {
-					assigneeNames = append(assigneeNames, nameStr)
-				}
-			}
-		}
-
-		if len(assigneeNames) > 0 {
-			// Try to resolve employees first
-			assigneeResult, err := p.module.resolveMultipleAssignees(assigneeNames)
-			if err != nil {
-				p.module.api.LogError("Failed to resolve employees during existing project analysis", "error", err.Error())
-			} else if assigneeResult.RequiresDisambiguation {
-				// Store the result and request employee disambiguation
-				state.PendingEmployeeResolution = assigneeResult
-				state.ResolvedEmployees = assigneeResult.ResolvedEmployees
-				state.Step = StepResolveEmployees
-				p.module.confirmationManager.StoreProcessingState(ctx.User.Id, state)
-				return p.requestEmployeeDisambiguation(ctx, state, assigneeResult)
-			} else {
-				// All employees resolved successfully
-				state.ResolvedEmployees = assigneeResult.ResolvedEmployees
-			}
-		}
-	}
-
-	// SECOND: Check for existing projects
+	// Check for existing projects FIRST
 	existingProjects, err := p.module.erpClient.SearchProjectsByName(projectName)
 	if err != nil {
 		p.module.api.LogError("Failed to search existing projects", "error", err.Error())
@@ -257,38 +195,24 @@ func (p *MultiStepProcessor) handleAnalyzeExistingProject(ctx *erp_modules.Modul
 		return p.requestExistingEntityDisambiguation(ctx, state, "project", entities)
 	}
 
-	// No existing matches, move to next step
+	// No existing matches, move to resolve employees or create new
 	state.CompletedSteps[StepAnalyzeExistingProject] = true
 	return p.moveToNextStep(ctx, state, p.getNextStepAfterExistingAnalysis(state))
 }
 
 // getNextStepAfterExistingAnalysis determines next step after existing entity analysis
 func (p *MultiStepProcessor) getNextStepAfterExistingAnalysis(state *ProcessingState) ProcessingStep {
-	// If employees not resolved yet, go to resolve employees
-	if len(state.ResolvedEmployees) == 0 && state.PendingEmployeeResolution == nil {
-		assigneeNamesInterface, hasAssignees := state.OriginalRequest["assigned_to_names"]
-		if hasAssignees {
-			if names, ok := assigneeNamesInterface.([]interface{}); ok && len(names) > 0 {
-				return StepResolveEmployees
-			}
-		}
-	}
-
-	// For tasks, check if project needs resolution
-	if state.Type == "task" {
-		if projectName, ok := state.OriginalRequest["project"].(string); ok && projectName != "" {
-			return StepResolveProject
-		}
-	}
-
-	return StepFinalConfirmation
+	// Always go to resolve employees next (regardless of whether we have assignees)
+	// This will handle the case where no employees are specified
+	return StepResolveEmployees
 }
 
 // handleResolveEmployees resolves employee assignments
 func (p *MultiStepProcessor) handleResolveEmployees(ctx *erp_modules.ModuleContext, state *ProcessingState) (*erp_modules.ModuleResponse, error) {
 	assigneeNamesInterface, hasAssignees := state.OriginalRequest["assigned_to_names"]
+
+	// If no assignees specified, skip to next step
 	if !hasAssignees {
-		// No employees to resolve, move to next step
 		state.CompletedSteps[StepResolveEmployees] = true
 		return p.moveToNextStep(ctx, state, p.getNextStepAfterEmployees(state))
 	}
@@ -396,48 +320,58 @@ func (p *MultiStepProcessor) handleFinalConfirmation(ctx *erp_modules.ModuleCont
 	// Update request with all resolved data
 	state.OriginalRequest["assigned_to_employees"] = state.ResolvedEmployees
 
-	// Generate final confirmation message
-	confirmationMsg, err := p.module.generateConfirmationMessage(ctx, state.Type, state.OriginalRequest)
-	if err != nil {
-		isVietnamese := detectUserLanguage(ctx.User)
-		errorMsg := "⚠️ Có lỗi xảy ra khi tạo tin nhắn xác nhận cuối cùng."
-		if !isVietnamese {
-			errorMsg = "⚠️ An error occurred while creating final confirmation message."
+	// For CREATE NEW actions only
+	if state.SelectedExistingEntity == nil {
+		// Generate final confirmation message for NEW entity creation
+		confirmationMsg, err := p.module.generateConfirmationMessage(ctx, state.Type, state.OriginalRequest)
+		if err != nil {
+			isVietnamese := detectUserLanguage(ctx.User)
+			errorMsg := "⚠️ Có lỗi xảy ra khi tạo tin nhắn xác nhận cuối cùng."
+			if !isVietnamese {
+				errorMsg = "⚠️ An error occurred while creating final confirmation message."
+			}
+			return &erp_modules.ModuleResponse{
+				Success: false,
+				Message: errorMsg,
+				Error:   err.Error(),
+			}, nil
 		}
+
+		// Store final confirmation state
+		finalConfirmation := &ProjectManagementConfirmation{
+			UserID:       state.UserID,
+			Type:         state.Type,
+			Action:       state.Action,
+			Data:         state.OriginalRequest,
+			CreatedAt:    time.Now().UnixMilli(),
+			EmployeeID:   state.EmployeeID,
+			CreatorEmail: state.CreatorEmail,
+		}
+
+		p.module.confirmationManager.StorePendingConfirmation(ctx.User.Id, finalConfirmation)
+
 		return &erp_modules.ModuleResponse{
-			Success: false,
-			Message: errorMsg,
-			Error:   err.Error(),
+			Success:     true,
+			Message:     confirmationMsg,
+			ActionTaken: "request_final_confirmation",
+			Data: map[string]interface{}{
+				"awaiting_confirmation": true,
+				"type":                  state.Type,
+				"all_steps_completed":   true,
+			},
 		}, nil
 	}
 
-	// Store final confirmation state
-	finalConfirmation := &ProjectManagementConfirmation{
-		UserID:       state.UserID,
-		Type:         state.Type,
-		Action:       state.Action,
-		Data:         state.OriginalRequest,
-		CreatedAt:    time.Now().UnixMilli(),
-		EmployeeID:   state.EmployeeID,
-		CreatorEmail: state.CreatorEmail,
-	}
-
-	p.module.confirmationManager.StorePendingConfirmation(ctx.User.Id, finalConfirmation)
-
-	return &erp_modules.ModuleResponse{
-		Success:     true,
-		Message:     confirmationMsg,
-		ActionTaken: "request_final_confirmation",
-		Data: map[string]interface{}{
-			"awaiting_confirmation": true,
-			"type":                  state.Type,
-			"all_steps_completed":   true,
-		},
-	}, nil
+	// If we selected an existing entity, we should have already handled assignment
+	// This shouldn't happen, but handle gracefully
+	return p.handleCompletion(ctx, state)
 }
 
-// handleCompletion executes the final creation
+// handleCompletion executes the final creation or assignment
 func (p *MultiStepProcessor) handleCompletion(ctx *erp_modules.ModuleContext, state *ProcessingState) (*erp_modules.ModuleResponse, error) {
+	// Clear processing state first
+	p.module.confirmationManager.ClearProcessingState(ctx.User.Id)
+
 	switch state.Action {
 	case "create_task":
 		return p.module.handleCreateTask(state.EmployeeID, ctx.User.Id, state.OriginalRequest, state.CreatorEmail)

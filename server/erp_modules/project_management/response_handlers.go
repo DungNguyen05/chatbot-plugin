@@ -67,16 +67,25 @@ func (h *ProcessingStateResponseHandler) handleExistingEntityResponse(ctx *erp_m
 
 	switch disambiguationResponse.Intent {
 	case "create_new":
-		// User wants to create new, mark step as completed and continue
+		// User wants to create new, continue with workflow
 		if state.Step == StepAnalyzeExistingTask {
 			state.CompletedSteps[StepAnalyzeExistingTask] = true
 		} else {
 			state.CompletedSteps[StepAnalyzeExistingProject] = true
 		}
+
+		// Clear existing entities since we're creating new
+		state.PendingExistingEntities = nil
+		state.SelectedExistingEntity = nil
+
+		// Store updated state
+		h.module.confirmationManager.StoreProcessingState(ctx.User.Id, state)
+
+		// Move to next step (resolve employees or final confirmation)
 		return h.processor.moveToNextStep(ctx, state, StepResolveEmployees)
 
 	case "use_existing":
-		// User wants to use existing entity - handle assignment and complete workflow
+		// User wants to use existing entity - handle assignment
 		return h.handleUseExistingEntity(ctx, state, disambiguationResponse.SelectedIndex)
 
 	case "cancel":
@@ -137,7 +146,18 @@ func (h *ProcessingStateResponseHandler) handleEmployeeResolutionResponse(ctx *e
 		state.ResolvedEmployees = append(state.ResolvedEmployees, selectedEmployees...)
 		state.CompletedSteps[StepResolveEmployees] = true
 
-		// Move to next step
+		// Clear pending employee resolution
+		state.PendingEmployeeResolution = nil
+
+		// Check if we have selected an existing entity for assignment
+		if state.SelectedExistingEntity != nil {
+			// We're assigning to existing entity, perform assignment now
+			h.module.confirmationManager.StoreProcessingState(ctx.User.Id, state)
+			return h.performExistingEntityAssignment(ctx, state)
+		}
+
+		// Store updated state and move to next step
+		h.module.confirmationManager.StoreProcessingState(ctx.User.Id, state)
 		return h.processor.moveToNextStep(ctx, state, h.processor.getNextStepAfterEmployees(state))
 
 	case "cancel":
@@ -196,7 +216,11 @@ func (h *ProcessingStateResponseHandler) handleProjectSelectionResponse(ctx *erp
 		state.OriginalRequest["project"] = selectedProject.Name
 		state.CompletedSteps[StepResolveProject] = true
 
-		// Move to final confirmation
+		// Clear pending project selection
+		state.PendingProjectSelection = nil
+
+		// Store updated state and move to final confirmation
+		h.module.confirmationManager.StoreProcessingState(ctx.User.Id, state)
 		return h.processor.moveToNextStep(ctx, state, StepFinalConfirmation)
 
 	case "no_project":
@@ -204,7 +228,11 @@ func (h *ProcessingStateResponseHandler) handleProjectSelectionResponse(ctx *erp
 		state.OriginalRequest["project"] = ""
 		state.CompletedSteps[StepResolveProject] = true
 
-		// Move to final confirmation
+		// Clear pending project selection
+		state.PendingProjectSelection = nil
+
+		// Store updated state and move to final confirmation
+		h.module.confirmationManager.StoreProcessingState(ctx.User.Id, state)
 		return h.processor.moveToNextStep(ctx, state, StepFinalConfirmation)
 
 	case "cancel":
@@ -528,6 +556,9 @@ func (h *ProcessingStateResponseHandler) handleModifications(ctx *erp_modules.Mo
 	// Update assigned_to_employees with resolved employees
 	state.OriginalRequest["assigned_to_employees"] = state.ResolvedEmployees
 
+	// Store updated state
+	h.module.confirmationManager.StoreProcessingState(ctx.User.Id, state)
+
 	// Generate new confirmation message
 	return h.processor.handleFinalConfirmation(ctx, state)
 }
@@ -535,6 +566,7 @@ func (h *ProcessingStateResponseHandler) handleModifications(ctx *erp_modules.Mo
 // handleCancelAction handles user cancellation
 func (h *ProcessingStateResponseHandler) handleCancelAction(userID string) (*erp_modules.ModuleResponse, error) {
 	h.module.confirmationManager.ClearPendingConfirmation(userID)
+	h.module.confirmationManager.ClearProcessingState(userID)
 	return &erp_modules.ModuleResponse{
 		Success:     true,
 		Message:     "Đã hủy bỏ yêu cầu tạo dự án/task.",

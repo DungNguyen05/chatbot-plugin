@@ -99,28 +99,28 @@ func (m *ProjectManagementModule) ProcessUserMessage(ctx *erp_modules.ModuleCont
 		return response, err
 	}
 
-	// PRIORITY 2: Check for existing entity disambiguation
+	// PRIORITY 2: Check for existing entity disambiguation (legacy support)
 	existingEntityDisambiguation, hasExistingEntityDisambiguation := m.confirmationManager.GetPendingExistingEntityDisambiguation(ctx.User.Id)
 	if hasExistingEntityDisambiguation {
 		m.api.LogDebug("Found pending existing entity disambiguation", "user_id", ctx.User.Id)
 		return m.handleExistingEntityDisambiguationResponse(ctx, message, existingEntityDisambiguation)
 	}
 
-	// PRIORITY 3: Check for project task disambiguation
+	// PRIORITY 3: Check for project task disambiguation (legacy support)
 	projectTaskDisambiguation, hasProjectTaskDisambiguation := m.confirmationManager.GetPendingProjectTaskDisambiguation(ctx.User.Id)
 	if hasProjectTaskDisambiguation {
 		m.api.LogDebug("Found pending project task disambiguation", "user_id", ctx.User.Id)
 		return m.handleProjectTaskDisambiguationResponse(ctx, message, projectTaskDisambiguation)
 	}
 
-	// PRIORITY 4: Check for multi-employee disambiguation
+	// PRIORITY 4: Check for multi-employee disambiguation (legacy support)
 	multiDisambiguation, hasMultiDisambiguation := m.confirmationManager.GetPendingMultiEmployeeDisambiguation(ctx.User.Id)
 	if hasMultiDisambiguation {
 		m.api.LogDebug("Found pending multi-employee disambiguation", "user_id", ctx.User.Id)
 		return m.handleMultiEmployeeDisambiguationResponse(ctx, message, multiDisambiguation)
 	}
 
-	// PRIORITY 5: Check for regular confirmation
+	// PRIORITY 5: Check for regular confirmation (legacy support)
 	pending, hasPending := m.confirmationManager.GetPendingConfirmation(ctx.User.Id)
 	if hasPending {
 		m.api.LogDebug("Found pending confirmation", "user_id", ctx.User.Id)
@@ -774,6 +774,10 @@ func (m *ProjectManagementModule) Execute(ctx *erp_modules.ModuleContext, intent
 			Error:   err.Error(),
 		}, nil
 	}
+
+	// Clear any existing states before starting new workflow
+	m.confirmationManager.ClearPendingConfirmation(ctx.User.Id)
+	m.confirmationManager.ClearProcessingState(ctx.User.Id)
 
 	// Execute specific action using state machine
 	switch intent.Action {
