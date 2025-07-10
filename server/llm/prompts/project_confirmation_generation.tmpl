@@ -14,7 +14,10 @@ Generate a confirmation message that:
 2. Asks the user to confirm if the information is correct
 3. Mentions they can request modifications before final creation
 4. Uses Vietnamese if IsVietnamese is true, otherwise use English
-5. Is professional but friendly
+5. Only include fields that have non-empty values in the confirmation message
+6. For employees, only include their full name and employee ID in the confirmation message. Do not repeat the employee name elsewhere.
+7. Display the list of employees in a clear and organized format using bullet points, showing only their full name and employee ID for better visualization.
+8. Show fullname of employee not just first name
 
 {{if .Parameters.IsVietnamese}}
 Example format:
@@ -23,10 +26,9 @@ Example format:
 • **Tên dự án:** [project_name]
 • **Mô tả:** [description] (if provided)
 • **Ưu tiên:** [priority] (if provided)
-• **Phân công cho:** [assigned_to_name] (if provided)
 [... other fields if provided]
 
-Vui lòng xác nhận thông tin trên có chính xác không? Bạn có thể yêu cầu chỉnh sửa bất kỳ thông tin nào hoặc trả lời **'có'** để tạo dự án."
+Vui lòng xác nhận thông tin trên có chính xác không? Bạn có thể yêu cầu chỉnh sửa, xác nhận hoặc huỷ."
 {{else}}
 Example format:
 " **Confirm Project Information:**
@@ -34,10 +36,9 @@ Example format:
 • **Project Name:** [project_name]
 • **Description:** [description] (if provided)
 • **Priority:** [priority] (if provided)
-• **Assigned To:** [assigned_to_name] (if provided)
 [... other fields if provided]
 
-Please confirm if the information above is correct. You can request modifications to any information or reply **'yes'** to create the project."
+Please confirm if the information above is correct. You can request modifications, confirm or cancel."
 {{end}}
 
 Generate the confirmation message:

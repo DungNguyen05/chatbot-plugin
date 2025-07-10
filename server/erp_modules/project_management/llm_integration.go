@@ -323,15 +323,15 @@ func (m *ProjectManagementModule) generateExistingEntityDisambiguationMessage(ct
 
 	if isVietnamese {
 		if disambiguation.EntityType == "project" {
-			message.WriteString("🔍 **Tìm thấy dự án tương tự:**\n\n")
+			message.WriteString("**Tìm thấy dự án tương tự:**\n\n")
 		} else {
-			message.WriteString("🔍 **Tìm thấy task tương tự:**\n\n")
+			message.WriteString("**Tìm thấy task tương tự:**\n\n")
 		}
 	} else {
 		if disambiguation.EntityType == "project" {
-			message.WriteString("🔍 **Found similar projects:**\n\n")
+			message.WriteString("**Found similar projects:**\n\n")
 		} else {
-			message.WriteString("🔍 **Found similar tasks:**\n\n")
+			message.WriteString("**Found similar tasks:**\n\n")
 		}
 	}
 
@@ -364,13 +364,11 @@ func (m *ProjectManagementModule) generateExistingEntityDisambiguationMessage(ct
 			message.WriteString("• **Tạo mới** - Tạo dự án mới\n")
 			message.WriteString("• **Chọn số** - Sử dụng dự án hiện có (ví dụ: '1')\n")
 			message.WriteString("• **Hủy** - Hủy bỏ yêu cầu\n\n")
-			message.WriteString("Vui lòng trả lời: 'tạo mới', số thứ tự, hoặc 'hủy'")
 		} else {
 			message.WriteString("Bạn muốn:\n")
 			message.WriteString("• **Tạo mới** - Tạo task mới\n")
 			message.WriteString("• **Chọn số** - Sử dụng task hiện có (ví dụ: '1')\n")
 			message.WriteString("• **Hủy** - Hủy bỏ yêu cầu\n\n")
-			message.WriteString("Vui lòng trả lời: 'tạo mới', số thứ tự, hoặc 'hủy'")
 		}
 	} else {
 		if disambiguation.EntityType == "project" {
@@ -378,13 +376,11 @@ func (m *ProjectManagementModule) generateExistingEntityDisambiguationMessage(ct
 			message.WriteString("• **Create new** - Create a new project\n")
 			message.WriteString("• **Select number** - Use existing project (example: '1')\n")
 			message.WriteString("• **Cancel** - Cancel the request\n\n")
-			message.WriteString("Please reply: 'create new', number, or 'cancel'")
 		} else {
 			message.WriteString("Do you want to:\n")
 			message.WriteString("• **Create new** - Create a new task\n")
 			message.WriteString("• **Select number** - Use existing task (example: '1')\n")
 			message.WriteString("• **Cancel** - Cancel the request\n\n")
-			message.WriteString("Please reply: 'create new', number, or 'cancel'")
 		}
 	}
 
@@ -398,9 +394,9 @@ func (m *ProjectManagementModule) generateProjectTaskDisambiguationMessage(ctx *
 	var message strings.Builder
 
 	if isVietnamese {
-		message.WriteString("🔍 **Tìm thấy nhiều dự án phù hợp:**\n\n")
+		message.WriteString("**Tìm thấy nhiều dự án phù hợp:**\n\n")
 	} else {
-		message.WriteString("🔍 **Found multiple matching projects:**\n\n")
+		message.WriteString("**Found multiple matching projects:**\n\n")
 	}
 
 	// List matching projects

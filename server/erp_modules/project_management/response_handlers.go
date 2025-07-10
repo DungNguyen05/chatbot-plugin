@@ -371,15 +371,15 @@ func (h *ProcessingStateResponseHandler) handleUseExistingEntity(ctx *erp_module
 		var successMsg string
 		if isVietnamese {
 			if state.Type == "project" {
-				successMsg = fmt.Sprintf("✅ Đã chọn dự án hiện có: **%s**. Không có nhân viên nào được chỉ định để phân công.", entityName)
+				successMsg = fmt.Sprintf("Đã chọn dự án hiện có: **%s**. Không có nhân viên nào được chỉ định để phân công.", entityName)
 			} else {
-				successMsg = fmt.Sprintf("✅ Đã chọn task hiện có: **%s**. Không có nhân viên nào được chỉ định để phân công.", entityName)
+				successMsg = fmt.Sprintf("Đã chọn task hiện có: **%s**. Không có nhân viên nào được chỉ định để phân công.", entityName)
 			}
 		} else {
 			if state.Type == "project" {
-				successMsg = fmt.Sprintf("✅ Selected existing project: **%s**. No employees were specified for assignment.", entityName)
+				successMsg = fmt.Sprintf("Selected existing project: **%s**. No employees were specified for assignment.", entityName)
 			} else {
-				successMsg = fmt.Sprintf("✅ Selected existing task: **%s**. No employees were specified for assignment.", entityName)
+				successMsg = fmt.Sprintf("Selected existing task: **%s**. No employees were specified for assignment.", entityName)
 			}
 		}
 
@@ -466,32 +466,43 @@ func (h *ProcessingStateResponseHandler) performExistingEntityAssignment(ctx *er
 	if len(assignmentErrors) == 0 {
 		if isVietnamese {
 			if state.Type == "project" {
-				successMsg = fmt.Sprintf("✅ Đã phân công dự án hiện có **%s** cho **%s**!", entityName, assigneesStr)
+				successMsg = fmt.Sprintf(
+					"**Phân công dự án thành công!**\n\n"+
+						"- Dự án: `%s`\n"+
+						"- Nhân viên: **%s**",
+					entityName,
+					assigneesStr)
 			} else {
-				successMsg = fmt.Sprintf("✅ Đã phân công task hiện có **%s** cho **%s**!", entityName, assigneesStr)
+				successMsg = fmt.Sprintf(
+					"**Phân công task thành công!**\n\n"+
+						"- Task: `%s`\n"+
+						"- Nhân viên: **%s**",
+					entityName,
+					assigneesStr)
 			}
+
 		} else {
 			if state.Type == "project" {
-				successMsg = fmt.Sprintf("✅ Successfully assigned existing project **%s** to **%s**!", entityName, assigneesStr)
+				successMsg = fmt.Sprintf("Successfully assigned existing project **%s** to **%s**!", entityName, assigneesStr)
 			} else {
-				successMsg = fmt.Sprintf("✅ Successfully assigned existing task **%s** to **%s**!", entityName, assigneesStr)
+				successMsg = fmt.Sprintf("Successfully assigned existing task **%s** to **%s**!", entityName, assigneesStr)
 			}
 		}
 	} else {
 		if isVietnamese {
 			if state.Type == "project" {
-				successMsg = fmt.Sprintf("✅ Đã phân công dự án hiện có **%s**. Thành công: **%s**. Lỗi: **%s**.",
+				successMsg = fmt.Sprintf("Đã phân công dự án hiện có **%s**. Thành công: **%s**. Lỗi: **%s**.",
 					entityName, assigneesStr, strings.Join(assignmentErrors, ", "))
 			} else {
-				successMsg = fmt.Sprintf("✅ Đã phân công task hiện có **%s**. Thành công: **%s**. Lỗi: **%s**.",
+				successMsg = fmt.Sprintf("Đã phân công task hiện có **%s**. Thành công: **%s**. Lỗi: **%s**.",
 					entityName, assigneesStr, strings.Join(assignmentErrors, ", "))
 			}
 		} else {
 			if state.Type == "project" {
-				successMsg = fmt.Sprintf("✅ Assigned existing project **%s**. Successful: **%s**. Failed: **%s**.",
+				successMsg = fmt.Sprintf("Assigned existing project **%s**. Successful: **%s**. Failed: **%s**.",
 					entityName, assigneesStr, strings.Join(assignmentErrors, ", "))
 			} else {
-				successMsg = fmt.Sprintf("✅ Assigned existing task **%s**. Successful: **%s**. Failed: **%s**.",
+				successMsg = fmt.Sprintf("Assigned existing task **%s**. Successful: **%s**. Failed: **%s**.",
 					entityName, assigneesStr, strings.Join(assignmentErrors, ", "))
 			}
 		}

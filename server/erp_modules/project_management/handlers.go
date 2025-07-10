@@ -587,9 +587,9 @@ func (m *ProjectManagementModule) generateMultiEmployeeDisambiguationMessage(ctx
 	// Show successfully resolved employees if any
 	if len(assigneeResult.ResolvedEmployees) > 0 {
 		if isVietnamese {
-			message.WriteString("✅ **Đã xác định thành công:**\n")
+			message.WriteString("**Đã xác định thành công:**\n")
 		} else {
-			message.WriteString("✅ **Successfully identified:**\n")
+			message.WriteString("**Successfully identified:**\n")
 		}
 		for _, emp := range assigneeResult.ResolvedEmployees {
 			message.WriteString(fmt.Sprintf("- **%s** (%s)\n", emp.EmployeeName, emp.Email))
@@ -599,9 +599,9 @@ func (m *ProjectManagementModule) generateMultiEmployeeDisambiguationMessage(ctx
 
 	// Show employees that need disambiguation
 	if isVietnamese {
-		message.WriteString("❓ **Cần làm rõ cho các nhân viên sau:**\n\n")
+		message.WriteString("**Cần làm rõ cho các nhân viên sau:**\n\n")
 	} else {
-		message.WriteString("❓ **Need clarification for the following employees:**\n\n")
+		message.WriteString("**Need clarification for the following employees:**\n\n")
 	}
 
 	globalIndex := 1
@@ -613,13 +613,13 @@ func (m *ProjectManagementModule) generateMultiEmployeeDisambiguationMessage(ctx
 		}
 
 		for _, emp := range unresolvedMatch.MatchingEmployees {
-			message.WriteString(fmt.Sprintf("%d. **%s** (%s, %s)\n",
+			message.WriteString(fmt.Sprintf("%d. **%s** (%s)\n",
 				globalIndex,
 				emp.EmployeeName,
-				emp.CompanyEmail,
 				emp.Name))
 			globalIndex++
 		}
+
 		message.WriteString("\n")
 	}
 
@@ -750,24 +750,24 @@ func (m *ProjectManagementModule) handleCreateProject(employeeID, userID string,
 
 		if len(assignmentErrors) == 0 {
 			if isVietnamese {
-				successMsg = fmt.Sprintf("✅ Đã tạo dự án thành công: **%s** và phân công cho **%s**!", projectID, assigneesStr)
+				successMsg = fmt.Sprintf("Đã tạo dự án thành công: **%s** và phân công cho **%s**!", projectID, assigneesStr)
 			} else {
-				successMsg = fmt.Sprintf("✅ Successfully created project: **%s** and assigned to **%s**!", projectID, assigneesStr)
+				successMsg = fmt.Sprintf("Successfully created project: **%s** and assigned to **%s**!", projectID, assigneesStr)
 			}
 		} else {
 			if isVietnamese {
-				successMsg = fmt.Sprintf("✅ Đã tạo dự án: **%s**. Phân công thành công cho **%s**. Lỗi phân công: **%s**.",
+				successMsg = fmt.Sprintf("Đã tạo dự án: **%s**. Phân công thành công cho **%s**. Lỗi phân công: **%s**.",
 					projectID, assigneesStr, strings.Join(assignmentErrors, ", "))
 			} else {
-				successMsg = fmt.Sprintf("✅ Created project: **%s**. Successfully assigned to **%s**. Assignment failed for: **%s**.",
+				successMsg = fmt.Sprintf("Created project: **%s**. Successfully assigned to **%s**. Assignment failed for: **%s**.",
 					projectID, assigneesStr, strings.Join(assignmentErrors, ", "))
 			}
 		}
 	} else {
 		if isVietnamese {
-			successMsg = fmt.Sprintf("✅ Đã tạo dự án thành công: **%s**!", projectID)
+			successMsg = fmt.Sprintf("Đã tạo dự án thành công: **%s**!", projectID)
 		} else {
-			successMsg = fmt.Sprintf("✅ Successfully created project: **%s**!", projectID)
+			successMsg = fmt.Sprintf("Successfully created project: **%s**!", projectID)
 		}
 	}
 
@@ -838,24 +838,24 @@ func (m *ProjectManagementModule) handleCreateTask(employeeID, userID string, da
 
 		if len(assignmentErrors) == 0 {
 			if isVietnamese {
-				successMsg = fmt.Sprintf("✅ Đã tạo task thành công: **%s** và phân công cho **%s**!", taskID, assigneesStr)
+				successMsg = fmt.Sprintf("Đã tạo task thành công: **%s** và phân công cho **%s**!", taskID, assigneesStr)
 			} else {
-				successMsg = fmt.Sprintf("✅ Successfully created task: **%s** and assigned to **%s**!", taskID, assigneesStr)
+				successMsg = fmt.Sprintf("Successfully created task: **%s** and assigned to **%s**!", taskID, assigneesStr)
 			}
 		} else {
 			if isVietnamese {
-				successMsg = fmt.Sprintf("✅ Đã tạo task: **%s**. Phân công thành công cho **%s**. Lỗi phân công: **%s**.",
+				successMsg = fmt.Sprintf("Đã tạo task: **%s**. Phân công thành công cho **%s**. Lỗi phân công: **%s**.",
 					taskID, assigneesStr, strings.Join(assignmentErrors, ", "))
 			} else {
-				successMsg = fmt.Sprintf("✅ Created task: **%s**. Successfully assigned to **%s**. Assignment failed for: **%s**.",
+				successMsg = fmt.Sprintf("Created task: **%s**. Successfully assigned to **%s**. Assignment failed for: **%s**.",
 					taskID, assigneesStr, strings.Join(assignmentErrors, ", "))
 			}
 		}
 	} else {
 		if isVietnamese {
-			successMsg = fmt.Sprintf("✅ Đã tạo task thành công: **%s**!", taskID)
+			successMsg = fmt.Sprintf("Đã tạo task thành công: **%s**!", taskID)
 		} else {
-			successMsg = fmt.Sprintf("✅ Successfully created task: **%s**!", taskID)
+			successMsg = fmt.Sprintf("Successfully created task: **%s**!", taskID)
 		}
 	}
 

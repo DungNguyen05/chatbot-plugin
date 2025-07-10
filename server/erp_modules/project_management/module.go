@@ -362,15 +362,15 @@ func (m *ProjectManagementModule) handleUseExistingEntity(ctx *erp_modules.Modul
 		var successMsg string
 		if isVietnamese {
 			if disambiguation.EntityType == "project" {
-				successMsg = fmt.Sprintf("✅ Đã chọn dự án hiện có: **%s**. Tuy nhiên, không có nhân viên nào được chỉ định để phân công.", entityName)
+				successMsg = fmt.Sprintf("Đã chọn dự án hiện có: **%s**. Tuy nhiên, không có nhân viên nào được chỉ định để phân công.", entityName)
 			} else {
-				successMsg = fmt.Sprintf("✅ Đã chọn task hiện có: **%s**. Tuy nhiên, không có nhân viên nào được chỉ định để phân công.", entityName)
+				successMsg = fmt.Sprintf("Đã chọn task hiện có: **%s**. Tuy nhiên, không có nhân viên nào được chỉ định để phân công.", entityName)
 			}
 		} else {
 			if disambiguation.EntityType == "project" {
-				successMsg = fmt.Sprintf("✅ Selected existing project: **%s**. However, no employees were specified for assignment.", entityName)
+				successMsg = fmt.Sprintf("Selected existing project: **%s**. However, no employees were specified for assignment.", entityName)
 			} else {
-				successMsg = fmt.Sprintf("✅ Selected existing task: **%s**. However, no employees were specified for assignment.", entityName)
+				successMsg = fmt.Sprintf("Selected existing task: **%s**. However, no employees were specified for assignment.", entityName)
 			}
 		}
 
@@ -449,32 +449,32 @@ func (m *ProjectManagementModule) handleUseExistingEntity(ctx *erp_modules.Modul
 	if len(assignmentErrors) == 0 {
 		if isVietnamese {
 			if disambiguation.EntityType == "project" {
-				successMsg = fmt.Sprintf("✅ Đã phân công dự án hiện có **%s** cho **%s**!", entityName, assigneesStr)
+				successMsg = fmt.Sprintf("Đã phân công dự án hiện có **%s** cho **%s**!", entityName, assigneesStr)
 			} else {
-				successMsg = fmt.Sprintf("✅ Đã phân công task hiện có **%s** cho **%s**!", entityName, assigneesStr)
+				successMsg = fmt.Sprintf("Đã phân công task hiện có **%s** cho **%s**!", entityName, assigneesStr)
 			}
 		} else {
 			if disambiguation.EntityType == "project" {
-				successMsg = fmt.Sprintf("✅ Successfully assigned existing project **%s** to **%s**!", entityName, assigneesStr)
+				successMsg = fmt.Sprintf("Successfully assigned existing project **%s** to **%s**!", entityName, assigneesStr)
 			} else {
-				successMsg = fmt.Sprintf("✅ Successfully assigned existing task **%s** to **%s**!", entityName, assigneesStr)
+				successMsg = fmt.Sprintf("Successfully assigned existing task **%s** to **%s**!", entityName, assigneesStr)
 			}
 		}
 	} else {
 		if isVietnamese {
 			if disambiguation.EntityType == "project" {
-				successMsg = fmt.Sprintf("✅ Đã phân công dự án hiện có **%s**. Thành công: **%s**. Lỗi: **%s**.",
+				successMsg = fmt.Sprintf("Đã phân công dự án hiện có **%s**. Thành công: **%s**. Lỗi: **%s**.",
 					entityName, assigneesStr, strings.Join(assignmentErrors, ", "))
 			} else {
-				successMsg = fmt.Sprintf("✅ Đã phân công task hiện có **%s**. Thành công: **%s**. Lỗi: **%s**.",
+				successMsg = fmt.Sprintf("Đã phân công task hiện có **%s**. Thành công: **%s**. Lỗi: **%s**.",
 					entityName, assigneesStr, strings.Join(assignmentErrors, ", "))
 			}
 		} else {
 			if disambiguation.EntityType == "project" {
-				successMsg = fmt.Sprintf("✅ Assigned existing project **%s**. Successful: **%s**. Failed: **%s**.",
+				successMsg = fmt.Sprintf("Assigned existing project **%s**. Successful: **%s**. Failed: **%s**.",
 					entityName, assigneesStr, strings.Join(assignmentErrors, ", "))
 			} else {
-				successMsg = fmt.Sprintf("✅ Assigned existing task **%s**. Successful: **%s**. Failed: **%s**.",
+				successMsg = fmt.Sprintf("Assigned existing task **%s**. Successful: **%s**. Failed: **%s**.",
 					entityName, assigneesStr, strings.Join(assignmentErrors, ", "))
 			}
 		}
@@ -668,9 +668,9 @@ func (m *ProjectManagementModule) handleMultiEmployeeDisambiguationResponse(ctx 
 		isVietnamese := detectUserLanguage(ctx.User)
 		var selectedMsg strings.Builder
 		if isVietnamese {
-			selectedMsg.WriteString("✅ **Đã chọn nhân viên:**\n")
+			selectedMsg.WriteString("**Đã chọn nhân viên:**\n")
 		} else {
-			selectedMsg.WriteString("✅ **Selected employees:**\n")
+			selectedMsg.WriteString("**Selected employees:**\n")
 		}
 		for _, emp := range allResolvedEmployees {
 			selectedMsg.WriteString(fmt.Sprintf("- **%s** (%s)\n", emp.EmployeeName, emp.Email))
