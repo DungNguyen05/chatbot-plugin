@@ -16,16 +16,20 @@ import (
 
 // ConfirmationManager handles confirmation state with multi-employee disambiguation
 type ConfirmationManager struct {
-	confirmationState                map[string]*ProjectManagementConfirmation
-	multiEmployeeDisambiguationState map[string]*MultiEmployeeDisambiguationConfirmation
-	confirmationMutex                sync.RWMutex
+	confirmationState                 map[string]*ProjectManagementConfirmation
+	multiEmployeeDisambiguationState  map[string]*MultiEmployeeDisambiguationConfirmation
+	existingEntityDisambiguationState map[string]*ExistingEntityDisambiguationConfirmation // NEW
+	projectTaskDisambiguationState    map[string]*ProjectTaskDisambiguationConfirmation    // NEW
+	confirmationMutex                 sync.RWMutex
 }
 
 // NewConfirmationManager creates a new confirmation manager
 func NewConfirmationManager() *ConfirmationManager {
 	return &ConfirmationManager{
-		confirmationState:                make(map[string]*ProjectManagementConfirmation),
-		multiEmployeeDisambiguationState: make(map[string]*MultiEmployeeDisambiguationConfirmation),
+		confirmationState:                 make(map[string]*ProjectManagementConfirmation),
+		multiEmployeeDisambiguationState:  make(map[string]*MultiEmployeeDisambiguationConfirmation),
+		existingEntityDisambiguationState: make(map[string]*ExistingEntityDisambiguationConfirmation),
+		projectTaskDisambiguationState:    make(map[string]*ProjectTaskDisambiguationConfirmation),
 	}
 }
 
@@ -51,6 +55,8 @@ func (cm *ConfirmationManager) ClearPendingConfirmation(userID string) {
 	defer cm.confirmationMutex.Unlock()
 	delete(cm.confirmationState, userID)
 	delete(cm.multiEmployeeDisambiguationState, userID)
+	delete(cm.existingEntityDisambiguationState, userID)
+	delete(cm.projectTaskDisambiguationState, userID)
 }
 
 // StorePendingMultiEmployeeDisambiguation stores a pending multi-employee disambiguation
@@ -66,6 +72,44 @@ func (cm *ConfirmationManager) GetPendingMultiEmployeeDisambiguation(userID stri
 	cm.confirmationMutex.RLock()
 	defer cm.confirmationMutex.RUnlock()
 	disambiguation, exists := cm.multiEmployeeDisambiguationState[userID]
+	return disambiguation, exists
+}
+
+// StorePendingExistingEntityDisambiguation stores a pending existing entity disambiguation
+func (cm *ConfirmationManager) StorePendingExistingEntityDisambiguation(userID string, disambiguation *ExistingEntityDisambiguationConfirmation) {
+	cm.confirmationMutex.Lock()
+	defer cm.confirmationMutex.Unlock()
+	cm.existingEntityDisambiguationState[userID] = disambiguation
+	// Clear other states
+	delete(cm.confirmationState, userID)
+	delete(cm.multiEmployeeDisambiguationState, userID)
+	delete(cm.projectTaskDisambiguationState, userID)
+}
+
+// GetPendingExistingEntityDisambiguation retrieves a pending existing entity disambiguation
+func (cm *ConfirmationManager) GetPendingExistingEntityDisambiguation(userID string) (*ExistingEntityDisambiguationConfirmation, bool) {
+	cm.confirmationMutex.RLock()
+	defer cm.confirmationMutex.RUnlock()
+	disambiguation, exists := cm.existingEntityDisambiguationState[userID]
+	return disambiguation, exists
+}
+
+// StorePendingProjectTaskDisambiguation stores a pending project task disambiguation
+func (cm *ConfirmationManager) StorePendingProjectTaskDisambiguation(userID string, disambiguation *ProjectTaskDisambiguationConfirmation) {
+	cm.confirmationMutex.Lock()
+	defer cm.confirmationMutex.Unlock()
+	cm.projectTaskDisambiguationState[userID] = disambiguation
+	// Clear other states
+	delete(cm.confirmationState, userID)
+	delete(cm.multiEmployeeDisambiguationState, userID)
+	delete(cm.existingEntityDisambiguationState, userID)
+}
+
+// GetPendingProjectTaskDisambiguation retrieves a pending project task disambiguation
+func (cm *ConfirmationManager) GetPendingProjectTaskDisambiguation(userID string) (*ProjectTaskDisambiguationConfirmation, bool) {
+	cm.confirmationMutex.RLock()
+	defer cm.confirmationMutex.RUnlock()
+	disambiguation, exists := cm.projectTaskDisambiguationState[userID]
 	return disambiguation, exists
 }
 
@@ -99,6 +143,215 @@ func (m *ProjectManagementModule) handleCreateProjectRequest(employeeID string, 
 		}, nil
 	}
 
+	// FIRST: Process assignees to resolve employees BEFORE checking existing projects
+	var resolvedEmployees []AssignedEmployee
+	if len(projectRequest.AssignedToNames) > 0 {
+		assigneeResult, err := m.resolveMultipleAssignees(projectRequest.AssignedToNames)
+		if err != nil {
+			m.api.LogError("Failed to resolve project assignees", "error", err.Error())
+		} else if assigneeResult.RequiresDisambiguation {
+			// Return disambiguation request
+			return m.requestMultiEmployeeDisambiguation(ctx, "create_project", "project", projectRequest, employeeID, assigneeResult)
+		} else {
+			resolvedEmployees = assigneeResult.ResolvedEmployees
+			projectRequest.AssignedToEmployees = resolvedEmployees
+		}
+	}
+
+	// SECOND: Check for existing projects with similar names
+	existingProjects, err := m.erpClient.SearchProjectsByName(projectRequest.ProjectName)
+	if err != nil {
+		m.api.LogError("Failed to search existing projects", "error", err.Error())
+		// Continue with creation even if search fails
+	} else if len(existingProjects) > 0 {
+		// Filter high confidence matches
+		var highConfidenceProjects []Project
+		for _, project := range existingProjects {
+			if project.MatchConfidence >= 0.85 {
+				highConfidenceProjects = append(highConfidenceProjects, project)
+			}
+		}
+
+		if len(highConfidenceProjects) > 0 {
+			// Store request for disambiguation WITH resolved employees
+			projectRequest.AssignedToEmployees = resolvedEmployees
+			return m.requestExistingEntityDisambiguation(ctx, "project", "create_project", projectRequest, employeeID, highConfidenceProjects, nil)
+		}
+	}
+
+	// No high confidence matches, proceed with normal flow
+	return m.handleProjectCreationFlow(employeeID, ctx, projectRequest)
+}
+
+// requestExistingEntityDisambiguation requests user to choose between creating new or using existing
+func (m *ProjectManagementModule) requestExistingEntityDisambiguation(
+	ctx *erp_modules.ModuleContext,
+	entityType, action string,
+	originalRequest interface{},
+	employeeID string,
+	existingProjects []Project,
+	existingTasks []Task,
+) (*erp_modules.ModuleResponse, error) {
+
+	// Convert original request to map
+	requestMap := make(map[string]interface{})
+	requestBytes, _ := json.Marshal(originalRequest)
+	json.Unmarshal(requestBytes, &requestMap)
+
+	// Get creator's email
+	creatorEmail, err := m.getEmployeeEmailFromUser(ctx.User)
+	if err != nil {
+		m.api.LogWarn("Failed to get creator email for entity disambiguation", "error", err.Error())
+		creatorEmail = "demo@example.com"
+	}
+
+	// Store pending disambiguation
+	disambiguation := &ExistingEntityDisambiguationConfirmation{
+		UserID:          ctx.User.Id,
+		Type:            entityType,
+		Action:          action,
+		OriginalRequest: requestMap,
+		CreatedAt:       time.Now().UnixMilli(),
+		EmployeeID:      employeeID,
+		CreatorEmail:    creatorEmail,
+		EntityType:      entityType,
+	}
+
+	if entityType == "project" {
+		var entities []interface{}
+		for _, p := range existingProjects {
+			entities = append(entities, p)
+		}
+		disambiguation.ExistingEntities = entities
+	} else {
+		var entities []interface{}
+		for _, t := range existingTasks {
+			entities = append(entities, t)
+		}
+		disambiguation.ExistingEntities = entities
+	}
+
+	m.confirmationManager.StorePendingExistingEntityDisambiguation(ctx.User.Id, disambiguation)
+
+	// Generate disambiguation message
+	disambiguationMsg, err := m.generateExistingEntityDisambiguationMessage(ctx, disambiguation)
+	if err != nil {
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Có lỗi xảy ra khi tạo tin nhắn lựa chọn."
+		if !isVietnamese {
+			errorMsg = "⚠️ An error occurred while creating selection message."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	return &erp_modules.ModuleResponse{
+		Success:     true,
+		Message:     disambiguationMsg,
+		ActionTaken: "request_existing_entity_disambiguation",
+		Data: map[string]interface{}{
+			"awaiting_disambiguation": true,
+			"type":                    "existing_entity",
+			"entity_type":             entityType,
+			"matches_count":           len(disambiguation.ExistingEntities),
+		},
+	}, nil
+}
+
+// handleTaskProjectSelection handles project selection for task creation
+func (m *ProjectManagementModule) handleTaskProjectSelection(employeeID string, ctx *erp_modules.ModuleContext, taskRequest *TaskCreationRequest) (*erp_modules.ModuleResponse, error) {
+	// Search for matching projects
+	matchingProjects, err := m.erpClient.SearchProjectsByName(taskRequest.Project)
+	if err != nil {
+		m.api.LogError("Failed to search projects for task", "error", err.Error())
+		// Continue with task creation without project
+		taskRequest.Project = ""
+		return m.handleTaskCreationFlow(employeeID, ctx, taskRequest)
+	}
+
+	// Filter high confidence matches
+	var highConfidenceProjects []Project
+	for _, project := range matchingProjects {
+		if project.MatchConfidence >= 0.85 {
+			highConfidenceProjects = append(highConfidenceProjects, project)
+		}
+	}
+
+	if len(highConfidenceProjects) == 0 {
+		// No matches, proceed without project
+		taskRequest.Project = ""
+		return m.handleTaskCreationFlow(employeeID, ctx, taskRequest)
+	}
+
+	if len(highConfidenceProjects) == 1 {
+		// Single match, use it
+		taskRequest.Project = highConfidenceProjects[0].Name
+		return m.handleTaskCreationFlow(employeeID, ctx, taskRequest)
+	}
+
+	// Multiple matches, need disambiguation
+	return m.requestProjectTaskDisambiguation(ctx, taskRequest, employeeID, highConfidenceProjects)
+}
+
+// requestProjectTaskDisambiguation requests user to select a project for task
+func (m *ProjectManagementModule) requestProjectTaskDisambiguation(
+	ctx *erp_modules.ModuleContext,
+	taskRequest *TaskCreationRequest,
+	employeeID string,
+	matchingProjects []Project,
+) (*erp_modules.ModuleResponse, error) {
+
+	// Get creator's email
+	creatorEmail, err := m.getEmployeeEmailFromUser(ctx.User)
+	if err != nil {
+		m.api.LogWarn("Failed to get creator email for project disambiguation", "error", err.Error())
+		creatorEmail = "demo@example.com"
+	}
+
+	// Store pending disambiguation
+	disambiguation := &ProjectTaskDisambiguationConfirmation{
+		UserID:              ctx.User.Id,
+		OriginalTaskRequest: taskRequest,
+		CreatedAt:           time.Now().UnixMilli(),
+		EmployeeID:          employeeID,
+		CreatorEmail:        creatorEmail,
+		MatchingProjects:    matchingProjects,
+	}
+
+	m.confirmationManager.StorePendingProjectTaskDisambiguation(ctx.User.Id, disambiguation)
+
+	// Generate disambiguation message
+	disambiguationMsg, err := m.generateProjectTaskDisambiguationMessage(ctx, disambiguation)
+	if err != nil {
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Có lỗi xảy ra khi tạo tin nhắn lựa chọn dự án."
+		if !isVietnamese {
+			errorMsg = "⚠️ An error occurred while creating project selection message."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	return &erp_modules.ModuleResponse{
+		Success:     true,
+		Message:     disambiguationMsg,
+		ActionTaken: "request_project_task_disambiguation",
+		Data: map[string]interface{}{
+			"awaiting_disambiguation": true,
+			"type":                    "project_selection",
+			"projects_count":          len(matchingProjects),
+		},
+	}, nil
+}
+
+// handleProjectCreationFlow handles the project creation flow (existing logic)
+func (m *ProjectManagementModule) handleProjectCreationFlow(employeeID string, ctx *erp_modules.ModuleContext, projectRequest *ProjectCreationRequest) (*erp_modules.ModuleResponse, error) {
 	// Process assignees if provided
 	if len(projectRequest.AssignedToNames) > 0 {
 		assigneeResult, err := m.resolveMultipleAssignees(projectRequest.AssignedToNames)
@@ -123,7 +376,32 @@ func (m *ProjectManagementModule) handleCreateProjectRequest(employeeID string, 
 	return m.requestConfirmation(ctx, "create_project", "project", projectRequest, employeeID, creatorEmail)
 }
 
-// handleCreateTaskRequest processes task creation request with multi-employee disambiguation support
+// handleTaskCreationFlow handles the task creation flow (existing logic)
+func (m *ProjectManagementModule) handleTaskCreationFlow(employeeID string, ctx *erp_modules.ModuleContext, taskRequest *TaskCreationRequest) (*erp_modules.ModuleResponse, error) {
+	// Process assignees if provided
+	if len(taskRequest.AssignedToNames) > 0 {
+		assigneeResult, err := m.resolveMultipleAssignees(taskRequest.AssignedToNames)
+		if err != nil {
+			m.api.LogError("Failed to resolve task assignees", "error", err.Error())
+		} else if assigneeResult.RequiresDisambiguation {
+			// Return disambiguation request
+			return m.requestMultiEmployeeDisambiguation(ctx, "create_task", "task", taskRequest, employeeID, assigneeResult)
+		} else {
+			taskRequest.AssignedToEmployees = assigneeResult.ResolvedEmployees
+		}
+	}
+
+	// Get creator's email for assignment
+	creatorEmail, err := m.getEmployeeEmailFromUser(ctx.User)
+	if err != nil {
+		m.api.LogWarn("Failed to get creator email", "error", err.Error())
+		creatorEmail = "demo@example.com"
+	}
+
+	// Request confirmation
+	return m.requestConfirmation(ctx, "create_task", "task", taskRequest, employeeID, creatorEmail)
+}
+
 func (m *ProjectManagementModule) handleCreateTaskRequest(employeeID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
 	isVietnamese := detectUserLanguage(ctx.User)
 
@@ -153,28 +431,49 @@ func (m *ProjectManagementModule) handleCreateTaskRequest(employeeID string, ctx
 		}, nil
 	}
 
-	// Process assignees if provided
+	// FIRST: Process assignees to resolve employees BEFORE checking existing tasks
+	var resolvedEmployees []AssignedEmployee
 	if len(taskRequest.AssignedToNames) > 0 {
 		assigneeResult, err := m.resolveMultipleAssignees(taskRequest.AssignedToNames)
 		if err != nil {
 			m.api.LogError("Failed to resolve task assignees", "error", err.Error())
 		} else if assigneeResult.RequiresDisambiguation {
-			// Return disambiguation request
+			// Return disambiguation request - but we need to save the task context too
 			return m.requestMultiEmployeeDisambiguation(ctx, "create_task", "task", taskRequest, employeeID, assigneeResult)
 		} else {
-			taskRequest.AssignedToEmployees = assigneeResult.ResolvedEmployees
+			resolvedEmployees = assigneeResult.ResolvedEmployees
+			taskRequest.AssignedToEmployees = resolvedEmployees
 		}
 	}
 
-	// Get creator's email for assignment
-	creatorEmail, err := m.getEmployeeEmailFromUser(ctx.User)
+	// SECOND: Check for existing tasks with similar names
+	existingTasks, err := m.erpClient.SearchTasksByName(taskRequest.Subject)
 	if err != nil {
-		m.api.LogWarn("Failed to get creator email", "error", err.Error())
-		creatorEmail = "demo@example.com"
+		m.api.LogError("Failed to search existing tasks", "error", err.Error())
+		// Continue even if search fails
+	} else if len(existingTasks) > 0 {
+		// Filter high confidence matches
+		var highConfidenceTasks []Task
+		for _, task := range existingTasks {
+			if task.MatchConfidence >= 0.85 {
+				highConfidenceTasks = append(highConfidenceTasks, task)
+			}
+		}
+
+		if len(highConfidenceTasks) > 0 {
+			// Store request for disambiguation WITH resolved employees
+			taskRequest.AssignedToEmployees = resolvedEmployees
+			return m.requestExistingEntityDisambiguation(ctx, "task", "create_task", taskRequest, employeeID, nil, highConfidenceTasks)
+		}
 	}
 
-	// Request confirmation
-	return m.requestConfirmation(ctx, "create_task", "task", taskRequest, employeeID, creatorEmail)
+	// No high confidence matches, proceed with project search if project mentioned
+	if taskRequest.Project != "" {
+		return m.handleTaskProjectSelection(employeeID, ctx, taskRequest)
+	}
+
+	// No existing matches and no project, proceed with normal flow
+	return m.handleTaskCreationFlow(employeeID, ctx, taskRequest)
 }
 
 // requestMultiEmployeeDisambiguation requests user to choose from multiple employees for multiple assignees

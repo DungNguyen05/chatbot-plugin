@@ -314,3 +314,241 @@ func (m *ProjectManagementModule) analyzeTaskCreation(ctx *erp_modules.ModuleCon
 
 	return &taskRequest, nil
 }
+
+// generateExistingEntityDisambiguationMessage generates message asking user to choose between creating new or using existing
+func (m *ProjectManagementModule) generateExistingEntityDisambiguationMessage(ctx *erp_modules.ModuleContext, disambiguation *ExistingEntityDisambiguationConfirmation) (string, error) {
+	isVietnamese := detectUserLanguage(ctx.User)
+
+	var message strings.Builder
+
+	if isVietnamese {
+		if disambiguation.EntityType == "project" {
+			message.WriteString("🔍 **Tìm thấy dự án tương tự:**\n\n")
+		} else {
+			message.WriteString("🔍 **Tìm thấy task tương tự:**\n\n")
+		}
+	} else {
+		if disambiguation.EntityType == "project" {
+			message.WriteString("🔍 **Found similar projects:**\n\n")
+		} else {
+			message.WriteString("🔍 **Found similar tasks:**\n\n")
+		}
+	}
+
+	// List existing entities
+	for i, entity := range disambiguation.ExistingEntities {
+		if disambiguation.EntityType == "project" {
+			if projectBytes, err := json.Marshal(entity); err == nil {
+				var project Project
+				if json.Unmarshal(projectBytes, &project) == nil {
+					message.WriteString(fmt.Sprintf("%d. **%s** (ID: %s, Status: %s)\n",
+						i+1, project.ProjectName, project.Name, project.Status))
+				}
+			}
+		} else {
+			if taskBytes, err := json.Marshal(entity); err == nil {
+				var task Task
+				if json.Unmarshal(taskBytes, &task) == nil {
+					message.WriteString(fmt.Sprintf("%d. **%s** (ID: %s, Status: %s)\n",
+						i+1, task.Subject, task.Name, task.Status))
+				}
+			}
+		}
+	}
+
+	message.WriteString("\n")
+
+	if isVietnamese {
+		if disambiguation.EntityType == "project" {
+			message.WriteString("Bạn muốn:\n")
+			message.WriteString("• **Tạo mới** - Tạo dự án mới\n")
+			message.WriteString("• **Chọn số** - Sử dụng dự án hiện có (ví dụ: '1')\n")
+			message.WriteString("• **Hủy** - Hủy bỏ yêu cầu\n\n")
+			message.WriteString("Vui lòng trả lời: 'tạo mới', số thứ tự, hoặc 'hủy'")
+		} else {
+			message.WriteString("Bạn muốn:\n")
+			message.WriteString("• **Tạo mới** - Tạo task mới\n")
+			message.WriteString("• **Chọn số** - Sử dụng task hiện có (ví dụ: '1')\n")
+			message.WriteString("• **Hủy** - Hủy bỏ yêu cầu\n\n")
+			message.WriteString("Vui lòng trả lời: 'tạo mới', số thứ tự, hoặc 'hủy'")
+		}
+	} else {
+		if disambiguation.EntityType == "project" {
+			message.WriteString("Do you want to:\n")
+			message.WriteString("• **Create new** - Create a new project\n")
+			message.WriteString("• **Select number** - Use existing project (example: '1')\n")
+			message.WriteString("• **Cancel** - Cancel the request\n\n")
+			message.WriteString("Please reply: 'create new', number, or 'cancel'")
+		} else {
+			message.WriteString("Do you want to:\n")
+			message.WriteString("• **Create new** - Create a new task\n")
+			message.WriteString("• **Select number** - Use existing task (example: '1')\n")
+			message.WriteString("• **Cancel** - Cancel the request\n\n")
+			message.WriteString("Please reply: 'create new', number, or 'cancel'")
+		}
+	}
+
+	return message.String(), nil
+}
+
+// generateProjectTaskDisambiguationMessage generates message asking user to select a project for task
+func (m *ProjectManagementModule) generateProjectTaskDisambiguationMessage(ctx *erp_modules.ModuleContext, disambiguation *ProjectTaskDisambiguationConfirmation) (string, error) {
+	isVietnamese := detectUserLanguage(ctx.User)
+
+	var message strings.Builder
+
+	if isVietnamese {
+		message.WriteString("🔍 **Tìm thấy nhiều dự án phù hợp:**\n\n")
+	} else {
+		message.WriteString("🔍 **Found multiple matching projects:**\n\n")
+	}
+
+	// List matching projects
+	for i, project := range disambiguation.MatchingProjects {
+		message.WriteString(fmt.Sprintf("%d. **%s** (ID: %s, Status: %s)\n",
+			i+1, project.ProjectName, project.Name, project.Status))
+	}
+
+	message.WriteString("\n")
+
+	if isVietnamese {
+		message.WriteString("Bạn muốn:\n")
+		message.WriteString("• **Chọn số** - Gán task vào dự án (ví dụ: '1')\n")
+		message.WriteString("• **Không** - Tạo task không thuộc dự án nào\n")
+		message.WriteString("• **Hủy** - Hủy bỏ yêu cầu\n\n")
+		message.WriteString("Vui lòng trả lời: số thứ tự, 'không', hoặc 'hủy'")
+	} else {
+		message.WriteString("Do you want to:\n")
+		message.WriteString("• **Select number** - Assign task to project (example: '1')\n")
+		message.WriteString("• **No project** - Create task without project\n")
+		message.WriteString("• **Cancel** - Cancel the request\n\n")
+		message.WriteString("Please reply: number, 'no project', or 'cancel'")
+	}
+
+	return message.String(), nil
+}
+
+// parseExistingEntityDisambiguationResponse parses user response to existing entity selection using LLM
+func (m *ProjectManagementModule) parseExistingEntityDisambiguationResponse(ctx *erp_modules.ModuleContext, message string, disambiguation *ExistingEntityDisambiguationConfirmation) (*ExistingEntityDisambiguationResponse, error) {
+	// Create LLM context
+	llmContext := &llm.Context{
+		RequestingUser: ctx.User,
+		Time:           time.Now().Format(time.RFC1123),
+	}
+
+	// Detect user language
+	isVietnamese := detectUserLanguage(ctx.User)
+
+	llmContext.Parameters = map[string]interface{}{
+		"UserMessage":  message,
+		"EntityType":   disambiguation.EntityType,
+		"EntityCount":  len(disambiguation.ExistingEntities),
+		"IsVietnamese": isVietnamese,
+	}
+
+	// Format the disambiguation analysis prompt
+	systemPrompt, err := m.prompts.Format("existing_entity_disambiguation_analysis", llmContext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to format existing entity disambiguation prompt: %w", err)
+	}
+
+	// Create completion request
+	completionRequest := llm.CompletionRequest{
+		Posts: []llm.Post{
+			{
+				Role:    llm.PostRoleSystem,
+				Message: systemPrompt,
+			},
+			{
+				Role:    llm.PostRoleUser,
+				Message: message,
+			},
+		},
+		Context: llmContext,
+	}
+
+	// Get LLM response
+	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(200))
+	if err != nil {
+		return nil, fmt.Errorf("failed to analyze existing entity disambiguation with LLM: %w", err)
+	}
+
+	// Parse JSON response
+	var disambiguationResponse ExistingEntityDisambiguationResponse
+	response = strings.TrimSpace(response)
+	start := strings.Index(response, "{")
+	end := strings.LastIndex(response, "}") + 1
+
+	if start == -1 || end <= start {
+		return nil, fmt.Errorf("no valid JSON found in LLM response: %s", response)
+	}
+
+	jsonStr := response[start:end]
+	if err := json.Unmarshal([]byte(jsonStr), &disambiguationResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse LLM existing entity disambiguation response as JSON: %w", err)
+	}
+
+	return &disambiguationResponse, nil
+}
+
+// parseProjectSelectionResponse parses user response to project selection using LLM
+func (m *ProjectManagementModule) parseProjectSelectionResponse(ctx *erp_modules.ModuleContext, message string, disambiguation *ProjectTaskDisambiguationConfirmation) (*ProjectSelectionResponse, error) {
+	// Create LLM context
+	llmContext := &llm.Context{
+		RequestingUser: ctx.User,
+		Time:           time.Now().Format(time.RFC1123),
+	}
+
+	// Detect user language
+	isVietnamese := detectUserLanguage(ctx.User)
+
+	llmContext.Parameters = map[string]interface{}{
+		"UserMessage":  message,
+		"ProjectCount": len(disambiguation.MatchingProjects),
+		"IsVietnamese": isVietnamese,
+	}
+
+	// Format the project selection analysis prompt
+	systemPrompt, err := m.prompts.Format("project_selection_analysis", llmContext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to format project selection analysis prompt: %w", err)
+	}
+
+	// Create completion request
+	completionRequest := llm.CompletionRequest{
+		Posts: []llm.Post{
+			{
+				Role:    llm.PostRoleSystem,
+				Message: systemPrompt,
+			},
+			{
+				Role:    llm.PostRoleUser,
+				Message: message,
+			},
+		},
+		Context: llmContext,
+	}
+
+	// Get LLM response
+	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(200))
+	if err != nil {
+		return nil, fmt.Errorf("failed to analyze project selection with LLM: %w", err)
+	}
+
+	// Parse JSON response
+	var selectionResponse ProjectSelectionResponse
+	response = strings.TrimSpace(response)
+	start := strings.Index(response, "{")
+	end := strings.LastIndex(response, "}") + 1
+
+	if start == -1 || end <= start {
+		return nil, fmt.Errorf("no valid JSON found in LLM response: %s", response)
+	}
+
+	jsonStr := response[start:end]
+	if err := json.Unmarshal([]byte(jsonStr), &selectionResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse LLM project selection response as JSON: %w", err)
+	}
+
+	return &selectionResponse, nil
+}

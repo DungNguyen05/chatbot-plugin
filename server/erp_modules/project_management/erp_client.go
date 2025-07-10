@@ -523,18 +523,134 @@ func (c *ERPClient) AssignTaskToEmployee(taskID, assignedBy, allocatedTo, priori
 	return nil
 }
 
-// validateConfig validates the ERP configuration
-func (c *ERPClient) validateConfig() error {
-	if c.config.ERPDomain == "" {
-		return fmt.Errorf("ERP domain not configured")
+// GetAllProjects fetches all projects from ERPNext
+func (c *ERPClient) GetAllProjects() ([]Project, error) {
+	c.api.LogDebug("Getting all projects from ERPNext for project management")
+
+	if err := c.validateConfig(); err != nil {
+		return nil, err
 	}
-	if c.config.ERPAPIKey == "" {
-		return fmt.Errorf("ERP API key not configured")
+
+	erpToken := c.config.ERPAPIKey + ":" + c.config.ERPAPISecret
+	baseURL := strings.TrimSuffix(c.config.ERPDomain, "/") + "/api/resource/Project"
+
+	reqURL, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
-	if c.config.ERPAPISecret == "" {
-		return fmt.Errorf("ERP API secret not configured")
+
+	query := reqURL.Query()
+	query.Add("fields", `["name","project_name","status","priority","description","customer","department"]`)
+	query.Add("filters", `[["status","in",["Open","Completed","Cancelled"]]]`) // Get all status projects
+	query.Add("limit_page_length", "1000")
+	reqURL.RawQuery = query.Encode()
+
+	c.api.LogDebug("Making request to ERPNext for all projects", "url", reqURL.String())
+
+	req, err := http.NewRequest("GET", reqURL.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	return nil
+
+	req.Header.Set("Authorization", "token "+erpToken)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	c.api.LogDebug("ERPNext API Response for all projects",
+		"status", resp.Status,
+		"response_length", len(respBody))
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ERP API error: %s - %s", resp.Status, string(respBody))
+	}
+
+	var apiResponse struct {
+		Data []Project `json:"data"`
+	}
+
+	if err := json.Unmarshal(respBody, &apiResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	c.api.LogDebug("Found projects for project management", "count", len(apiResponse.Data))
+
+	return apiResponse.Data, nil
+}
+
+// GetAllTasks fetches all tasks from ERPNext
+func (c *ERPClient) GetAllTasks() ([]Task, error) {
+	c.api.LogDebug("Getting all tasks from ERPNext for project management")
+
+	if err := c.validateConfig(); err != nil {
+		return nil, err
+	}
+
+	erpToken := c.config.ERPAPIKey + ":" + c.config.ERPAPISecret
+	baseURL := strings.TrimSuffix(c.config.ERPDomain, "/") + "/api/resource/Task"
+
+	reqURL, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse URL: %w", err)
+	}
+
+	query := reqURL.Query()
+	query.Add("fields", `["name","subject","status","priority","description","project","department"]`)
+	query.Add("filters", `[["status","in",["Open","Working","Pending Review","Completed","Cancelled"]]]`) // Get all status tasks
+	query.Add("limit_page_length", "1000")
+	reqURL.RawQuery = query.Encode()
+
+	c.api.LogDebug("Making request to ERPNext for all tasks", "url", reqURL.String())
+
+	req, err := http.NewRequest("GET", reqURL.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "token "+erpToken)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	c.api.LogDebug("ERPNext API Response for all tasks",
+		"status", resp.Status,
+		"response_length", len(respBody))
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ERP API error: %s - %s", resp.Status, string(respBody))
+	}
+
+	var apiResponse struct {
+		Data []Task `json:"data"`
+	}
+
+	if err := json.Unmarshal(respBody, &apiResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	c.api.LogDebug("Found tasks for project management", "count", len(apiResponse.Data))
+
+	return apiResponse.Data, nil
 }
 
 // sendToERPWithResponse sends data to ERP system and returns response

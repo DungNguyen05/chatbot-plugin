@@ -51,41 +51,43 @@ type Employee struct {
 
 // Project represents the data structure for ERPNext Project
 type Project struct {
-	Docstatus         int    `json:"docstatus"`
-	Doctype           string `json:"doctype"`
-	Name              string `json:"name"`
-	IsLocal           bool   `json:"__islocal"`
-	Unsaved           bool   `json:"__unsaved"`
-	Owner             string `json:"owner"`
-	ProjectName       string `json:"project_name"`
-	Status            string `json:"status"`
-	Priority          string `json:"priority,omitempty"`
-	ProjectType       string `json:"project_type,omitempty"`
-	Description       string `json:"description,omitempty"`
-	ExpectedStartDate string `json:"expected_start_date,omitempty"`
-	ExpectedEndDate   string `json:"expected_end_date,omitempty"`
-	Department        string `json:"department,omitempty"`
-	Customer          string `json:"customer,omitempty"`
-	Company           string `json:"company,omitempty"`
+	Docstatus         int     `json:"docstatus"`
+	Doctype           string  `json:"doctype"`
+	Name              string  `json:"name"`
+	IsLocal           bool    `json:"__islocal"`
+	Unsaved           bool    `json:"__unsaved"`
+	Owner             string  `json:"owner"`
+	ProjectName       string  `json:"project_name"`
+	Status            string  `json:"status"`
+	Priority          string  `json:"priority,omitempty"`
+	ProjectType       string  `json:"project_type,omitempty"`
+	Description       string  `json:"description,omitempty"`
+	ExpectedStartDate string  `json:"expected_start_date,omitempty"`
+	ExpectedEndDate   string  `json:"expected_end_date,omitempty"`
+	Department        string  `json:"department,omitempty"`
+	Customer          string  `json:"customer,omitempty"`
+	Company           string  `json:"company,omitempty"`
+	MatchConfidence   float64 `json:"match_confidence"` // NEW FIELD
 }
 
 // Task represents the data structure for ERPNext Task
 type Task struct {
-	Docstatus    int    `json:"docstatus"`
-	Doctype      string `json:"doctype"`
-	Name         string `json:"name"`
-	IsLocal      bool   `json:"__islocal"`
-	Unsaved      bool   `json:"__unsaved"`
-	Owner        string `json:"owner"`
-	Subject      string `json:"subject"`
-	Status       string `json:"status"`
-	Priority     string `json:"priority,omitempty"`
-	Project      string `json:"project,omitempty"`
-	Description  string `json:"description,omitempty"`
-	ExpStartDate string `json:"exp_start_date,omitempty"`
-	ExpEndDate   string `json:"exp_end_date,omitempty"`
-	Department   string `json:"department,omitempty"`
-	Company      string `json:"company,omitempty"`
+	Docstatus       int     `json:"docstatus"`
+	Doctype         string  `json:"doctype"`
+	Name            string  `json:"name"`
+	IsLocal         bool    `json:"__islocal"`
+	Unsaved         bool    `json:"__unsaved"`
+	Owner           string  `json:"owner"`
+	Subject         string  `json:"subject"`
+	Status          string  `json:"status"`
+	Priority        string  `json:"priority,omitempty"`
+	Project         string  `json:"project,omitempty"`
+	Description     string  `json:"description,omitempty"`
+	ExpStartDate    string  `json:"exp_start_date,omitempty"`
+	ExpEndDate      string  `json:"exp_end_date,omitempty"`
+	Department      string  `json:"department,omitempty"`
+	Company         string  `json:"company,omitempty"`
+	MatchConfidence float64 `json:"match_confidence"` // NEW FIELD
 }
 
 // ProjectCreationRequest represents parsed project creation intent with multi-employee support
@@ -200,4 +202,44 @@ type ToDoAssignment struct {
 	Description   string `json:"description"`    // Assignment description
 	Priority      string `json:"priority"`       // Priority level
 	Status        string `json:"status"`         // Usually "Open"
+}
+
+// ExistingEntityDisambiguationConfirmation represents pending existing entity selection
+type ExistingEntityDisambiguationConfirmation struct {
+	UserID                 string                                   `json:"user_id"`
+	Type                   string                                   `json:"type"`             // "project" or "task"
+	Action                 string                                   `json:"action"`           // "create_project", "create_task"
+	OriginalRequest        map[string]interface{}                   `json:"original_request"` // Original parsed request
+	CreatedAt              int64                                    `json:"created_at"`
+	EmployeeID             string                                   `json:"employee_id"`
+	CreatorEmail           string                                   `json:"creator_email"`
+	ExistingEntities       []interface{}                            `json:"existing_entities"`                 // []Project or []Task
+	EntityType             string                                   `json:"entity_type"`                       // "project" or "task"
+	ResolvedEmployees      []AssignedEmployee                       `json:"resolved_employees"`                // Already resolved employees
+	EmployeeDisambiguation *MultiEmployeeDisambiguationConfirmation `json:"employee_disambiguation,omitempty"` // If employee disambiguation needed
+}
+
+// ExistingEntityDisambiguationResponse represents parsed user response to existing entity selection
+type ExistingEntityDisambiguationResponse struct {
+	Intent        string `json:"intent"`         // "create_new", "use_existing", "cancel"
+	SelectedIndex int    `json:"selected_index"` // 1-based index for use_existing
+	Reasoning     string `json:"reasoning"`      // LLM reasoning
+}
+
+// ProjectTaskDisambiguationConfirmation handles project selection for task creation
+type ProjectTaskDisambiguationConfirmation struct {
+	UserID              string               `json:"user_id"`
+	OriginalTaskRequest *TaskCreationRequest `json:"original_task_request"`
+	CreatedAt           int64                `json:"created_at"`
+	EmployeeID          string               `json:"employee_id"`
+	CreatorEmail        string               `json:"creator_email"`
+	MatchingProjects    []Project            `json:"matching_projects"`
+	ResolvedEmployees   []AssignedEmployee   `json:"resolved_employees"`
+}
+
+// ProjectSelectionResponse represents parsed user response to project selection
+type ProjectSelectionResponse struct {
+	Intent        string `json:"intent"`         // "select_project", "no_project", "cancel"
+	SelectedIndex int    `json:"selected_index"` // 1-based index for select_project
+	Reasoning     string `json:"reasoning"`      // LLM reasoning
 }

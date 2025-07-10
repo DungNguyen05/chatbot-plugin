@@ -4,6 +4,7 @@
 package project_management
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -77,7 +78,21 @@ func (m *ProjectManagementModule) ProcessUserMessage(ctx *erp_modules.ModuleCont
 	// Sanitize user input
 	message = sanitizeUserInput(message)
 
-	// Check for pending multi-employee disambiguation first - THIS IS CRITICAL
+	// Check for pending existing entity disambiguation FIRST
+	existingEntityDisambiguation, hasExistingEntityDisambiguation := m.confirmationManager.GetPendingExistingEntityDisambiguation(ctx.User.Id)
+	if hasExistingEntityDisambiguation {
+		m.api.LogDebug("Found pending existing entity disambiguation", "user_id", ctx.User.Id)
+		return m.handleExistingEntityDisambiguationResponse(ctx, message, existingEntityDisambiguation)
+	}
+
+	// Check for pending project task disambiguation
+	projectTaskDisambiguation, hasProjectTaskDisambiguation := m.confirmationManager.GetPendingProjectTaskDisambiguation(ctx.User.Id)
+	if hasProjectTaskDisambiguation {
+		m.api.LogDebug("Found pending project task disambiguation", "user_id", ctx.User.Id)
+		return m.handleProjectTaskDisambiguationResponse(ctx, message, projectTaskDisambiguation)
+	}
+
+	// Check for pending multi-employee disambiguation
 	multiDisambiguation, hasMultiDisambiguation := m.confirmationManager.GetPendingMultiEmployeeDisambiguation(ctx.User.Id)
 	if hasMultiDisambiguation {
 		m.api.LogDebug("Found pending multi-employee disambiguation", "user_id", ctx.User.Id)
@@ -129,6 +144,457 @@ func (m *ProjectManagementModule) ProcessUserMessage(ctx *erp_modules.ModuleCont
 			Message: errorMsg,
 		}, nil
 	}
+}
+
+// handleExistingEntityDisambiguationResponse handles user response to existing entity selection
+func (m *ProjectManagementModule) handleExistingEntityDisambiguationResponse(ctx *erp_modules.ModuleContext, message string, disambiguation *ExistingEntityDisambiguationConfirmation) (*erp_modules.ModuleResponse, error) {
+	m.api.LogInfo("Handling existing entity disambiguation response",
+		"user_id", ctx.User.Id,
+		"message", message,
+		"entity_type", disambiguation.EntityType)
+
+	// Parse disambiguation response using LLM
+	disambiguationResponse, err := m.parseExistingEntityDisambiguationResponse(ctx, message, disambiguation)
+	if err != nil {
+		m.api.LogError("Failed to parse existing entity disambiguation response", "error", err.Error())
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Không thể hiểu lựa chọn của bạn. Vui lòng trả lời 'tạo mới', số thứ tự, hoặc 'hủy'."
+		if !isVietnamese {
+			errorMsg = "⚠️ Cannot understand your selection. Please reply 'create new', number, or 'cancel'."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+		}, nil
+	}
+
+	m.api.LogInfo("Parsed existing entity disambiguation response",
+		"intent", disambiguationResponse.Intent,
+		"selected_index", disambiguationResponse.SelectedIndex)
+
+	// Clear pending disambiguation
+	m.confirmationManager.ClearPendingConfirmation(ctx.User.Id)
+
+	switch disambiguationResponse.Intent {
+	case "create_new":
+		// User wants to create new, proceed with original flow
+		if disambiguation.Type == "project" {
+			var projectRequest ProjectCreationRequest
+			requestBytes, _ := json.Marshal(disambiguation.OriginalRequest)
+			json.Unmarshal(requestBytes, &projectRequest)
+			return m.handleProjectCreationFlow(disambiguation.EmployeeID, ctx, &projectRequest)
+		} else {
+			var taskRequest TaskCreationRequest
+			requestBytes, _ := json.Marshal(disambiguation.OriginalRequest)
+			json.Unmarshal(requestBytes, &taskRequest)
+
+			// Handle project selection if needed
+			if taskRequest.Project != "" {
+				return m.handleTaskProjectSelection(disambiguation.EmployeeID, ctx, &taskRequest)
+			}
+			return m.handleTaskCreationFlow(disambiguation.EmployeeID, ctx, &taskRequest)
+		}
+
+	case "use_existing":
+		// User wants to use existing entity for assignment only
+		return m.handleUseExistingEntity(ctx, disambiguation, disambiguationResponse.SelectedIndex)
+
+	case "cancel":
+		return m.handleCancelAction(ctx.User.Id)
+
+	default:
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Vui lòng trả lời 'tạo mới', số thứ tự, hoặc 'hủy'."
+		if !isVietnamese {
+			errorMsg = "⚠️ Please reply 'create new', number, or 'cancel'."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+		}, nil
+	}
+}
+
+// handleProjectTaskDisambiguationResponse handles user response to project selection for task
+func (m *ProjectManagementModule) handleProjectTaskDisambiguationResponse(ctx *erp_modules.ModuleContext, message string, disambiguation *ProjectTaskDisambiguationConfirmation) (*erp_modules.ModuleResponse, error) {
+	m.api.LogInfo("Handling project task disambiguation response",
+		"user_id", ctx.User.Id,
+		"message", message)
+
+	// Parse selection response using LLM
+	selectionResponse, err := m.parseProjectSelectionResponse(ctx, message, disambiguation)
+	if err != nil {
+		m.api.LogError("Failed to parse project selection response", "error", err.Error())
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Không thể hiểu lựa chọn của bạn. Vui lòng chọn số thứ tự, 'không', hoặc 'hủy'."
+		if !isVietnamese {
+			errorMsg = "⚠️ Cannot understand your selection. Please choose number, 'no project', or 'cancel'."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+		}, nil
+	}
+
+	m.api.LogInfo("Parsed project selection response",
+		"intent", selectionResponse.Intent,
+		"selected_index", selectionResponse.SelectedIndex)
+
+	// Clear pending disambiguation
+	m.confirmationManager.ClearPendingConfirmation(ctx.User.Id)
+
+	switch selectionResponse.Intent {
+	case "select_project":
+		// Validate index
+		if selectionResponse.SelectedIndex < 1 || selectionResponse.SelectedIndex > len(disambiguation.MatchingProjects) {
+			isVietnamese := detectUserLanguage(ctx.User)
+			errorMsg := "⚠️ Số thứ tự không hợp lệ."
+			if !isVietnamese {
+				errorMsg = "⚠️ Invalid selection number."
+			}
+			return &erp_modules.ModuleResponse{
+				Success: false,
+				Message: errorMsg,
+			}, nil
+		}
+
+		// Set selected project
+		selectedProject := disambiguation.MatchingProjects[selectionResponse.SelectedIndex-1]
+		disambiguation.OriginalTaskRequest.Project = selectedProject.Name
+
+		return m.handleTaskCreationFlow(disambiguation.EmployeeID, ctx, disambiguation.OriginalTaskRequest)
+
+	case "no_project":
+		// Clear project and proceed
+		disambiguation.OriginalTaskRequest.Project = ""
+		return m.handleTaskCreationFlow(disambiguation.EmployeeID, ctx, disambiguation.OriginalTaskRequest)
+
+	case "cancel":
+		return m.handleCancelAction(ctx.User.Id)
+
+	default:
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Vui lòng chọn số thứ tự, 'không', hoặc 'hủy'."
+		if !isVietnamese {
+			errorMsg = "⚠️ Please choose number, 'no project', or 'cancel'."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+		}, nil
+	}
+}
+
+// handleUseExistingEntity handles assignment to existing project/task
+func (m *ProjectManagementModule) handleUseExistingEntity(ctx *erp_modules.ModuleContext, disambiguation *ExistingEntityDisambiguationConfirmation, selectedIndex int) (*erp_modules.ModuleResponse, error) {
+	// Validate index
+	if selectedIndex < 1 || selectedIndex > len(disambiguation.ExistingEntities) {
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Số thứ tự không hợp lệ."
+		if !isVietnamese {
+			errorMsg = "⚠️ Invalid selection number."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+		}, nil
+	}
+
+	// Get selected entity
+	selectedEntity := disambiguation.ExistingEntities[selectedIndex-1]
+
+	// Extract assigned employees from original request - IMPROVED EXTRACTION
+	var assignedEmployees []AssignedEmployee
+
+	// Method 1: Try to get from assigned_to_employees field (already resolved)
+	if assignedToEmployees, ok := disambiguation.OriginalRequest["assigned_to_employees"]; ok {
+		if employees, ok := assignedToEmployees.([]interface{}); ok {
+			for _, emp := range employees {
+				if empBytes, err := json.Marshal(emp); err == nil {
+					var assignedEmp AssignedEmployee
+					if json.Unmarshal(empBytes, &assignedEmp) == nil {
+						assignedEmployees = append(assignedEmployees, assignedEmp)
+					}
+				}
+			}
+		}
+	}
+
+	// Method 2: If no resolved employees, try to resolve from assigned_to_names
+	if len(assignedEmployees) == 0 {
+		if assignedToNames, ok := disambiguation.OriginalRequest["assigned_to_names"]; ok {
+			if names, ok := assignedToNames.([]interface{}); ok {
+				var nameStrings []string
+				for _, name := range names {
+					if nameStr, ok := name.(string); ok {
+						nameStrings = append(nameStrings, nameStr)
+					}
+				}
+
+				if len(nameStrings) > 0 {
+					// Try to resolve the names now
+					assigneeResult, err := m.resolveMultipleAssignees(nameStrings)
+					if err != nil {
+						m.api.LogError("Failed to resolve employees for existing entity assignment", "error", err.Error())
+					} else if assigneeResult.RequiresDisambiguation {
+						// Handle employee disambiguation for existing entity
+						return m.handleEmployeeDisambiguationForExistingEntity(ctx, disambiguation, selectedIndex, assigneeResult)
+					} else {
+						assignedEmployees = assigneeResult.ResolvedEmployees
+					}
+				}
+			}
+		}
+	}
+
+	// Log what we found
+	m.api.LogInfo("Extracting employees for existing entity assignment",
+		"entity_type", disambiguation.EntityType,
+		"resolved_employees_count", len(assignedEmployees),
+		"original_request_keys", getMapKeys(disambiguation.OriginalRequest))
+
+	// Only proceed with assignment if there are employees to assign
+	if len(assignedEmployees) == 0 {
+		isVietnamese := detectUserLanguage(ctx.User)
+		var entityName string
+		if disambiguation.EntityType == "project" {
+			if projBytes, err := json.Marshal(selectedEntity); err == nil {
+				var project Project
+				if json.Unmarshal(projBytes, &project) == nil {
+					entityName = project.ProjectName
+				}
+			}
+		} else {
+			if taskBytes, err := json.Marshal(selectedEntity); err == nil {
+				var task Task
+				if json.Unmarshal(taskBytes, &task) == nil {
+					entityName = task.Subject
+				}
+			}
+		}
+
+		var successMsg string
+		if isVietnamese {
+			if disambiguation.EntityType == "project" {
+				successMsg = fmt.Sprintf("✅ Đã chọn dự án hiện có: **%s**. Tuy nhiên, không có nhân viên nào được chỉ định để phân công.", entityName)
+			} else {
+				successMsg = fmt.Sprintf("✅ Đã chọn task hiện có: **%s**. Tuy nhiên, không có nhân viên nào được chỉ định để phân công.", entityName)
+			}
+		} else {
+			if disambiguation.EntityType == "project" {
+				successMsg = fmt.Sprintf("✅ Selected existing project: **%s**. However, no employees were specified for assignment.", entityName)
+			} else {
+				successMsg = fmt.Sprintf("✅ Selected existing task: **%s**. However, no employees were specified for assignment.", entityName)
+			}
+		}
+
+		return &erp_modules.ModuleResponse{
+			Success:     true,
+			Message:     successMsg,
+			ActionTaken: "use_existing_without_assignment",
+			Data: map[string]interface{}{
+				"entity_type": disambiguation.EntityType,
+				"entity_name": entityName,
+			},
+		}, nil
+	}
+
+	// Perform assignments to existing entity
+	var entityID, entityName string
+	if disambiguation.EntityType == "project" {
+		if projBytes, err := json.Marshal(selectedEntity); err == nil {
+			var project Project
+			if json.Unmarshal(projBytes, &project) == nil {
+				entityID = project.Name
+				entityName = project.ProjectName
+			}
+		}
+	} else {
+		if taskBytes, err := json.Marshal(selectedEntity); err == nil {
+			var task Task
+			if json.Unmarshal(taskBytes, &task) == nil {
+				entityID = task.Name
+				entityName = task.Subject
+			}
+		}
+	}
+
+	// Assign to all employees
+	var assignmentErrors []string
+	priority := "Medium" // Default priority for assignments
+	if originalPriority, ok := disambiguation.OriginalRequest["priority"]; ok {
+		if priorityStr, ok := originalPriority.(string); ok && priorityStr != "" {
+			priority = priorityStr
+		}
+	}
+
+	for _, assignedEmployee := range assignedEmployees {
+		var err error
+		if disambiguation.EntityType == "project" {
+			err = m.erpClient.AssignProjectToEmployee(entityID, disambiguation.CreatorEmail, assignedEmployee.Email, priority)
+		} else {
+			err = m.erpClient.AssignTaskToEmployee(entityID, disambiguation.CreatorEmail, assignedEmployee.Email, priority)
+		}
+
+		if err != nil {
+			m.api.LogWarn("Assignment to existing entity failed",
+				"entity_type", disambiguation.EntityType,
+				"entity_id", entityID,
+				"assignee", assignedEmployee.EmployeeName,
+				"error", err.Error())
+			assignmentErrors = append(assignmentErrors, assignedEmployee.EmployeeName)
+		} else {
+			m.api.LogInfo("Assignment to existing entity successful",
+				"entity_type", disambiguation.EntityType,
+				"entity_id", entityID,
+				"assignee", assignedEmployee.EmployeeName)
+		}
+	}
+
+	isVietnamese := detectUserLanguage(ctx.User)
+
+	var successMsg string
+	assigneeNames := make([]string, len(assignedEmployees))
+	for i, emp := range assignedEmployees {
+		assigneeNames[i] = emp.EmployeeName
+	}
+	assigneesStr := strings.Join(assigneeNames, ", ")
+
+	if len(assignmentErrors) == 0 {
+		if isVietnamese {
+			if disambiguation.EntityType == "project" {
+				successMsg = fmt.Sprintf("✅ Đã phân công dự án hiện có **%s** cho **%s**!", entityName, assigneesStr)
+			} else {
+				successMsg = fmt.Sprintf("✅ Đã phân công task hiện có **%s** cho **%s**!", entityName, assigneesStr)
+			}
+		} else {
+			if disambiguation.EntityType == "project" {
+				successMsg = fmt.Sprintf("✅ Successfully assigned existing project **%s** to **%s**!", entityName, assigneesStr)
+			} else {
+				successMsg = fmt.Sprintf("✅ Successfully assigned existing task **%s** to **%s**!", entityName, assigneesStr)
+			}
+		}
+	} else {
+		if isVietnamese {
+			if disambiguation.EntityType == "project" {
+				successMsg = fmt.Sprintf("✅ Đã phân công dự án hiện có **%s**. Thành công: **%s**. Lỗi: **%s**.",
+					entityName, assigneesStr, strings.Join(assignmentErrors, ", "))
+			} else {
+				successMsg = fmt.Sprintf("✅ Đã phân công task hiện có **%s**. Thành công: **%s**. Lỗi: **%s**.",
+					entityName, assigneesStr, strings.Join(assignmentErrors, ", "))
+			}
+		} else {
+			if disambiguation.EntityType == "project" {
+				successMsg = fmt.Sprintf("✅ Assigned existing project **%s**. Successful: **%s**. Failed: **%s**.",
+					entityName, assigneesStr, strings.Join(assignmentErrors, ", "))
+			} else {
+				successMsg = fmt.Sprintf("✅ Assigned existing task **%s**. Successful: **%s**. Failed: **%s**.",
+					entityName, assigneesStr, strings.Join(assignmentErrors, ", "))
+			}
+		}
+	}
+
+	return &erp_modules.ModuleResponse{
+		Success:     true,
+		Message:     successMsg,
+		ActionTaken: "assign_existing_entity",
+		Data: map[string]interface{}{
+			"entity_type":        disambiguation.EntityType,
+			"entity_id":          entityID,
+			"entity_name":        entityName,
+			"assigned_employees": assignedEmployees,
+			"assignment_errors":  assignmentErrors,
+		},
+	}, nil
+}
+
+// handleEmployeeDisambiguationForExistingEntity handles employee disambiguation when assigning to existing entity
+func (m *ProjectManagementModule) handleEmployeeDisambiguationForExistingEntity(
+	ctx *erp_modules.ModuleContext,
+	existingEntityDisambiguation *ExistingEntityDisambiguationConfirmation,
+	selectedEntityIndex int,
+	assigneeResult *AssigneeResolutionResult,
+) (*erp_modules.ModuleResponse, error) {
+
+	// This is a complex case where we need to:
+	// 1. Store the existing entity selection
+	// 2. Handle employee disambiguation
+	// 3. Then assign to the selected existing entity
+
+	// For now, we'll do the employee disambiguation and then continue with assignment
+	// In a more complex implementation, you might want to store this state differently
+
+	return m.requestMultiEmployeeDisambiguationForExistingEntity(
+		ctx,
+		existingEntityDisambiguation,
+		selectedEntityIndex,
+		assigneeResult,
+	)
+}
+
+// requestMultiEmployeeDisambiguationForExistingEntity requests employee disambiguation for existing entity assignment
+func (m *ProjectManagementModule) requestMultiEmployeeDisambiguationForExistingEntity(
+	ctx *erp_modules.ModuleContext,
+	existingEntityDisambiguation *ExistingEntityDisambiguationConfirmation,
+	selectedEntityIndex int,
+	assigneeResult *AssigneeResolutionResult,
+) (*erp_modules.ModuleResponse, error) {
+
+	// Convert existing entity request data for employee disambiguation
+	multiEmployeeDisambiguation := &MultiEmployeeDisambiguationConfirmation{
+		UserID:                    ctx.User.Id,
+		Type:                      existingEntityDisambiguation.Type,
+		Action:                    "assign_existing_entity",
+		Data:                      existingEntityDisambiguation.OriginalRequest,
+		CreatedAt:                 time.Now().UnixMilli(),
+		EmployeeID:                existingEntityDisambiguation.EmployeeID,
+		CreatorEmail:              existingEntityDisambiguation.CreatorEmail,
+		UnresolvedEmployeeMatches: assigneeResult.UnresolvedEmployeeMatches,
+		ResolvedEmployees:         assigneeResult.ResolvedEmployees,
+		IsModification:            false,
+	}
+
+	// Store additional context about selected entity
+	multiEmployeeDisambiguation.Data["selected_entity_index"] = selectedEntityIndex
+	multiEmployeeDisambiguation.Data["existing_entities"] = existingEntityDisambiguation.ExistingEntities
+
+	m.confirmationManager.StorePendingMultiEmployeeDisambiguation(ctx.User.Id, multiEmployeeDisambiguation)
+
+	// Generate disambiguation message
+	disambiguationMsg, err := m.generateMultiEmployeeDisambiguationMessage(ctx, assigneeResult)
+	if err != nil {
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Có lỗi xảy ra khi tạo tin nhắn lựa chọn nhân viên."
+		if !isVietnamese {
+			errorMsg = "⚠️ An error occurred while creating employee selection message."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	return &erp_modules.ModuleResponse{
+		Success:     true,
+		Message:     disambiguationMsg,
+		ActionTaken: "request_employee_disambiguation_for_existing_entity",
+		Data: map[string]interface{}{
+			"awaiting_disambiguation": true,
+			"type":                    "employee_selection_for_existing",
+			"unresolved_count":        len(assigneeResult.UnresolvedEmployeeMatches),
+			"resolved_count":          len(assigneeResult.ResolvedEmployees),
+		},
+	}, nil
+}
+
+// getMapKeys returns the keys of a map for debugging
+func getMapKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 // handleMultiEmployeeDisambiguationResponse handles user response to multi-employee selection
@@ -263,23 +729,6 @@ func (m *ProjectManagementModule) handleMultiEmployeeDisambiguationResponse(ctx 
 			Message: errorMsg,
 		}, nil
 	}
-}
-
-// proceedWithConfirmationAfterMultiDisambiguation proceeds with confirmation after multi-employee selection
-func (m *ProjectManagementModule) proceedWithConfirmationAfterMultiDisambiguation(ctx *erp_modules.ModuleContext, disambiguation *MultiEmployeeDisambiguationConfirmation, allResolvedEmployees []AssignedEmployee) (*erp_modules.ModuleResponse, error) {
-	// Store regular confirmation with selected employees
-	confirmation := &ProjectManagementConfirmation{
-		UserID:       disambiguation.UserID,
-		Type:         disambiguation.Type,
-		Action:       disambiguation.Action,
-		Data:         disambiguation.Data,
-		CreatedAt:    time.Now().UnixMilli(),
-		EmployeeID:   disambiguation.EmployeeID,
-		CreatorEmail: disambiguation.CreatorEmail,
-	}
-
-	m.confirmationManager.StorePendingConfirmation(ctx.User.Id, confirmation)
-	return nil, nil // This will be handled by the confirmation flow
 }
 
 // Execute processes the project management intent

@@ -50,6 +50,188 @@ func (c *ERPClient) SearchEmployeesByName(searchName string) ([]Employee, error)
 	return matchedEmployees, nil
 }
 
+// SearchProjectsByName searches for projects by name using fuzzy matching
+func (c *ERPClient) SearchProjectsByName(searchName string) ([]Project, error) {
+	c.api.LogDebug("Searching projects by name", "search_name", searchName)
+
+	// Get all projects first
+	allProjects, err := c.GetAllProjects()
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter projects using fuzzy matching
+	var matchedProjects []Project
+	searchNameLower := strings.ToLower(searchName)
+
+	for _, project := range allProjects {
+		// Check project name for matches
+		projectNameLower := strings.ToLower(project.ProjectName)
+		projectIDLower := strings.ToLower(project.Name)
+
+		// Calculate confidence score
+		confidence := calculateProjectMatchConfidence(searchNameLower, projectNameLower, projectIDLower)
+
+		// Only include projects with confidence above threshold
+		if confidence >= 0.8 { // 80% confidence threshold
+			project.MatchConfidence = confidence
+			matchedProjects = append(matchedProjects, project)
+		}
+	}
+
+	// Sort by confidence (highest first)
+	sort.Slice(matchedProjects, func(i, j int) bool {
+		return matchedProjects[i].MatchConfidence > matchedProjects[j].MatchConfidence
+	})
+
+	c.api.LogDebug("Found matching projects", "count", len(matchedProjects), "search_name", searchName)
+
+	return matchedProjects, nil
+}
+
+// SearchTasksByName searches for tasks by name using fuzzy matching
+func (c *ERPClient) SearchTasksByName(searchName string) ([]Task, error) {
+	c.api.LogDebug("Searching tasks by name", "search_name", searchName)
+
+	// Get all tasks first
+	allTasks, err := c.GetAllTasks()
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter tasks using fuzzy matching
+	var matchedTasks []Task
+	searchNameLower := strings.ToLower(searchName)
+
+	for _, task := range allTasks {
+		// Check task subject for matches
+		taskSubjectLower := strings.ToLower(task.Subject)
+		taskIDLower := strings.ToLower(task.Name)
+
+		// Calculate confidence score
+		confidence := calculateTaskMatchConfidence(searchNameLower, taskSubjectLower, taskIDLower)
+
+		// Only include tasks with confidence above threshold
+		if confidence >= 0.8 { // 80% confidence threshold
+			task.MatchConfidence = confidence
+			matchedTasks = append(matchedTasks, task)
+		}
+	}
+
+	// Sort by confidence (highest first)
+	sort.Slice(matchedTasks, func(i, j int) bool {
+		return matchedTasks[i].MatchConfidence > matchedTasks[j].MatchConfidence
+	})
+
+	c.api.LogDebug("Found matching tasks", "count", len(matchedTasks), "search_name", searchName)
+
+	return matchedTasks, nil
+}
+
+// calculateProjectMatchConfidence calculates project name matching confidence
+func calculateProjectMatchConfidence(searchName, projectName, projectID string) float64 {
+	var maxConfidence float64
+
+	// Exact match
+	if searchName == projectName {
+		return 1.0
+	}
+
+	// Check if search name is contained in project name
+	if strings.Contains(projectName, searchName) {
+		maxConfidence = math.Max(maxConfidence, 0.9)
+	}
+
+	// Check if project name is contained in search name
+	if strings.Contains(searchName, projectName) {
+		maxConfidence = math.Max(maxConfidence, 0.85)
+	}
+
+	// Check individual words
+	searchWords := strings.Fields(searchName)
+	projectWords := strings.Fields(projectName)
+
+	var matchCount float64
+	for _, searchWord := range searchWords {
+		for _, projWord := range projectWords {
+			if strings.Contains(projWord, searchWord) || strings.Contains(searchWord, projWord) {
+				matchCount++
+				break
+			}
+		}
+	}
+
+	if len(searchWords) > 0 {
+		wordMatchConfidence := matchCount / float64(len(searchWords)) * 0.8
+		maxConfidence = math.Max(maxConfidence, wordMatchConfidence)
+	}
+
+	// Check project ID match
+	if strings.Contains(projectID, searchName) {
+		maxConfidence = math.Max(maxConfidence, 0.95)
+	}
+
+	// Fuzzy string matching using Levenshtein distance
+	if len(searchName) > 2 && len(projectName) > 2 {
+		fuzzyConfidence := calculateFuzzyMatch(searchName, projectName)
+		maxConfidence = math.Max(maxConfidence, fuzzyConfidence)
+	}
+
+	return maxConfidence
+}
+
+// calculateTaskMatchConfidence calculates task name matching confidence
+func calculateTaskMatchConfidence(searchName, taskSubject, taskID string) float64 {
+	var maxConfidence float64
+
+	// Exact match
+	if searchName == taskSubject {
+		return 1.0
+	}
+
+	// Check if search name is contained in task subject
+	if strings.Contains(taskSubject, searchName) {
+		maxConfidence = math.Max(maxConfidence, 0.9)
+	}
+
+	// Check if task subject is contained in search name
+	if strings.Contains(searchName, taskSubject) {
+		maxConfidence = math.Max(maxConfidence, 0.85)
+	}
+
+	// Check individual words
+	searchWords := strings.Fields(searchName)
+	taskWords := strings.Fields(taskSubject)
+
+	var matchCount float64
+	for _, searchWord := range searchWords {
+		for _, taskWord := range taskWords {
+			if strings.Contains(taskWord, searchWord) || strings.Contains(searchWord, taskWord) {
+				matchCount++
+				break
+			}
+		}
+	}
+
+	if len(searchWords) > 0 {
+		wordMatchConfidence := matchCount / float64(len(searchWords)) * 0.8
+		maxConfidence = math.Max(maxConfidence, wordMatchConfidence)
+	}
+
+	// Check task ID match
+	if strings.Contains(taskID, searchName) {
+		maxConfidence = math.Max(maxConfidence, 0.95)
+	}
+
+	// Fuzzy string matching using Levenshtein distance
+	if len(searchName) > 2 && len(taskSubject) > 2 {
+		fuzzyConfidence := calculateFuzzyMatch(searchName, taskSubject)
+		maxConfidence = math.Max(maxConfidence, fuzzyConfidence)
+	}
+
+	return maxConfidence
+}
+
 // removeDuplicateEmployees removes duplicate employees from the list
 func removeDuplicateEmployees(employees []Employee) []Employee {
 	seen := make(map[string]bool)

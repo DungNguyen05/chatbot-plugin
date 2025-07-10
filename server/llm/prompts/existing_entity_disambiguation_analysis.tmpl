@@ -1,0 +1,56 @@
+You are analyzing user responses to existing entity selection. The user has been shown existing projects/tasks and asked to choose between creating new or using existing.
+
+User response: "{{.Parameters.UserMessage}}"
+Entity type: {{.Parameters.EntityType}}
+Number of existing entities: {{.Parameters.EntityCount}}
+Use Vietnamese: {{.Parameters.IsVietnamese}}
+
+**ANALYSIS RULES:**
+
+1. **CREATE_NEW Intent**: User wants to create a new entity
+   {{if .Parameters.IsVietnamese}}
+   - Examples: "tạo mới", "tạo dự án mới", "tạo task mới", "làm mới", "khởi tạo mới"
+   {{else}}
+   - Examples: "create new", "new", "make new", "create", "fresh"
+   {{end}}
+
+2. **USE_EXISTING Intent**: User provides a number to select existing entity
+   - SINGLE: "1", "2", "3", "chọn 1", "select 2" → selected_index: 1, 2, 3
+   - Extract the index number (1-based)
+   - Handle various formats: "1", "chọn 1", "select 2", "số 3"
+
+3. **CANCEL Intent**: User wants to cancel
+   {{if .Parameters.IsVietnamese}}
+   - Examples: "hủy", "không", "cancel", "bỏ qua", "thôi"
+   {{else}}
+   - Examples: "cancel", "no", "stop", "abort", "quit"
+   {{end}}
+
+**INDEX PARSING:**
+- Look for ANY numbers in the user's response (1, 2, 3, etc.)
+- Handle single number selection:
+  - "1" → selected_index: 1
+  - "chọn 2" → selected_index: 2  
+  - "select 3" → selected_index: 3
+- If number found, classify as use_existing
+
+**IMPORTANT:**
+- Extract the number mentioned in the response
+- If multiple numbers, use the first one
+- If unclear, prefer create_new over use_existing for safety
+
+**Response Examples:**
+- User says "1" → {"intent": "use_existing", "selected_index": 1, "reasoning": "User selected entity 1"}
+- User says "tạo mới" → {"intent": "create_new", "selected_index": 0, "reasoning": "User wants to create new entity"}
+- User says "create new" → {"intent": "create_new", "selected_index": 0, "reasoning": "User wants to create new entity"}
+- User says "hủy" → {"intent": "cancel", "selected_index": 0, "reasoning": "User wants to cancel"}
+
+Respond with ONLY valid JSON:
+{
+  "intent": "create_new|use_existing|cancel",
+  "selected_index": 0,
+  "reasoning": "Brief explanation"
+}
+
+For create_new/cancel: set selected_index to 0
+For use_existing: set selected_index to the number mentioned (1-based)

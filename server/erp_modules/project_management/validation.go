@@ -87,6 +87,20 @@ func validateChatID(chatID string) error {
 	return nil
 }
 
+// validateConfig validates the ERP configuration
+func (c *ERPClient) validateConfig() error {
+	if c.config.ERPDomain == "" {
+		return fmt.Errorf("ERP domain not configured")
+	}
+	if c.config.ERPAPIKey == "" {
+		return fmt.Errorf("ERP API key not configured")
+	}
+	if c.config.ERPAPISecret == "" {
+		return fmt.Errorf("ERP API secret not configured")
+	}
+	return nil
+}
+
 // validateProjectName validates project name
 func validateProjectName(name string) error {
 	name = strings.TrimSpace(name)
