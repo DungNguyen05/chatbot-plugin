@@ -1,5 +1,5 @@
-// Copyright (c) 2023-present Mattermost, Inc. All Rights Reserved.
-// See LICENSE.txt for license information.
+// Enhanced workflow engine that can handle complex multi-component requests
+// This replaces the existing workflow_engine.go
 
 package project_management
 
@@ -10,79 +10,127 @@ import (
 	"time"
 
 	"github.com/mattermost/mattermost-plugin-ai/server/erp_modules"
+	"github.com/mattermost/mattermost-plugin-ai/server/llm"
 )
 
-// WorkflowStepType represents different types of workflow steps
-type WorkflowStepType string
+// ComponentType represents different types of components that need resolution
+type ComponentType string
 
 const (
-	StepTypeEmployeeDisambiguation  WorkflowStepType = "employee_disambiguation"
-	StepTypeProjectSelection        WorkflowStepType = "project_selection"
-	StepTypeExistingEntitySelection WorkflowStepType = "existing_entity_selection"
-	StepTypeConfirmation            WorkflowStepType = "confirmation"
+	ComponentTypeTask     ComponentType = "task"
+	ComponentTypeEmployee ComponentType = "employee"
+	ComponentTypeProject  ComponentType = "project"
 )
 
-// WorkflowStep represents a single step in the workflow
-type WorkflowStep struct {
-	Type         WorkflowStepType       `json:"type"`
-	ID           string                 `json:"id"`
-	Title        string                 `json:"title"`
-	Required     bool                   `json:"required"`
-	Completed    bool                   `json:"completed"`
-	Data         map[string]interface{} `json:"data"`
-	Dependencies []string               `json:"dependencies"` // IDs of steps that must complete first
+// ComponentStatus represents the resolution status of a component
+type ComponentStatus string
+
+const (
+	StatusPending   ComponentStatus = "pending"
+	StatusResolving ComponentStatus = "resolving"
+	StatusResolved  ComponentStatus = "resolved"
+	StatusSkipped   ComponentStatus = "skipped"
+)
+
+// ComponentAnalysis represents the analysis of what needs to be clarified
+type ComponentAnalysis struct {
+	TaskComponent     *TaskComponentInfo     `json:"task_component,omitempty"`
+	EmployeeComponent *EmployeeComponentInfo `json:"employee_component,omitempty"`
+	ProjectComponent  *ProjectComponentInfo  `json:"project_component,omitempty"`
 }
 
-// WorkflowState represents the complete state of a workflow
-type WorkflowState struct {
-	UserID           string                 `json:"user_id"`
-	WorkflowType     string                 `json:"workflow_type"` // "create_project", "create_task"
-	EntityType       string                 `json:"entity_type"`   // "project", "task"
-	OriginalRequest  map[string]interface{} `json:"original_request"`
-	Steps            []WorkflowStep         `json:"steps"`
-	CurrentStepIndex int                    `json:"current_step_index"`
-	CreatedAt        int64                  `json:"created_at"`
-	LastModified     int64                  `json:"last_modified"`
-	EmployeeID       string                 `json:"employee_id"`
-	CreatorEmail     string                 `json:"creator_email"`
-	CompletedData    map[string]interface{} `json:"completed_data"` // Final resolved data
+// TaskComponentInfo holds information about task resolution needs
+type TaskComponentInfo struct {
+	Status              ComponentStatus        `json:"status"`
+	Action              string                 `json:"action"`         // "create_new", "use_existing", "needs_clarification"
+	Name                string                 `json:"name,omitempty"` // extracted task name
+	ExistingTasks       []Task                 `json:"existing_tasks,omitempty"`
+	NeedsDisambiguation bool                   `json:"needs_disambiguation"`
+	ResolutionData      map[string]interface{} `json:"resolution_data,omitempty"`
 }
 
-// WorkflowEngine manages the entire workflow process
-type WorkflowEngine struct {
+// EmployeeComponentInfo holds information about employee resolution needs
+type EmployeeComponentInfo struct {
+	Status              ComponentStatus           `json:"status"`
+	Action              string                    `json:"action"` // "assign_to_existing", "needs_clarification"
+	Names               []string                  `json:"names,omitempty"`
+	ResolvedEmployees   []AssignedEmployee        `json:"resolved_employees,omitempty"`
+	UnresolvedMatches   []UnresolvedEmployeeMatch `json:"unresolved_matches,omitempty"`
+	NeedsDisambiguation bool                      `json:"needs_disambiguation"`
+	ResolutionData      map[string]interface{}    `json:"resolution_data,omitempty"`
+}
+
+// ProjectComponentInfo holds information about project resolution needs
+type ProjectComponentInfo struct {
+	Status              ComponentStatus        `json:"status"`
+	Action              string                 `json:"action"`         // "assign_to_existing", "no_project", "needs_clarification"
+	Name                string                 `json:"name,omitempty"` // extracted project name
+	MatchingProjects    []Project              `json:"matching_projects,omitempty"`
+	SelectedProject     string                 `json:"selected_project,omitempty"`
+	NeedsDisambiguation bool                   `json:"needs_disambiguation"`
+	ResolutionData      map[string]interface{} `json:"resolution_data,omitempty"`
+}
+
+// EnhancedWorkflowState represents the complete state with component analysis
+type EnhancedWorkflowState struct {
+	UserID            string                 `json:"user_id"`
+	WorkflowType      string                 `json:"workflow_type"` // "create_project", "create_task"
+	EntityType        string                 `json:"entity_type"`   // "project", "task"
+	OriginalRequest   map[string]interface{} `json:"original_request"`
+	ComponentAnalysis *ComponentAnalysis     `json:"component_analysis"`
+	CurrentComponent  ComponentType          `json:"current_component,omitempty"`
+	CreatedAt         int64                  `json:"created_at"`
+	LastModified      int64                  `json:"last_modified"`
+	EmployeeID        string                 `json:"employee_id"`
+	CreatorEmail      string                 `json:"creator_email"`
+	CompletedData     map[string]interface{} `json:"completed_data"`
+	Phase             WorkflowPhase          `json:"phase"` // New field to track phase
+}
+
+// WorkflowPhase represents the current phase of the workflow
+type WorkflowPhase string
+
+const (
+	PhaseAnalysis     WorkflowPhase = "analysis"     // Analyzing components
+	PhaseResolution   WorkflowPhase = "resolution"   // Resolving components
+	PhaseConfirmation WorkflowPhase = "confirmation" // Final confirmation
+	PhaseExecution    WorkflowPhase = "execution"    // Creating entities
+)
+
+// EnhancedWorkflowEngine manages the enhanced workflow process
+type EnhancedWorkflowEngine struct {
 	module          *ProjectManagementModule
-	activeWorkflows map[string]*WorkflowState
+	activeWorkflows map[string]*EnhancedWorkflowState
 }
 
-// NewWorkflowEngine creates a new workflow engine
-func NewWorkflowEngine(module *ProjectManagementModule) *WorkflowEngine {
-	return &WorkflowEngine{
+// NewEnhancedWorkflowEngine creates a new enhanced workflow engine
+func NewEnhancedWorkflowEngine(module *ProjectManagementModule) *EnhancedWorkflowEngine {
+	return &EnhancedWorkflowEngine{
 		module:          module,
-		activeWorkflows: make(map[string]*WorkflowState),
+		activeWorkflows: make(map[string]*EnhancedWorkflowState),
 	}
 }
 
-// StartWorkflow starts a new workflow for project/task creation
-func (we *WorkflowEngine) StartWorkflow(
+// StartWorkflow starts a new enhanced workflow
+func (we *EnhancedWorkflowEngine) StartWorkflow(
 	ctx *erp_modules.ModuleContext,
 	workflowType, entityType string,
 	originalRequest map[string]interface{},
 	employeeID, creatorEmail string,
 ) (*erp_modules.ModuleResponse, error) {
 
-	// Create workflow state
-	workflow := &WorkflowState{
-		UserID:           ctx.User.Id,
-		WorkflowType:     workflowType,
-		EntityType:       entityType,
-		OriginalRequest:  originalRequest,
-		Steps:            []WorkflowStep{},
-		CurrentStepIndex: 0,
-		CreatedAt:        time.Now().UnixMilli(),
-		LastModified:     time.Now().UnixMilli(),
-		EmployeeID:       employeeID,
-		CreatorEmail:     creatorEmail,
-		CompletedData:    make(map[string]interface{}),
+	// Create enhanced workflow state
+	workflow := &EnhancedWorkflowState{
+		UserID:          ctx.User.Id,
+		WorkflowType:    workflowType,
+		EntityType:      entityType,
+		OriginalRequest: originalRequest,
+		CreatedAt:       time.Now().UnixMilli(),
+		LastModified:    time.Now().UnixMilli(),
+		EmployeeID:      employeeID,
+		CreatorEmail:    creatorEmail,
+		CompletedData:   make(map[string]interface{}),
+		Phase:           PhaseAnalysis,
 	}
 
 	// Copy original request to completed data
@@ -90,370 +138,138 @@ func (we *WorkflowEngine) StartWorkflow(
 		workflow.CompletedData[k] = v
 	}
 
-	// Analyze and build workflow steps
-	if err := we.buildWorkflowSteps(workflow); err != nil {
-		return nil, fmt.Errorf("failed to build workflow steps: %w", err)
-	}
-
 	// Store workflow
 	we.activeWorkflows[ctx.User.Id] = workflow
 
-	// Execute first step
-	return we.executeCurrentStep(ctx, workflow)
+	// Start with comprehensive analysis
+	return we.performComprehensiveAnalysis(ctx, workflow)
 }
 
-// ProcessWorkflowMessage processes user messages in an active workflow
-func (we *WorkflowEngine) ProcessWorkflowMessage(
+// performComprehensiveAnalysis analyzes all components that need resolution
+func (we *EnhancedWorkflowEngine) performComprehensiveAnalysis(
 	ctx *erp_modules.ModuleContext,
-	message string,
+	workflow *EnhancedWorkflowState,
 ) (*erp_modules.ModuleResponse, error) {
 
-	workflow, exists := we.activeWorkflows[ctx.User.Id]
-	if !exists {
-		return nil, nil // No active workflow
+	workflow.Phase = PhaseAnalysis
+
+	// Create component analysis
+	analysis := &ComponentAnalysis{}
+
+	// Analyze task component (for existing task checks)
+	if err := we.analyzeTaskComponent(workflow, analysis); err != nil {
+		we.module.api.LogError("Failed to analyze task component", "error", err.Error())
 	}
 
-	// Handle special commands
-	if we.handleSpecialCommands(ctx, workflow, message) {
-		return we.executeCurrentStep(ctx, workflow)
+	// Analyze employee component (for assignments)
+	if err := we.analyzeEmployeeComponent(workflow, analysis); err != nil {
+		we.module.api.LogError("Failed to analyze employee component", "error", err.Error())
 	}
 
-	// Check if this is a modification request
-	if modificationResponse := we.handleModification(ctx, workflow, message); modificationResponse != nil {
-		return modificationResponse, nil
+	// Analyze project component (for project assignment)
+	if err := we.analyzeProjectComponent(workflow, analysis); err != nil {
+		we.module.api.LogError("Failed to analyze project component", "error", err.Error())
 	}
 
-	// Process current step
-	return we.processCurrentStep(ctx, workflow, message)
+	workflow.ComponentAnalysis = analysis
+	workflow.LastModified = time.Now().UnixMilli()
+
+	// Determine what needs resolution first
+	return we.proceedWithResolution(ctx, workflow)
 }
 
-// handleSpecialCommands handles special workflow commands
-func (we *WorkflowEngine) handleSpecialCommands(
-	ctx *erp_modules.ModuleContext,
-	workflow *WorkflowState,
-	message string,
-) bool {
-	messageLower := strings.ToLower(strings.TrimSpace(message))
+// analyzeTaskComponent analyzes if task needs clarification
+func (we *EnhancedWorkflowEngine) analyzeTaskComponent(
+	workflow *EnhancedWorkflowState,
+	analysis *ComponentAnalysis,
+) error {
 
-	switch messageLower {
-	case "cancel", "hủy", "stop", "dừng":
-		we.cancelWorkflow(ctx.User.Id)
-		return true
-	case "restart", "bắt đầu lại", "làm lại":
-		workflow.CurrentStepIndex = 0
-		we.resetIncompleteSteps(workflow)
-		return true
-	case "skip", "bỏ qua", "next":
-		if we.canSkipCurrentStep(workflow) {
-			we.markCurrentStepCompleted(workflow)
-			we.moveToNextStep(workflow)
-			return true
+	var taskName string
+	if workflow.EntityType == "task" {
+		if subject, ok := workflow.CompletedData["subject"].(string); ok && subject != "" {
+			taskName = subject
+		}
+	} else if workflow.EntityType == "project" {
+		if projectName, ok := workflow.CompletedData["project_name"].(string); ok && projectName != "" {
+			taskName = projectName
 		}
 	}
 
-	return false
-}
-
-// handleModification handles modification requests during workflow
-func (we *WorkflowEngine) handleModification(
-	ctx *erp_modules.ModuleContext,
-	workflow *WorkflowState,
-	message string,
-) *erp_modules.ModuleResponse {
-
-	// Parse modification using LLM
-	modifications, err := we.parseModificationRequest(ctx, workflow, message)
-	if err != nil || len(modifications) == 0 {
-		return nil // Not a modification request
+	if taskName == "" {
+		return nil // No task component to analyze
 	}
 
-	// Apply modifications to completed data
-	for key, value := range modifications {
-		workflow.CompletedData[key] = value
+	taskInfo := &TaskComponentInfo{
+		Status: StatusPending,
+		Name:   taskName,
 	}
 
-	// Rebuild workflow steps based on new data
-	if err := we.buildWorkflowSteps(workflow); err != nil {
-		we.module.api.LogError("Failed to rebuild workflow steps", "error", err.Error())
-		return nil
+	// Search for existing tasks/projects
+	if workflow.EntityType == "task" {
+		tasks, err := we.module.erpClient.SearchTasksByName(taskName)
+		if err == nil {
+			var highConfidenceTasks []Task
+			for _, task := range tasks {
+				if task.MatchConfidence >= 0.85 {
+					highConfidenceTasks = append(highConfidenceTasks, task)
+				}
+			}
+			if len(highConfidenceTasks) > 0 {
+				taskInfo.ExistingTasks = highConfidenceTasks
+				taskInfo.NeedsDisambiguation = true
+				taskInfo.Action = "needs_clarification"
+			} else {
+				taskInfo.Action = "create_new"
+			}
+		} else {
+			taskInfo.Action = "create_new"
+		}
+	} else {
+		// For projects, similar logic
+		projects, err := we.module.erpClient.SearchProjectsByName(taskName)
+		if err == nil {
+			var highConfidenceProjects []Project
+			for _, project := range projects {
+				if project.MatchConfidence >= 0.85 {
+					highConfidenceProjects = append(highConfidenceProjects, project)
+				}
+			}
+			if len(highConfidenceProjects) > 0 {
+				// Convert to Task format for consistent handling
+				for _, project := range highConfidenceProjects {
+					task := Task{
+						Name:            project.Name,
+						Subject:         project.ProjectName,
+						Status:          project.Status,
+						Priority:        project.Priority,
+						Department:      project.Department,
+						MatchConfidence: project.MatchConfidence,
+					}
+					taskInfo.ExistingTasks = append(taskInfo.ExistingTasks, task)
+				}
+				taskInfo.NeedsDisambiguation = true
+				taskInfo.Action = "needs_clarification"
+			} else {
+				taskInfo.Action = "create_new"
+			}
+		} else {
+			taskInfo.Action = "create_new"
+		}
 	}
 
-	// Find first incomplete step
-	workflow.CurrentStepIndex = we.findFirstIncompleteStep(workflow)
-	workflow.LastModified = time.Now().UnixMilli()
-
-	// Execute current step
-	response, err := we.executeCurrentStep(ctx, workflow)
-	if err != nil {
-		we.module.api.LogError("Failed to execute step after modification", "error", err.Error())
-		return nil
-	}
-
-	return response
-}
-
-// buildWorkflowSteps dynamically builds workflow steps based on current data
-func (we *WorkflowEngine) buildWorkflowSteps(workflow *WorkflowState) error {
-	workflow.Steps = []WorkflowStep{}
-
-	// Step 1: Check for existing entities (projects/tasks with similar names)
-	if we.needsExistingEntityCheck(workflow) {
-		workflow.Steps = append(workflow.Steps, WorkflowStep{
-			Type:      StepTypeExistingEntitySelection,
-			ID:        "existing_entity_check",
-			Title:     "Check Existing Entities",
-			Required:  true,
-			Completed: false,
-			Data:      map[string]interface{}{},
-		})
-	}
-
-	// Step 2: Employee disambiguation (if needed)
-	if we.needsEmployeeDisambiguation(workflow) {
-		workflow.Steps = append(workflow.Steps, WorkflowStep{
-			Type:      StepTypeEmployeeDisambiguation,
-			ID:        "employee_disambiguation",
-			Title:     "Select Employees",
-			Required:  true,
-			Completed: false,
-			Data:      map[string]interface{}{},
-		})
-	}
-
-	// Step 3: Project selection for tasks (if needed)
-	if we.needsProjectSelection(workflow) {
-		workflow.Steps = append(workflow.Steps, WorkflowStep{
-			Type:         StepTypeProjectSelection,
-			ID:           "project_selection",
-			Title:        "Select Project",
-			Required:     false,
-			Completed:    false,
-			Data:         map[string]interface{}{},
-			Dependencies: []string{"employee_disambiguation"}, // After employees are resolved
-		})
-	}
-
-	// Step 4: Final confirmation
-	workflow.Steps = append(workflow.Steps, WorkflowStep{
-		Type:         StepTypeConfirmation,
-		ID:           "final_confirmation",
-		Title:        "Confirm Creation",
-		Required:     true,
-		Completed:    false,
-		Data:         map[string]interface{}{},
-		Dependencies: we.getAllPreviousStepIDs(workflow),
-	})
-
+	analysis.TaskComponent = taskInfo
 	return nil
 }
 
-// needsExistingEntityCheck checks if we need to check for existing entities
-func (we *WorkflowEngine) needsExistingEntityCheck(workflow *WorkflowState) bool {
-	// Check if we already completed this step
-	for _, step := range workflow.Steps {
-		if step.ID == "existing_entity_check" && step.Completed {
-			return false
-		}
-	}
-
-	// Check if we have a name to search for
-	if workflow.EntityType == "project" {
-		if projectName, ok := workflow.CompletedData["project_name"].(string); ok && projectName != "" {
-			return true
-		}
-	} else if workflow.EntityType == "task" {
-		if subject, ok := workflow.CompletedData["subject"].(string); ok && subject != "" {
-			return true
-		}
-	}
-
-	return false
-}
-
-// needsEmployeeDisambiguation checks if employee disambiguation is needed
-func (we *WorkflowEngine) needsEmployeeDisambiguation(workflow *WorkflowState) bool {
-	// Check if we already completed this step
-	for _, step := range workflow.Steps {
-		if step.ID == "employee_disambiguation" && step.Completed {
-			return false
-		}
-	}
-
-	// Check if we have unresolved employee names
-	if assigneeNames, ok := workflow.CompletedData["assigned_to_names"].([]interface{}); ok && len(assigneeNames) > 0 {
-		// Check if we already have resolved employees
-		if assigneeEmployees, ok := workflow.CompletedData["assigned_to_employees"].([]interface{}); ok && len(assigneeEmployees) > 0 {
-			return false // Already resolved
-		}
-		return true
-	}
-
-	return false
-}
-
-// needsProjectSelection checks if project selection is needed for tasks
-func (we *WorkflowEngine) needsProjectSelection(workflow *WorkflowState) bool {
-	// Only for tasks
-	if workflow.EntityType != "task" {
-		return false
-	}
-
-	// Check if we already completed this step
-	for _, step := range workflow.Steps {
-		if step.ID == "project_selection" && step.Completed {
-			return false
-		}
-	}
-
-	// Check if we have a project mentioned but not resolved
-	if project, ok := workflow.CompletedData["project"].(string); ok && project != "" {
-		// Check if it's already a resolved project ID
-		projects, err := we.module.erpClient.SearchProjectsByName(project)
-		if err == nil && len(projects) > 1 {
-			return true // Multiple matches, need selection
-		}
-	}
-
-	return false
-}
-
-// executeCurrentStep executes the current workflow step
-func (we *WorkflowEngine) executeCurrentStep(
-	ctx *erp_modules.ModuleContext,
-	workflow *WorkflowState,
-) (*erp_modules.ModuleResponse, error) {
-
-	if workflow.CurrentStepIndex >= len(workflow.Steps) {
-		// All steps completed, execute final action
-		return we.executeFinalAction(ctx, workflow)
-	}
-
-	currentStep := &workflow.Steps[workflow.CurrentStepIndex]
-
-	// Check dependencies
-	if !we.areDependenciesMet(workflow, currentStep) {
-		// Find next step with met dependencies
-		workflow.CurrentStepIndex = we.findNextAvailableStep(workflow)
-		if workflow.CurrentStepIndex >= len(workflow.Steps) {
-			return we.executeFinalAction(ctx, workflow)
-		}
-		currentStep = &workflow.Steps[workflow.CurrentStepIndex]
-	}
-
-	// Execute step based on type
-	switch currentStep.Type {
-	case StepTypeExistingEntitySelection:
-		return we.executeExistingEntityStep(ctx, workflow, currentStep)
-	case StepTypeEmployeeDisambiguation:
-		return we.executeEmployeeDisambiguationStep(ctx, workflow, currentStep)
-	case StepTypeProjectSelection:
-		return we.executeProjectSelectionStep(ctx, workflow, currentStep)
-	case StepTypeConfirmation:
-		return we.executeConfirmationStep(ctx, workflow, currentStep)
-	}
-
-	return nil, fmt.Errorf("unknown step type: %s", currentStep.Type)
-}
-
-// executeExistingEntityStep executes existing entity selection step
-func (we *WorkflowEngine) executeExistingEntityStep(
-	ctx *erp_modules.ModuleContext,
-	workflow *WorkflowState,
-	step *WorkflowStep,
-) (*erp_modules.ModuleResponse, error) {
-
-	var existingEntities []interface{}
-	var entityName string
-
-	if workflow.EntityType == "project" {
-		entityName = workflow.CompletedData["project_name"].(string)
-		projects, err := we.module.erpClient.SearchProjectsByName(entityName)
-		if err != nil {
-			we.module.api.LogError("Failed to search projects", "error", err.Error())
-			// Continue without checking
-			we.markStepCompleted(workflow, step)
-			return we.moveToNextStepAndExecute(ctx, workflow)
-		}
-
-		var highConfidenceProjects []Project
-		for _, project := range projects {
-			if project.MatchConfidence >= 0.85 {
-				highConfidenceProjects = append(highConfidenceProjects, project)
-			}
-		}
-
-		if len(highConfidenceProjects) == 0 {
-			// No existing entities found
-			we.markStepCompleted(workflow, step)
-			return we.moveToNextStepAndExecute(ctx, workflow)
-		}
-
-		for _, p := range highConfidenceProjects {
-			existingEntities = append(existingEntities, p)
-		}
-	} else {
-		entityName = workflow.CompletedData["subject"].(string)
-		tasks, err := we.module.erpClient.SearchTasksByName(entityName)
-		if err != nil {
-			we.module.api.LogError("Failed to search tasks", "error", err.Error())
-			// Continue without checking
-			we.markStepCompleted(workflow, step)
-			return we.moveToNextStepAndExecute(ctx, workflow)
-		}
-
-		var highConfidenceTasks []Task
-		for _, task := range tasks {
-			if task.MatchConfidence >= 0.85 {
-				highConfidenceTasks = append(highConfidenceTasks, task)
-			}
-		}
-
-		if len(highConfidenceTasks) == 0 {
-			// No existing entities found
-			we.markStepCompleted(workflow, step)
-			return we.moveToNextStepAndExecute(ctx, workflow)
-		}
-
-		for _, t := range highConfidenceTasks {
-			existingEntities = append(existingEntities, t)
-		}
-	}
-
-	// Store existing entities in step data
-	step.Data["existing_entities"] = existingEntities
-	step.Data["entity_name"] = entityName
-
-	// Generate disambiguation message
-	message, err := we.module.generateExistingEntityDisambiguationMessage(ctx, workflow.EntityType, existingEntities)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate existing entity message: %w", err)
-	}
-
-	return &erp_modules.ModuleResponse{
-		Success:     true,
-		Message:     message,
-		ActionTaken: "workflow_existing_entity_disambiguation",
-		Data: map[string]interface{}{
-			"workflow_active": true,
-			"step_type":       string(step.Type),
-			"step_id":         step.ID,
-			"entity_count":    len(existingEntities),
-		},
-	}, nil
-}
-
-// executeEmployeeDisambiguationStep executes employee disambiguation step
-func (we *WorkflowEngine) executeEmployeeDisambiguationStep(
-	ctx *erp_modules.ModuleContext,
-	workflow *WorkflowState,
-	step *WorkflowStep,
-) (*erp_modules.ModuleResponse, error) {
+// analyzeEmployeeComponent analyzes employee assignment needs
+func (we *EnhancedWorkflowEngine) analyzeEmployeeComponent(
+	workflow *EnhancedWorkflowState,
+	analysis *ComponentAnalysis,
+) error {
 
 	assigneeNames, ok := workflow.CompletedData["assigned_to_names"].([]interface{})
 	if !ok || len(assigneeNames) == 0 {
-		// No employees to resolve
-		we.markStepCompleted(workflow, step)
-		return we.moveToNextStepAndExecute(ctx, workflow)
+		return nil // No employee assignment
 	}
 
 	// Convert to string slice
@@ -464,182 +280,309 @@ func (we *WorkflowEngine) executeEmployeeDisambiguationStep(
 		}
 	}
 
+	if len(nameStrings) == 0 {
+		return nil
+	}
+
+	employeeInfo := &EmployeeComponentInfo{
+		Status: StatusPending,
+		Names:  nameStrings,
+		Action: "assign_to_existing",
+	}
+
 	// Resolve employees
 	assigneeResult, err := we.module.resolveMultipleAssignees(nameStrings)
 	if err != nil {
-		we.module.api.LogError("Failed to resolve employees", "error", err.Error())
-		// Continue without assignment
-		workflow.CompletedData["assigned_to_employees"] = []AssignedEmployee{}
-		we.markStepCompleted(workflow, step)
-		return we.moveToNextStepAndExecute(ctx, workflow)
+		employeeInfo.Action = "needs_clarification"
+		employeeInfo.NeedsDisambiguation = true
+	} else {
+		if assigneeResult.RequiresDisambiguation {
+			employeeInfo.UnresolvedMatches = assigneeResult.UnresolvedEmployeeMatches
+			employeeInfo.ResolvedEmployees = assigneeResult.ResolvedEmployees
+			employeeInfo.NeedsDisambiguation = true
+			employeeInfo.Action = "needs_clarification"
+		} else {
+			employeeInfo.ResolvedEmployees = assigneeResult.ResolvedEmployees
+			employeeInfo.Status = StatusResolved
+		}
 	}
 
-	if !assigneeResult.RequiresDisambiguation {
-		// All employees resolved
-		workflow.CompletedData["assigned_to_employees"] = assigneeResult.ResolvedEmployees
-		we.markStepCompleted(workflow, step)
-		return we.moveToNextStepAndExecute(ctx, workflow)
-	}
-
-	// Store disambiguation data in step
-	step.Data["unresolved_matches"] = assigneeResult.UnresolvedEmployeeMatches
-	step.Data["resolved_employees"] = assigneeResult.ResolvedEmployees
-
-	// Generate disambiguation message
-	message, err := we.module.generateMultiEmployeeDisambiguationMessage(ctx, assigneeResult)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate employee disambiguation message: %w", err)
-	}
-
-	return &erp_modules.ModuleResponse{
-		Success:     true,
-		Message:     message,
-		ActionTaken: "workflow_employee_disambiguation",
-		Data: map[string]interface{}{
-			"workflow_active":  true,
-			"step_type":        string(step.Type),
-			"step_id":          step.ID,
-			"unresolved_count": len(assigneeResult.UnresolvedEmployeeMatches),
-			"resolved_count":   len(assigneeResult.ResolvedEmployees),
-		},
-	}, nil
+	analysis.EmployeeComponent = employeeInfo
+	return nil
 }
 
-// executeProjectSelectionStep executes project selection step
-func (we *WorkflowEngine) executeProjectSelectionStep(
-	ctx *erp_modules.ModuleContext,
-	workflow *WorkflowState,
-	step *WorkflowStep,
-) (*erp_modules.ModuleResponse, error) {
+// analyzeProjectComponent analyzes project assignment needs (for tasks)
+func (we *EnhancedWorkflowEngine) analyzeProjectComponent(
+	workflow *EnhancedWorkflowState,
+	analysis *ComponentAnalysis,
+) error {
+
+	// Only for tasks
+	if workflow.EntityType != "task" {
+		return nil
+	}
 
 	projectName, ok := workflow.CompletedData["project"].(string)
 	if !ok || projectName == "" {
-		// No project specified
-		we.markStepCompleted(workflow, step)
-		return we.moveToNextStepAndExecute(ctx, workflow)
+		return nil // No project assignment
+	}
+
+	projectInfo := &ProjectComponentInfo{
+		Status: StatusPending,
+		Name:   projectName,
 	}
 
 	// Search for matching projects
 	projects, err := we.module.erpClient.SearchProjectsByName(projectName)
 	if err != nil {
-		we.module.api.LogError("Failed to search projects", "error", err.Error())
-		// Continue without project
-		workflow.CompletedData["project"] = ""
-		we.markStepCompleted(workflow, step)
-		return we.moveToNextStepAndExecute(ctx, workflow)
-	}
+		projectInfo.Action = "no_project"
+	} else {
+		var highConfidenceProjects []Project
+		for _, project := range projects {
+			if project.MatchConfidence >= 0.85 {
+				highConfidenceProjects = append(highConfidenceProjects, project)
+			}
+		}
 
-	// Filter high confidence matches
-	var highConfidenceProjects []Project
-	for _, project := range projects {
-		if project.MatchConfidence >= 0.85 {
-			highConfidenceProjects = append(highConfidenceProjects, project)
+		if len(highConfidenceProjects) == 0 {
+			projectInfo.Action = "no_project"
+		} else if len(highConfidenceProjects) == 1 {
+			projectInfo.SelectedProject = highConfidenceProjects[0].Name
+			projectInfo.Status = StatusResolved
+			projectInfo.Action = "assign_to_existing"
+		} else {
+			projectInfo.MatchingProjects = highConfidenceProjects
+			projectInfo.NeedsDisambiguation = true
+			projectInfo.Action = "needs_clarification"
 		}
 	}
 
-	if len(highConfidenceProjects) == 0 {
-		// No matches, proceed without project
-		workflow.CompletedData["project"] = ""
-		we.markStepCompleted(workflow, step)
-		return we.moveToNextStepAndExecute(ctx, workflow)
+	analysis.ProjectComponent = projectInfo
+	return nil
+}
+
+// proceedWithResolution determines next step and proceeds
+func (we *EnhancedWorkflowEngine) proceedWithResolution(
+	ctx *erp_modules.ModuleContext,
+	workflow *EnhancedWorkflowState,
+) (*erp_modules.ModuleResponse, error) {
+
+	workflow.Phase = PhaseResolution
+
+	// Find first component that needs disambiguation
+	if workflow.ComponentAnalysis.TaskComponent != nil && workflow.ComponentAnalysis.TaskComponent.NeedsDisambiguation {
+		workflow.CurrentComponent = ComponentTypeTask
+		return we.handleTaskDisambiguation(ctx, workflow)
 	}
 
-	if len(highConfidenceProjects) == 1 {
-		// Single match, use it
-		workflow.CompletedData["project"] = highConfidenceProjects[0].Name
-		we.markStepCompleted(workflow, step)
-		return we.moveToNextStepAndExecute(ctx, workflow)
+	if workflow.ComponentAnalysis.EmployeeComponent != nil && workflow.ComponentAnalysis.EmployeeComponent.NeedsDisambiguation {
+		workflow.CurrentComponent = ComponentTypeEmployee
+		return we.handleEmployeeDisambiguation(ctx, workflow)
 	}
 
-	// Multiple matches, need selection
-	step.Data["matching_projects"] = highConfidenceProjects
+	if workflow.ComponentAnalysis.ProjectComponent != nil && workflow.ComponentAnalysis.ProjectComponent.NeedsDisambiguation {
+		workflow.CurrentComponent = ComponentTypeProject
+		return we.handleProjectDisambiguation(ctx, workflow)
+	}
 
-	// Generate selection message
-	message, err := we.module.generateProjectTaskDisambiguationMessage(ctx, highConfidenceProjects)
+	// All components resolved, proceed to confirmation
+	return we.proceedToConfirmation(ctx, workflow)
+}
+
+// ProcessWorkflowMessage processes user messages in active workflow
+func (we *EnhancedWorkflowEngine) ProcessWorkflowMessage(
+	ctx *erp_modules.ModuleContext,
+	message string,
+) (*erp_modules.ModuleResponse, error) {
+
+	workflow, exists := we.activeWorkflows[ctx.User.Id]
+	if !exists {
+		return nil, nil
+	}
+
+	// Handle special commands
+	if we.handleSpecialCommands(ctx, workflow, message) {
+		return we.proceedWithResolution(ctx, workflow)
+	}
+
+	// Check if this is a comprehensive modification request
+	if workflow.Phase == PhaseConfirmation {
+		if modificationResponse := we.handleComprehensiveModification(ctx, workflow, message); modificationResponse != nil {
+			return modificationResponse, nil
+		}
+	}
+
+	// Handle current component resolution
+	switch workflow.CurrentComponent {
+	case ComponentTypeTask:
+		return we.processTaskDisambiguationResponse(ctx, workflow, message)
+	case ComponentTypeEmployee:
+		return we.processEmployeeDisambiguationResponse(ctx, workflow, message)
+	case ComponentTypeProject:
+		return we.processProjectDisambiguationResponse(ctx, workflow, message)
+	default:
+		// In confirmation phase
+		return we.processConfirmationResponse(ctx, workflow, message)
+	}
+}
+
+// handleComprehensiveModification handles complex modification requests
+func (we *EnhancedWorkflowEngine) handleComprehensiveModification(
+	ctx *erp_modules.ModuleContext,
+	workflow *EnhancedWorkflowState,
+	message string,
+) *erp_modules.ModuleResponse {
+
+	// Parse comprehensive modification using enhanced LLM prompt
+	modifications, err := we.parseComprehensiveModification(ctx, workflow, message)
+	if err != nil || len(modifications) == 0 {
+		return nil // Not a modification request
+	}
+
+	// Apply all modifications to completed data
+	for key, value := range modifications {
+		workflow.CompletedData[key] = value
+	}
+
+	// Re-run comprehensive analysis with new data
+	response, err := we.performComprehensiveAnalysis(ctx, workflow)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate project selection message: %w", err)
+		we.module.api.LogError("Failed to re-analyze after modification", "error", err.Error())
+		return nil
+	}
+
+	return response
+}
+
+// parseComprehensiveModification parses complex modification requests
+func (we *EnhancedWorkflowEngine) parseComprehensiveModification(
+	ctx *erp_modules.ModuleContext,
+	workflow *EnhancedWorkflowState,
+	message string,
+) (map[string]interface{}, error) {
+
+	// Create enhanced LLM context for comprehensive modification analysis
+	llmContext := &llm.Context{
+		RequestingUser: ctx.User,
+		Time:           time.Now().Format(time.RFC1123),
+	}
+
+	isVietnamese := detectUserLanguage(ctx.User)
+
+	llmContext.Parameters = map[string]interface{}{
+		"UserMessage":  message,
+		"CurrentData":  workflow.CompletedData,
+		"EntityType":   workflow.EntityType,
+		"IsVietnamese": isVietnamese,
+		"WorkflowType": workflow.WorkflowType,
+	}
+
+	// Use enhanced prompt for comprehensive modification analysis
+	systemPrompt, err := we.module.prompts.Format("comprehensive_modification_analysis", llmContext)
+	if err != nil {
+		// Fallback to existing modification analysis
+		response, fallbackErr := we.module.parseConfirmationResponse(ctx, message, workflow.CompletedData)
+		if fallbackErr != nil {
+			return nil, fallbackErr
+		}
+		if response.Intent == "modify" {
+			return response.Modifications, nil
+		}
+		return nil, nil
+	}
+
+	// Create completion request
+	completionRequest := llm.CompletionRequest{
+		Posts: []llm.Post{
+			{
+				Role:    llm.PostRoleSystem,
+				Message: systemPrompt,
+			},
+			{
+				Role:    llm.PostRoleUser,
+				Message: message,
+			},
+		},
+		Context: llmContext,
+	}
+
+	// Get LLM response
+	response, err := we.module.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(400))
+	if err != nil {
+		return nil, fmt.Errorf("failed to analyze comprehensive modification with LLM: %w", err)
+	}
+
+	// Parse JSON response
+	var modificationResponse ConfirmationResponse
+	response = strings.TrimSpace(response)
+	start := strings.Index(response, "{")
+	end := strings.LastIndex(response, "}") + 1
+
+	if start == -1 || end <= start {
+		return nil, fmt.Errorf("no valid JSON found in LLM response: %s", response)
+	}
+
+	jsonStr := response[start:end]
+	if err := json.Unmarshal([]byte(jsonStr), &modificationResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse LLM comprehensive modification response as JSON: %w", err)
+	}
+
+	if modificationResponse.Intent == "modify" {
+		return modificationResponse.Modifications, nil
+	}
+
+	return nil, nil
+}
+
+// handleTaskDisambiguation handles task disambiguation
+func (we *EnhancedWorkflowEngine) handleTaskDisambiguation(
+	ctx *erp_modules.ModuleContext,
+	workflow *EnhancedWorkflowState,
+) (*erp_modules.ModuleResponse, error) {
+
+	taskInfo := workflow.ComponentAnalysis.TaskComponent
+	if taskInfo == nil || !taskInfo.NeedsDisambiguation {
+		return we.proceedToNextComponent(ctx, workflow)
+	}
+
+	// Convert Task to interface{} for generateExistingEntityDisambiguationMessage
+	var existingEntities []interface{}
+	for _, task := range taskInfo.ExistingTasks {
+		existingEntities = append(existingEntities, task)
+	}
+
+	// Generate disambiguation message
+	message, err := we.module.generateExistingEntityDisambiguationMessage(ctx, workflow.EntityType, existingEntities)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate task disambiguation message: %w", err)
 	}
 
 	return &erp_modules.ModuleResponse{
 		Success:     true,
 		Message:     message,
-		ActionTaken: "workflow_project_selection",
+		ActionTaken: "workflow_task_disambiguation",
 		Data: map[string]interface{}{
 			"workflow_active": true,
-			"step_type":       string(step.Type),
-			"step_id":         step.ID,
-			"project_count":   len(highConfidenceProjects),
+			"component_type":  string(ComponentTypeTask),
+			"entity_count":    len(existingEntities),
 		},
 	}, nil
 }
 
-// executeConfirmationStep executes final confirmation step
-func (we *WorkflowEngine) executeConfirmationStep(
+// processTaskDisambiguationResponse processes task disambiguation response
+func (we *EnhancedWorkflowEngine) processTaskDisambiguationResponse(
 	ctx *erp_modules.ModuleContext,
-	workflow *WorkflowState,
-	step *WorkflowStep,
-) (*erp_modules.ModuleResponse, error) {
-
-	// Generate confirmation message
-	message, err := we.module.generateConfirmationMessage(ctx, workflow.EntityType, workflow.CompletedData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate confirmation message: %w", err)
-	}
-
-	return &erp_modules.ModuleResponse{
-		Success:     true,
-		Message:     message,
-		ActionTaken: "workflow_confirmation",
-		Data: map[string]interface{}{
-			"workflow_active": true,
-			"step_type":       string(step.Type),
-			"step_id":         step.ID,
-		},
-	}, nil
-}
-
-// processCurrentStep processes user response for current step
-func (we *WorkflowEngine) processCurrentStep(
-	ctx *erp_modules.ModuleContext,
-	workflow *WorkflowState,
+	workflow *EnhancedWorkflowState,
 	message string,
 ) (*erp_modules.ModuleResponse, error) {
 
-	if workflow.CurrentStepIndex >= len(workflow.Steps) {
-		return we.executeFinalAction(ctx, workflow)
+	taskInfo := workflow.ComponentAnalysis.TaskComponent
+	if taskInfo == nil {
+		return nil, fmt.Errorf("missing task component info")
 	}
 
-	currentStep := &workflow.Steps[workflow.CurrentStepIndex]
-
-	switch currentStep.Type {
-	case StepTypeExistingEntitySelection:
-		return we.processExistingEntityResponse(ctx, workflow, currentStep, message)
-	case StepTypeEmployeeDisambiguation:
-		return we.processEmployeeDisambiguationResponse(ctx, workflow, currentStep, message)
-	case StepTypeProjectSelection:
-		return we.processProjectSelectionResponse(ctx, workflow, currentStep, message)
-	case StepTypeConfirmation:
-		return we.processConfirmationResponse(ctx, workflow, currentStep, message)
-	}
-
-	return nil, fmt.Errorf("unknown step type: %s", currentStep.Type)
-}
-
-// processExistingEntityResponse processes user response to existing entity selection
-func (we *WorkflowEngine) processExistingEntityResponse(
-	ctx *erp_modules.ModuleContext,
-	workflow *WorkflowState,
-	step *WorkflowStep,
-	message string,
-) (*erp_modules.ModuleResponse, error) {
-
-	entities, ok := step.Data["existing_entities"].([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("missing existing entities data")
-	}
-
-	// Parse response using LLM
-	response, err := we.module.parseExistingEntityDisambiguationResponse(ctx, message, workflow.EntityType, len(entities))
+	// Parse response
+	response, err := we.module.parseExistingEntityDisambiguationResponse(ctx, message, workflow.EntityType, len(taskInfo.ExistingTasks))
 	if err != nil {
 		isVietnamese := detectUserLanguage(ctx.User)
 		errorMsg := "⚠️ Không thể hiểu lựa chọn của bạn. Vui lòng trả lời 'tạo mới', số thứ tự, hoặc 'hủy'."
@@ -654,13 +597,12 @@ func (we *WorkflowEngine) processExistingEntityResponse(
 
 	switch response.Intent {
 	case "create_new":
-		// Continue with new creation
-		we.markStepCompleted(workflow, step)
-		return we.moveToNextStepAndExecute(ctx, workflow)
+		taskInfo.Status = StatusResolved
+		taskInfo.Action = "create_new"
+		return we.proceedToNextComponent(ctx, workflow)
 
 	case "use_existing":
-		// Use existing entity for assignment
-		if response.SelectedIndex < 1 || response.SelectedIndex > len(entities) {
+		if response.SelectedIndex < 1 || response.SelectedIndex > len(taskInfo.ExistingTasks) {
 			isVietnamese := detectUserLanguage(ctx.User)
 			errorMsg := "⚠️ Số thứ tự không hợp lệ."
 			if !isVietnamese {
@@ -672,9 +614,16 @@ func (we *WorkflowEngine) processExistingEntityResponse(
 			}, nil
 		}
 
-		// Get selected entity and assign employees to it
-		selectedEntity := entities[response.SelectedIndex-1]
-		return we.assignToExistingEntity(ctx, workflow, selectedEntity)
+		// Store selected existing entity for later use
+		selectedTask := taskInfo.ExistingTasks[response.SelectedIndex-1]
+		taskInfo.ResolutionData = map[string]interface{}{
+			"selected_existing_entity": selectedTask,
+			"action":                   "use_existing",
+		}
+		taskInfo.Status = StatusResolved
+		taskInfo.Action = "use_existing"
+
+		return we.proceedToNextComponent(ctx, workflow)
 
 	case "cancel":
 		we.cancelWorkflow(ctx.User.Id)
@@ -693,26 +642,57 @@ func (we *WorkflowEngine) processExistingEntityResponse(
 	return nil, fmt.Errorf("unhandled intent: %s", response.Intent)
 }
 
-// processEmployeeDisambiguationResponse processes employee disambiguation response
-func (we *WorkflowEngine) processEmployeeDisambiguationResponse(
+// handleEmployeeDisambiguation handles employee disambiguation
+func (we *EnhancedWorkflowEngine) handleEmployeeDisambiguation(
 	ctx *erp_modules.ModuleContext,
-	workflow *WorkflowState,
-	step *WorkflowStep,
+	workflow *EnhancedWorkflowState,
+) (*erp_modules.ModuleResponse, error) {
+
+	employeeInfo := workflow.ComponentAnalysis.EmployeeComponent
+	if employeeInfo == nil || !employeeInfo.NeedsDisambiguation {
+		return we.proceedToNextComponent(ctx, workflow)
+	}
+
+	// Create assignee result for message generation
+	assigneeResult := &AssigneeResolutionResult{
+		ResolvedEmployees:         employeeInfo.ResolvedEmployees,
+		UnresolvedEmployeeMatches: employeeInfo.UnresolvedMatches,
+		RequiresDisambiguation:    true,
+	}
+
+	// Generate disambiguation message
+	message, err := we.module.generateMultiEmployeeDisambiguationMessage(ctx, assigneeResult)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate employee disambiguation message: %w", err)
+	}
+
+	return &erp_modules.ModuleResponse{
+		Success:     true,
+		Message:     message,
+		ActionTaken: "workflow_employee_disambiguation",
+		Data: map[string]interface{}{
+			"workflow_active":  true,
+			"component_type":   string(ComponentTypeEmployee),
+			"unresolved_count": len(employeeInfo.UnresolvedMatches),
+			"resolved_count":   len(employeeInfo.ResolvedEmployees),
+		},
+	}, nil
+}
+
+// processEmployeeDisambiguationResponse processes employee disambiguation response
+func (we *EnhancedWorkflowEngine) processEmployeeDisambiguationResponse(
+	ctx *erp_modules.ModuleContext,
+	workflow *EnhancedWorkflowState,
 	message string,
 ) (*erp_modules.ModuleResponse, error) {
 
-	unresolvedMatches, ok := step.Data["unresolved_matches"].([]UnresolvedEmployeeMatch)
-	if !ok {
-		return nil, fmt.Errorf("missing unresolved matches data")
+	employeeInfo := workflow.ComponentAnalysis.EmployeeComponent
+	if employeeInfo == nil {
+		return nil, fmt.Errorf("missing employee component info")
 	}
 
-	resolvedEmployees, ok := step.Data["resolved_employees"].([]AssignedEmployee)
-	if !ok {
-		resolvedEmployees = []AssignedEmployee{}
-	}
-
-	// Parse disambiguation response using LLM
-	response, err := we.module.parseMultiEmployeeDisambiguationResponse(ctx, message, unresolvedMatches)
+	// Parse disambiguation response
+	response, err := we.module.parseMultiEmployeeDisambiguationResponse(ctx, message, employeeInfo.UnresolvedMatches)
 	if err != nil {
 		isVietnamese := detectUserLanguage(ctx.User)
 		errorMsg := "⚠️ Không thể hiểu lựa chọn của bạn. Vui lòng chọn bằng số thứ tự (ví dụ: 1, 3, 5)."
@@ -740,7 +720,7 @@ func (we *WorkflowEngine) processEmployeeDisambiguationResponse(
 		}
 
 		// Resolve selected employees
-		selectedEmployees, err := we.module.resolveDisambiguatedEmployees(unresolvedMatches, response.SelectedIndexes)
+		selectedEmployees, err := we.module.resolveDisambiguatedEmployees(employeeInfo.UnresolvedMatches, response.SelectedIndexes)
 		if err != nil {
 			isVietnamese := detectUserLanguage(ctx.User)
 			errorMsg := "⚠️ Có lỗi xảy ra khi xử lý lựa chọn nhân viên: " + err.Error()
@@ -754,12 +734,14 @@ func (we *WorkflowEngine) processEmployeeDisambiguationResponse(
 		}
 
 		// Combine with previously resolved employees
-		allResolvedEmployees := append(resolvedEmployees, selectedEmployees...)
+		allResolvedEmployees := append(employeeInfo.ResolvedEmployees, selectedEmployees...)
+		employeeInfo.ResolvedEmployees = allResolvedEmployees
+		employeeInfo.Status = StatusResolved
+
+		// Update completed data
 		workflow.CompletedData["assigned_to_employees"] = allResolvedEmployees
 
-		// Mark step completed and continue
-		we.markStepCompleted(workflow, step)
-		return we.moveToNextStepAndExecute(ctx, workflow)
+		return we.proceedToNextComponent(ctx, workflow)
 
 	case "cancel":
 		we.cancelWorkflow(ctx.User.Id)
@@ -778,21 +760,49 @@ func (we *WorkflowEngine) processEmployeeDisambiguationResponse(
 	return nil, fmt.Errorf("unhandled intent: %s", response.Intent)
 }
 
-// processProjectSelectionResponse processes project selection response
-func (we *WorkflowEngine) processProjectSelectionResponse(
+// handleProjectDisambiguation handles project disambiguation
+func (we *EnhancedWorkflowEngine) handleProjectDisambiguation(
 	ctx *erp_modules.ModuleContext,
-	workflow *WorkflowState,
-	step *WorkflowStep,
+	workflow *EnhancedWorkflowState,
+) (*erp_modules.ModuleResponse, error) {
+
+	projectInfo := workflow.ComponentAnalysis.ProjectComponent
+	if projectInfo == nil || !projectInfo.NeedsDisambiguation {
+		return we.proceedToNextComponent(ctx, workflow)
+	}
+
+	// Generate project selection message
+	message, err := we.module.generateProjectTaskDisambiguationMessage(ctx, projectInfo.MatchingProjects)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate project disambiguation message: %w", err)
+	}
+
+	return &erp_modules.ModuleResponse{
+		Success:     true,
+		Message:     message,
+		ActionTaken: "workflow_project_disambiguation",
+		Data: map[string]interface{}{
+			"workflow_active": true,
+			"component_type":  string(ComponentTypeProject),
+			"project_count":   len(projectInfo.MatchingProjects),
+		},
+	}, nil
+}
+
+// processProjectDisambiguationResponse processes project disambiguation response
+func (we *EnhancedWorkflowEngine) processProjectDisambiguationResponse(
+	ctx *erp_modules.ModuleContext,
+	workflow *EnhancedWorkflowState,
 	message string,
 ) (*erp_modules.ModuleResponse, error) {
 
-	matchingProjects, ok := step.Data["matching_projects"].([]Project)
-	if !ok {
-		return nil, fmt.Errorf("missing matching projects data")
+	projectInfo := workflow.ComponentAnalysis.ProjectComponent
+	if projectInfo == nil {
+		return nil, fmt.Errorf("missing project component info")
 	}
 
-	// Parse selection response using LLM
-	response, err := we.module.parseProjectSelectionResponse(ctx, message, matchingProjects)
+	// Parse selection response
+	response, err := we.module.parseProjectSelectionResponse(ctx, message, projectInfo.MatchingProjects)
 	if err != nil {
 		isVietnamese := detectUserLanguage(ctx.User)
 		errorMsg := "⚠️ Không thể hiểu lựa chọn của bạn. Vui lòng chọn số thứ tự, 'không', hoặc 'hủy'."
@@ -807,7 +817,7 @@ func (we *WorkflowEngine) processProjectSelectionResponse(
 
 	switch response.Intent {
 	case "select_project":
-		if response.SelectedIndex < 1 || response.SelectedIndex > len(matchingProjects) {
+		if response.SelectedIndex < 1 || response.SelectedIndex > len(projectInfo.MatchingProjects) {
 			isVietnamese := detectUserLanguage(ctx.User)
 			errorMsg := "⚠️ Số thứ tự không hợp lệ."
 			if !isVietnamese {
@@ -820,18 +830,20 @@ func (we *WorkflowEngine) processProjectSelectionResponse(
 		}
 
 		// Set selected project
-		selectedProject := matchingProjects[response.SelectedIndex-1]
+		selectedProject := projectInfo.MatchingProjects[response.SelectedIndex-1]
+		projectInfo.SelectedProject = selectedProject.Name
+		projectInfo.Status = StatusResolved
 		workflow.CompletedData["project"] = selectedProject.Name
 
-		// Mark step completed and continue
-		we.markStepCompleted(workflow, step)
-		return we.moveToNextStepAndExecute(ctx, workflow)
+		return we.proceedToNextComponent(ctx, workflow)
 
 	case "no_project":
 		// Clear project and proceed
+		projectInfo.Status = StatusResolved
+		projectInfo.Action = "no_project"
 		workflow.CompletedData["project"] = ""
-		we.markStepCompleted(workflow, step)
-		return we.moveToNextStepAndExecute(ctx, workflow)
+
+		return we.proceedToNextComponent(ctx, workflow)
 
 	case "cancel":
 		we.cancelWorkflow(ctx.User.Id)
@@ -850,15 +862,303 @@ func (we *WorkflowEngine) processProjectSelectionResponse(
 	return nil, fmt.Errorf("unhandled intent: %s", response.Intent)
 }
 
-// processConfirmationResponse processes final confirmation response
-func (we *WorkflowEngine) processConfirmationResponse(
+// proceedToNextComponent moves to next component or confirmation
+func (we *EnhancedWorkflowEngine) proceedToNextComponent(
 	ctx *erp_modules.ModuleContext,
-	workflow *WorkflowState,
-	step *WorkflowStep,
+	workflow *EnhancedWorkflowState,
+) (*erp_modules.ModuleResponse, error) {
+
+	// Check if there are more components that need disambiguation
+	if workflow.ComponentAnalysis.TaskComponent != nil &&
+		workflow.ComponentAnalysis.TaskComponent.NeedsDisambiguation &&
+		workflow.ComponentAnalysis.TaskComponent.Status == StatusPending {
+		workflow.CurrentComponent = ComponentTypeTask
+		return we.handleTaskDisambiguation(ctx, workflow)
+	}
+
+	if workflow.ComponentAnalysis.EmployeeComponent != nil &&
+		workflow.ComponentAnalysis.EmployeeComponent.NeedsDisambiguation &&
+		workflow.ComponentAnalysis.EmployeeComponent.Status == StatusPending {
+		workflow.CurrentComponent = ComponentTypeEmployee
+		return we.handleEmployeeDisambiguation(ctx, workflow)
+	}
+
+	if workflow.ComponentAnalysis.ProjectComponent != nil &&
+		workflow.ComponentAnalysis.ProjectComponent.NeedsDisambiguation &&
+		workflow.ComponentAnalysis.ProjectComponent.Status == StatusPending {
+		workflow.CurrentComponent = ComponentTypeProject
+		return we.handleProjectDisambiguation(ctx, workflow)
+	}
+
+	// All components resolved, proceed to confirmation
+	return we.proceedToConfirmation(ctx, workflow)
+}
+
+// proceedToConfirmation moves to confirmation phase
+func (we *EnhancedWorkflowEngine) proceedToConfirmation(
+	ctx *erp_modules.ModuleContext,
+	workflow *EnhancedWorkflowState,
+) (*erp_modules.ModuleResponse, error) {
+
+	workflow.Phase = PhaseConfirmation
+	workflow.CurrentComponent = ""
+
+	// Apply any resolved component data to completed data
+	we.applyResolvedComponentData(workflow)
+
+	// Generate comprehensive confirmation message
+	message, err := we.generateComprehensiveConfirmation(ctx, workflow)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate comprehensive confirmation: %w", err)
+	}
+
+	return &erp_modules.ModuleResponse{
+		Success:     true,
+		Message:     message,
+		ActionTaken: "workflow_comprehensive_confirmation",
+		Data: map[string]interface{}{
+			"workflow_active": true,
+			"phase":           string(PhaseConfirmation),
+		},
+	}, nil
+}
+
+// applyResolvedComponentData applies component resolution data to completed data
+func (we *EnhancedWorkflowEngine) applyResolvedComponentData(workflow *EnhancedWorkflowState) {
+	// Apply employee resolutions
+	if workflow.ComponentAnalysis.EmployeeComponent != nil &&
+		workflow.ComponentAnalysis.EmployeeComponent.Status == StatusResolved {
+		workflow.CompletedData["assigned_to_employees"] = workflow.ComponentAnalysis.EmployeeComponent.ResolvedEmployees
+	}
+
+	// Apply project resolutions
+	if workflow.ComponentAnalysis.ProjectComponent != nil &&
+		workflow.ComponentAnalysis.ProjectComponent.Status == StatusResolved {
+		if workflow.ComponentAnalysis.ProjectComponent.SelectedProject != "" {
+			workflow.CompletedData["project"] = workflow.ComponentAnalysis.ProjectComponent.SelectedProject
+		}
+	}
+
+	// Task component data is already in CompletedData, but check for use_existing action
+	if workflow.ComponentAnalysis.TaskComponent != nil &&
+		workflow.ComponentAnalysis.TaskComponent.Action == "use_existing" &&
+		workflow.ComponentAnalysis.TaskComponent.ResolutionData != nil {
+		// Store information about using existing entity for later execution
+		workflow.CompletedData["_use_existing_entity"] = workflow.ComponentAnalysis.TaskComponent.ResolutionData["selected_existing_entity"]
+		workflow.CompletedData["_use_existing_action"] = true
+	}
+}
+
+// generateComprehensiveConfirmation generates comprehensive confirmation message
+func (we *EnhancedWorkflowEngine) generateComprehensiveConfirmation(
+	ctx *erp_modules.ModuleContext,
+	workflow *EnhancedWorkflowState,
+) (string, error) {
+
+	isVietnamese := detectUserLanguage(ctx.User)
+	var message strings.Builder
+
+	// Check if using existing entity
+	if useExisting, ok := workflow.CompletedData["_use_existing_action"].(bool); ok && useExisting {
+		// This is assignment to existing entity
+		if existingEntity, ok := workflow.CompletedData["_use_existing_entity"]; ok {
+			return we.generateExistingEntityAssignmentConfirmation(ctx, workflow, existingEntity, isVietnamese)
+		}
+	}
+
+	// Regular new entity creation confirmation
+	if isVietnamese {
+		if workflow.EntityType == "project" {
+			message.WriteString("📋 **Xác nhận thông tin dự án mới:**\n\n")
+		} else {
+			message.WriteString("📋 **Xác nhận thông tin task mới:**\n\n")
+		}
+	} else {
+		if workflow.EntityType == "project" {
+			message.WriteString("📋 **Confirm New Project Information:**\n\n")
+		} else {
+			message.WriteString("📋 **Confirm New Task Information:**\n\n")
+		}
+	}
+
+	// Display all confirmed information
+	for key, value := range workflow.CompletedData {
+		if strings.HasPrefix(key, "_") {
+			continue // Skip internal fields
+		}
+
+		if value == nil || value == "" {
+			continue
+		}
+
+		// Handle special fields
+		switch key {
+		case "assigned_to_employees":
+			if employees, ok := value.([]AssignedEmployee); ok && len(employees) > 0 {
+				var names []string
+				for _, emp := range employees {
+					names = append(names, emp.EmployeeName)
+				}
+				if isVietnamese {
+					message.WriteString(fmt.Sprintf("• **Phân công cho:** %s\n", strings.Join(names, ", ")))
+				} else {
+					message.WriteString(fmt.Sprintf("• **Assigned to:** %s\n", strings.Join(names, ", ")))
+				}
+			}
+		case "project_name":
+			if isVietnamese {
+				message.WriteString(fmt.Sprintf("• **Tên dự án:** %v\n", value))
+			} else {
+				message.WriteString(fmt.Sprintf("• **Project Name:** %v\n", value))
+			}
+		case "subject":
+			if isVietnamese {
+				message.WriteString(fmt.Sprintf("• **Tên task:** %v\n", value))
+			} else {
+				message.WriteString(fmt.Sprintf("• **Task Name:** %v\n", value))
+			}
+		case "project":
+			if isVietnamese {
+				message.WriteString(fmt.Sprintf("• **Thuộc dự án:** %v\n", value))
+			} else {
+				message.WriteString(fmt.Sprintf("• **Project:** %v\n", value))
+			}
+		case "priority":
+			if isVietnamese {
+				message.WriteString(fmt.Sprintf("• **Độ ưu tiên:** %v\n", value))
+			} else {
+				message.WriteString(fmt.Sprintf("• **Priority:** %v\n", value))
+			}
+		case "description":
+			if isVietnamese {
+				message.WriteString(fmt.Sprintf("• **Mô tả:** %v\n", value))
+			} else {
+				message.WriteString(fmt.Sprintf("• **Description:** %v\n", value))
+			}
+		case "expected_start_date", "exp_start_date":
+			if isVietnamese {
+				message.WriteString(fmt.Sprintf("• **Ngày bắt đầu:** %v\n", value))
+			} else {
+				message.WriteString(fmt.Sprintf("• **Start Date:** %v\n", value))
+			}
+		case "expected_end_date", "exp_end_date":
+			if isVietnamese {
+				message.WriteString(fmt.Sprintf("• **Ngày kết thúc:** %v\n", value))
+			} else {
+				message.WriteString(fmt.Sprintf("• **End Date:** %v\n", value))
+			}
+		default:
+			// Format other fields generically
+			if str, ok := value.(string); ok && str != "" {
+				fieldName := strings.Title(strings.ReplaceAll(key, "_", " "))
+				message.WriteString(fmt.Sprintf("• **%s:** %v\n", fieldName, value))
+			}
+		}
+	}
+
+	message.WriteString("\n")
+
+	if isVietnamese {
+		message.WriteString("Vui lòng xác nhận thông tin trên có chính xác không?\n")
+		message.WriteString("Bạn có thể:\n")
+		message.WriteString("• Trả lời **'có'** để tạo\n")
+		message.WriteString("• Yêu cầu chỉnh sửa (ví dụ: 'đổi tên thành ABC', 'giao cho Nam', 'thêm vào project XYZ')\n")
+		message.WriteString("• Trả lời **'hủy'** để hủy bỏ")
+	} else {
+		message.WriteString("Please confirm if the information above is correct.\n")
+		message.WriteString("You can:\n")
+		message.WriteString("• Reply **'yes'** to create\n")
+		message.WriteString("• Request modifications (e.g., 'change name to ABC', 'assign to John', 'add to project XYZ')\n")
+		message.WriteString("• Reply **'cancel'** to cancel")
+	}
+
+	return message.String(), nil
+}
+
+// generateExistingEntityAssignmentConfirmation generates confirmation for existing entity assignment
+func (we *EnhancedWorkflowEngine) generateExistingEntityAssignmentConfirmation(
+	ctx *erp_modules.ModuleContext,
+	workflow *EnhancedWorkflowState,
+	existingEntity interface{},
+	isVietnamese bool,
+) (string, error) {
+
+	var message strings.Builder
+	var entityName, entityID string
+
+	// Extract entity information
+	if workflow.EntityType == "project" {
+		if entityBytes, err := json.Marshal(existingEntity); err == nil {
+			var project Project
+			if json.Unmarshal(entityBytes, &project) == nil {
+				entityName = project.ProjectName
+				entityID = project.Name
+			}
+		}
+	} else {
+		if entityBytes, err := json.Marshal(existingEntity); err == nil {
+			var task Task
+			if json.Unmarshal(entityBytes, &task) == nil {
+				entityName = task.Subject
+				entityID = task.Name
+			}
+		}
+	}
+
+	if isVietnamese {
+		if workflow.EntityType == "project" {
+			message.WriteString("🔗 **Xác nhận phân công dự án hiện có:**\n\n")
+			message.WriteString(fmt.Sprintf("• **Dự án:** %s (ID: %s)\n", entityName, entityID))
+		} else {
+			message.WriteString("🔗 **Xác nhận phân công task hiện có:**\n\n")
+			message.WriteString(fmt.Sprintf("• **Task:** %s (ID: %s)\n", entityName, entityID))
+		}
+	} else {
+		if workflow.EntityType == "project" {
+			message.WriteString("🔗 **Confirm Existing Project Assignment:**\n\n")
+			message.WriteString(fmt.Sprintf("• **Project:** %s (ID: %s)\n", entityName, entityID))
+		} else {
+			message.WriteString("🔗 **Confirm Existing Task Assignment:**\n\n")
+			message.WriteString(fmt.Sprintf("• **Task:** %s (ID: %s)\n", entityName, entityID))
+		}
+	}
+
+	// Show assigned employees
+	if employees, ok := workflow.CompletedData["assigned_to_employees"].([]AssignedEmployee); ok && len(employees) > 0 {
+		var names []string
+		for _, emp := range employees {
+			names = append(names, emp.EmployeeName)
+		}
+		if isVietnamese {
+			message.WriteString(fmt.Sprintf("• **Phân công cho:** %s\n", strings.Join(names, ", ")))
+		} else {
+			message.WriteString(fmt.Sprintf("• **Assigned to:** %s\n", strings.Join(names, ", ")))
+		}
+	}
+
+	message.WriteString("\n")
+
+	if isVietnamese {
+		message.WriteString("Xác nhận phân công này?\n")
+		message.WriteString("• **'có'** - Thực hiện phân công\n")
+		message.WriteString("• **'hủy'** - Hủy bỏ")
+	} else {
+		message.WriteString("Confirm this assignment?\n")
+		message.WriteString("• **'yes'** - Proceed with assignment\n")
+		message.WriteString("• **'cancel'** - Cancel")
+	}
+
+	return message.String(), nil
+}
+
+// processConfirmationResponse processes final confirmation response
+func (we *EnhancedWorkflowEngine) processConfirmationResponse(
+	ctx *erp_modules.ModuleContext,
+	workflow *EnhancedWorkflowState,
 	message string,
 ) (*erp_modules.ModuleResponse, error) {
 
-	// Parse confirmation response using LLM
+	// Parse confirmation response
 	response, err := we.module.parseConfirmationResponse(ctx, message, workflow.CompletedData)
 	if err != nil {
 		isVietnamese := detectUserLanguage(ctx.User)
@@ -874,27 +1174,17 @@ func (we *WorkflowEngine) processConfirmationResponse(
 
 	switch response.Intent {
 	case "confirm":
-		// Execute final creation
-		we.markStepCompleted(workflow, step)
+		// Execute final action
 		return we.executeFinalAction(ctx, workflow)
 
 	case "modify":
-		// Apply modifications and rebuild workflow
+		// Apply modifications and re-analyze
 		for key, value := range response.Modifications {
 			workflow.CompletedData[key] = value
 		}
 
-		// Rebuild workflow steps
-		if err := we.buildWorkflowSteps(workflow); err != nil {
-			return nil, fmt.Errorf("failed to rebuild workflow after modification: %w", err)
-		}
-
-		// Find first incomplete step
-		workflow.CurrentStepIndex = we.findFirstIncompleteStep(workflow)
-		workflow.LastModified = time.Now().UnixMilli()
-
-		// Execute current step
-		return we.executeCurrentStep(ctx, workflow)
+		// Re-run comprehensive analysis
+		return we.performComprehensiveAnalysis(ctx, workflow)
 
 	case "cancel":
 		we.cancelWorkflow(ctx.User.Id)
@@ -913,15 +1203,24 @@ func (we *WorkflowEngine) processConfirmationResponse(
 	return nil, fmt.Errorf("unhandled intent: %s", response.Intent)
 }
 
-// executeFinalAction executes the final creation action
-func (we *WorkflowEngine) executeFinalAction(
+// executeFinalAction executes the final creation or assignment action
+func (we *EnhancedWorkflowEngine) executeFinalAction(
 	ctx *erp_modules.ModuleContext,
-	workflow *WorkflowState,
+	workflow *EnhancedWorkflowState,
 ) (*erp_modules.ModuleResponse, error) {
 
-	defer we.cancelWorkflow(ctx.User.Id) // Clean up workflow
+	defer we.cancelWorkflow(ctx.User.Id)
 
-	// Execute based on workflow type
+	workflow.Phase = PhaseExecution
+
+	// Check if this is assignment to existing entity
+	if useExisting, ok := workflow.CompletedData["_use_existing_action"].(bool); ok && useExisting {
+		if existingEntity, ok := workflow.CompletedData["_use_existing_entity"]; ok {
+			return we.executeExistingEntityAssignment(ctx, workflow, existingEntity)
+		}
+	}
+
+	// Regular new entity creation
 	switch workflow.WorkflowType {
 	case "create_project":
 		return we.executeProjectCreation(ctx, workflow)
@@ -932,209 +1231,33 @@ func (we *WorkflowEngine) executeFinalAction(
 	return nil, fmt.Errorf("unknown workflow type: %s", workflow.WorkflowType)
 }
 
-// executeProjectCreation executes project creation
-func (we *WorkflowEngine) executeProjectCreation(
+// executeExistingEntityAssignment assigns to existing entity
+func (we *EnhancedWorkflowEngine) executeExistingEntityAssignment(
 	ctx *erp_modules.ModuleContext,
-	workflow *WorkflowState,
+	workflow *EnhancedWorkflowState,
+	existingEntity interface{},
 ) (*erp_modules.ModuleResponse, error) {
-
-	var projectRequest ProjectCreationRequest
-	dataBytes, _ := json.Marshal(workflow.CompletedData)
-	json.Unmarshal(dataBytes, &projectRequest)
-
-	// Create project
-	projectID, err := we.module.erpClient.CreateProject(projectRequest, workflow.EmployeeID)
-	if err != nil {
-		isVietnamese := detectUserLanguage(ctx.User)
-		errorMsg := "⚠️ Có lỗi xảy ra khi tạo dự án trong hệ thống. Vui lòng thử lại."
-		if !isVietnamese {
-			errorMsg = "⚠️ An error occurred while creating project in the system. Please try again."
-		}
-		return &erp_modules.ModuleResponse{
-			Success: false,
-			Message: errorMsg,
-			Error:   err.Error(),
-		}, nil
-	}
-
-	// Assign to multiple employees if any
-	var assignmentErrors []string
-	for _, assignedEmployee := range projectRequest.AssignedToEmployees {
-		err := we.module.erpClient.AssignProjectToEmployee(projectID, workflow.CreatorEmail, assignedEmployee.Email, projectRequest.Priority)
-		if err != nil {
-			we.module.api.LogWarn("Project created but assignment failed",
-				"project_id", projectID,
-				"assignee", assignedEmployee.EmployeeName,
-				"error", err.Error())
-			assignmentErrors = append(assignmentErrors, assignedEmployee.EmployeeName)
-		}
-	}
-
-	isVietnamese := detectUserLanguage(ctx.User)
-	var successMsg string
-	if len(projectRequest.AssignedToEmployees) > 0 {
-		assigneeNames := make([]string, len(projectRequest.AssignedToEmployees))
-		for i, emp := range projectRequest.AssignedToEmployees {
-			assigneeNames[i] = emp.EmployeeName
-		}
-		assigneesStr := strings.Join(assigneeNames, ", ")
-
-		if len(assignmentErrors) == 0 {
-			if isVietnamese {
-				successMsg = fmt.Sprintf("✅ Đã tạo dự án thành công: **%s** và phân công cho **%s**!", projectID, assigneesStr)
-			} else {
-				successMsg = fmt.Sprintf("✅ Successfully created project: **%s** and assigned to **%s**!", projectID, assigneesStr)
-			}
-		} else {
-			if isVietnamese {
-				successMsg = fmt.Sprintf("✅ Đã tạo dự án: **%s**. Phân công thành công cho **%s**. Lỗi phân công: **%s**.",
-					projectID, assigneesStr, strings.Join(assignmentErrors, ", "))
-			} else {
-				successMsg = fmt.Sprintf("✅ Created project: **%s**. Successfully assigned to **%s**. Assignment failed for: **%s**.",
-					projectID, assigneesStr, strings.Join(assignmentErrors, ", "))
-			}
-		}
-	} else {
-		if isVietnamese {
-			successMsg = fmt.Sprintf("✅ Đã tạo dự án thành công: **%s**!", projectID)
-		} else {
-			successMsg = fmt.Sprintf("✅ Successfully created project: **%s**!", projectID)
-		}
-	}
-
-	return &erp_modules.ModuleResponse{
-		Success:     true,
-		Message:     successMsg,
-		ActionTaken: "project_created",
-		Data: map[string]interface{}{
-			"project_id":         projectID,
-			"project_name":       projectRequest.ProjectName,
-			"assigned_employees": projectRequest.AssignedToEmployees,
-			"assignment_errors":  assignmentErrors,
-		},
-	}, nil
-}
-
-// executeTaskCreation executes task creation
-func (we *WorkflowEngine) executeTaskCreation(
-	ctx *erp_modules.ModuleContext,
-	workflow *WorkflowState,
-) (*erp_modules.ModuleResponse, error) {
-
-	var taskRequest TaskCreationRequest
-	dataBytes, _ := json.Marshal(workflow.CompletedData)
-	json.Unmarshal(dataBytes, &taskRequest)
-
-	// Create task
-	taskID, err := we.module.erpClient.CreateTask(taskRequest, workflow.EmployeeID)
-	if err != nil {
-		isVietnamese := detectUserLanguage(ctx.User)
-		errorMsg := "⚠️ Có lỗi xảy ra khi tạo task trong hệ thống. Vui lòng thử lại."
-		if !isVietnamese {
-			errorMsg = "⚠️ An error occurred while creating task in the system. Please try again."
-		}
-		return &erp_modules.ModuleResponse{
-			Success: false,
-			Message: errorMsg,
-			Error:   err.Error(),
-		}, nil
-	}
-
-	// Assign to multiple employees if any
-	var assignmentErrors []string
-	for _, assignedEmployee := range taskRequest.AssignedToEmployees {
-		err := we.module.erpClient.AssignTaskToEmployee(taskID, workflow.CreatorEmail, assignedEmployee.Email, taskRequest.Priority)
-		if err != nil {
-			we.module.api.LogWarn("Task created but assignment failed",
-				"task_id", taskID,
-				"assignee", assignedEmployee.EmployeeName,
-				"error", err.Error())
-			assignmentErrors = append(assignmentErrors, assignedEmployee.EmployeeName)
-		}
-	}
-
-	isVietnamese := detectUserLanguage(ctx.User)
-	var successMsg string
-	if len(taskRequest.AssignedToEmployees) > 0 {
-		assigneeNames := make([]string, len(taskRequest.AssignedToEmployees))
-		for i, emp := range taskRequest.AssignedToEmployees {
-			assigneeNames[i] = emp.EmployeeName
-		}
-		assigneesStr := strings.Join(assigneeNames, ", ")
-
-		if len(assignmentErrors) == 0 {
-			if isVietnamese {
-				successMsg = fmt.Sprintf("✅ Đã tạo task thành công: **%s** và phân công cho **%s**!", taskID, assigneesStr)
-			} else {
-				successMsg = fmt.Sprintf("✅ Successfully created task: **%s** and assigned to **%s**!", taskID, assigneesStr)
-			}
-		} else {
-			if isVietnamese {
-				successMsg = fmt.Sprintf("✅ Đã tạo task: **%s**. Phân công thành công cho **%s**. Lỗi phân công: **%s**.",
-					taskID, assigneesStr, strings.Join(assignmentErrors, ", "))
-			} else {
-				successMsg = fmt.Sprintf("✅ Created task: **%s**. Successfully assigned to **%s**. Assignment failed for: **%s**.",
-					taskID, assigneesStr, strings.Join(assignmentErrors, ", "))
-			}
-		}
-	} else {
-		if isVietnamese {
-			successMsg = fmt.Sprintf("✅ Đã tạo task thành công: **%s**!", taskID)
-		} else {
-			successMsg = fmt.Sprintf("✅ Successfully created task: **%s**!", taskID)
-		}
-	}
-
-	return &erp_modules.ModuleResponse{
-		Success:     true,
-		Message:     successMsg,
-		ActionTaken: "task_created",
-		Data: map[string]interface{}{
-			"task_id":            taskID,
-			"task_name":          taskRequest.Subject,
-			"assigned_employees": taskRequest.AssignedToEmployees,
-			"assignment_errors":  assignmentErrors,
-			"project":            taskRequest.Project,
-		},
-	}, nil
-}
-
-// assignToExistingEntity assigns employees to existing project/task
-func (we *WorkflowEngine) assignToExistingEntity(
-	ctx *erp_modules.ModuleContext,
-	workflow *WorkflowState,
-	selectedEntity interface{},
-) (*erp_modules.ModuleResponse, error) {
-
-	defer we.cancelWorkflow(ctx.User.Id) // Clean up workflow
 
 	// Extract assigned employees
 	var assignedEmployees []AssignedEmployee
-	if assignedToEmployees, ok := workflow.CompletedData["assigned_to_employees"].([]interface{}); ok {
-		for _, emp := range assignedToEmployees {
-			if empBytes, err := json.Marshal(emp); err == nil {
-				var assignedEmp AssignedEmployee
-				if json.Unmarshal(empBytes, &assignedEmp) == nil {
-					assignedEmployees = append(assignedEmployees, assignedEmp)
-				}
-			}
-		}
+	if employees, ok := workflow.CompletedData["assigned_to_employees"].([]AssignedEmployee); ok {
+		assignedEmployees = employees
 	}
 
-	// Get entity ID and name
+	// Get entity information
 	var entityID, entityName string
 	if workflow.EntityType == "project" {
-		if projBytes, err := json.Marshal(selectedEntity); err == nil {
+		if entityBytes, err := json.Marshal(existingEntity); err == nil {
 			var project Project
-			if json.Unmarshal(projBytes, &project) == nil {
+			if json.Unmarshal(entityBytes, &project) == nil {
 				entityID = project.Name
 				entityName = project.ProjectName
 			}
 		}
 	} else {
-		if taskBytes, err := json.Marshal(selectedEntity); err == nil {
+		if entityBytes, err := json.Marshal(existingEntity); err == nil {
 			var task Task
-			if json.Unmarshal(taskBytes, &task) == nil {
+			if json.Unmarshal(entityBytes, &task) == nil {
 				entityID = task.Name
 				entityName = task.Subject
 			}
@@ -1251,132 +1374,211 @@ func (we *WorkflowEngine) assignToExistingEntity(
 	}, nil
 }
 
+// executeProjectCreation executes new project creation
+func (we *EnhancedWorkflowEngine) executeProjectCreation(
+	ctx *erp_modules.ModuleContext,
+	workflow *EnhancedWorkflowState,
+) (*erp_modules.ModuleResponse, error) {
+
+	var projectRequest ProjectCreationRequest
+	dataBytes, _ := json.Marshal(workflow.CompletedData)
+	json.Unmarshal(dataBytes, &projectRequest)
+
+	// Create project
+	projectID, err := we.module.erpClient.CreateProject(projectRequest, workflow.EmployeeID)
+	if err != nil {
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Có lỗi xảy ra khi tạo dự án trong hệ thống. Vui lòng thử lại."
+		if !isVietnamese {
+			errorMsg = "⚠️ An error occurred while creating project in the system. Please try again."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	// Assign to multiple employees if any
+	var assignmentErrors []string
+	for _, assignedEmployee := range projectRequest.AssignedToEmployees {
+		err := we.module.erpClient.AssignProjectToEmployee(projectID, workflow.CreatorEmail, assignedEmployee.Email, projectRequest.Priority)
+		if err != nil {
+			we.module.api.LogWarn("Project created but assignment failed",
+				"project_id", projectID,
+				"assignee", assignedEmployee.EmployeeName,
+				"error", err.Error())
+			assignmentErrors = append(assignmentErrors, assignedEmployee.EmployeeName)
+		}
+	}
+
+	isVietnamese := detectUserLanguage(ctx.User)
+	var successMsg string
+	if len(projectRequest.AssignedToEmployees) > 0 {
+		assigneeNames := make([]string, len(projectRequest.AssignedToEmployees))
+		for i, emp := range projectRequest.AssignedToEmployees {
+			assigneeNames[i] = emp.EmployeeName
+		}
+		assigneesStr := strings.Join(assigneeNames, ", ")
+
+		if len(assignmentErrors) == 0 {
+			if isVietnamese {
+				successMsg = fmt.Sprintf("✅ Đã tạo dự án thành công: **%s** và phân công cho **%s**!", projectID, assigneesStr)
+			} else {
+				successMsg = fmt.Sprintf("✅ Successfully created project: **%s** and assigned to **%s**!", projectID, assigneesStr)
+			}
+		} else {
+			if isVietnamese {
+				successMsg = fmt.Sprintf("✅ Đã tạo dự án: **%s**. Phân công thành công cho **%s**. Lỗi phân công: **%s**.",
+					projectID, assigneesStr, strings.Join(assignmentErrors, ", "))
+			} else {
+				successMsg = fmt.Sprintf("✅ Created project: **%s**. Successfully assigned to **%s**. Assignment failed for: **%s**.",
+					projectID, assigneesStr, strings.Join(assignmentErrors, ", "))
+			}
+		}
+	} else {
+		if isVietnamese {
+			successMsg = fmt.Sprintf("✅ Đã tạo dự án thành công: **%s**!", projectID)
+		} else {
+			successMsg = fmt.Sprintf("✅ Successfully created project: **%s**!", projectID)
+		}
+	}
+
+	return &erp_modules.ModuleResponse{
+		Success:     true,
+		Message:     successMsg,
+		ActionTaken: "project_created",
+		Data: map[string]interface{}{
+			"project_id":         projectID,
+			"project_name":       projectRequest.ProjectName,
+			"assigned_employees": projectRequest.AssignedToEmployees,
+			"assignment_errors":  assignmentErrors,
+		},
+	}, nil
+}
+
+// executeTaskCreation executes new task creation
+func (we *EnhancedWorkflowEngine) executeTaskCreation(
+	ctx *erp_modules.ModuleContext,
+	workflow *EnhancedWorkflowState,
+) (*erp_modules.ModuleResponse, error) {
+
+	var taskRequest TaskCreationRequest
+	dataBytes, _ := json.Marshal(workflow.CompletedData)
+	json.Unmarshal(dataBytes, &taskRequest)
+
+	// Create task
+	taskID, err := we.module.erpClient.CreateTask(taskRequest, workflow.EmployeeID)
+	if err != nil {
+		isVietnamese := detectUserLanguage(ctx.User)
+		errorMsg := "⚠️ Có lỗi xảy ra khi tạo task trong hệ thống. Vui lòng thử lại."
+		if !isVietnamese {
+			errorMsg = "⚠️ An error occurred while creating task in the system. Please try again."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	// Assign to multiple employees if any
+	var assignmentErrors []string
+	for _, assignedEmployee := range taskRequest.AssignedToEmployees {
+		err := we.module.erpClient.AssignTaskToEmployee(taskID, workflow.CreatorEmail, assignedEmployee.Email, taskRequest.Priority)
+		if err != nil {
+			we.module.api.LogWarn("Task created but assignment failed",
+				"task_id", taskID,
+				"assignee", assignedEmployee.EmployeeName,
+				"error", err.Error())
+			assignmentErrors = append(assignmentErrors, assignedEmployee.EmployeeName)
+		}
+	}
+
+	isVietnamese := detectUserLanguage(ctx.User)
+	var successMsg string
+	if len(taskRequest.AssignedToEmployees) > 0 {
+		assigneeNames := make([]string, len(taskRequest.AssignedToEmployees))
+		for i, emp := range taskRequest.AssignedToEmployees {
+			assigneeNames[i] = emp.EmployeeName
+		}
+		assigneesStr := strings.Join(assigneeNames, ", ")
+
+		if len(assignmentErrors) == 0 {
+			if isVietnamese {
+				successMsg = fmt.Sprintf("✅ Đã tạo task thành công: **%s** và phân công cho **%s**!", taskID, assigneesStr)
+			} else {
+				successMsg = fmt.Sprintf("✅ Successfully created task: **%s** and assigned to **%s**!", taskID, assigneesStr)
+			}
+		} else {
+			if isVietnamese {
+				successMsg = fmt.Sprintf("✅ Đã tạo task: **%s**. Phân công thành công cho **%s**. Lỗi phân công: **%s**.",
+					taskID, assigneesStr, strings.Join(assignmentErrors, ", "))
+			} else {
+				successMsg = fmt.Sprintf("✅ Created task: **%s**. Successfully assigned to **%s**. Assignment failed for: **%s**.",
+					taskID, assigneesStr, strings.Join(assignmentErrors, ", "))
+			}
+		}
+	} else {
+		if isVietnamese {
+			successMsg = fmt.Sprintf("✅ Đã tạo task thành công: **%s**!", taskID)
+		} else {
+			successMsg = fmt.Sprintf("✅ Successfully created task: **%s**!", taskID)
+		}
+	}
+
+	return &erp_modules.ModuleResponse{
+		Success:     true,
+		Message:     successMsg,
+		ActionTaken: "task_created",
+		Data: map[string]interface{}{
+			"task_id":            taskID,
+			"task_name":          taskRequest.Subject,
+			"assigned_employees": taskRequest.AssignedToEmployees,
+			"assignment_errors":  assignmentErrors,
+			"project":            taskRequest.Project,
+		},
+	}, nil
+}
+
 // Helper methods
 
 // cancelWorkflow cancels and cleans up a workflow
-func (we *WorkflowEngine) cancelWorkflow(userID string) {
+func (we *EnhancedWorkflowEngine) cancelWorkflow(userID string) {
 	delete(we.activeWorkflows, userID)
 }
 
-// markStepCompleted marks a step as completed
-func (we *WorkflowEngine) markStepCompleted(workflow *WorkflowState, step *WorkflowStep) {
-	step.Completed = true
-	workflow.LastModified = time.Now().UnixMilli()
-}
-
-// markCurrentStepCompleted marks current step as completed
-func (we *WorkflowEngine) markCurrentStepCompleted(workflow *WorkflowState) {
-	if workflow.CurrentStepIndex < len(workflow.Steps) {
-		workflow.Steps[workflow.CurrentStepIndex].Completed = true
-		workflow.LastModified = time.Now().UnixMilli()
-	}
-}
-
-// moveToNextStep moves to the next step
-func (we *WorkflowEngine) moveToNextStep(workflow *WorkflowState) {
-	workflow.CurrentStepIndex++
-}
-
-// moveToNextStepAndExecute moves to next step and executes it
-func (we *WorkflowEngine) moveToNextStepAndExecute(
+// handleSpecialCommands handles special workflow commands
+func (we *EnhancedWorkflowEngine) handleSpecialCommands(
 	ctx *erp_modules.ModuleContext,
-	workflow *WorkflowState,
-) (*erp_modules.ModuleResponse, error) {
-	we.moveToNextStep(workflow)
-	return we.executeCurrentStep(ctx, workflow)
-}
-
-// findFirstIncompleteStep finds the first incomplete step
-func (we *WorkflowEngine) findFirstIncompleteStep(workflow *WorkflowState) int {
-	for i, step := range workflow.Steps {
-		if !step.Completed {
-			return i
-		}
-	}
-	return len(workflow.Steps) // All completed
-}
-
-// findNextAvailableStep finds next step with met dependencies
-func (we *WorkflowEngine) findNextAvailableStep(workflow *WorkflowState) int {
-	for i := workflow.CurrentStepIndex; i < len(workflow.Steps); i++ {
-		step := &workflow.Steps[i]
-		if !step.Completed && we.areDependenciesMet(workflow, step) {
-			return i
-		}
-	}
-	return len(workflow.Steps) // No available step
-}
-
-// areDependenciesMet checks if step dependencies are met
-func (we *WorkflowEngine) areDependenciesMet(workflow *WorkflowState, step *WorkflowStep) bool {
-	for _, depID := range step.Dependencies {
-		found := false
-		for _, s := range workflow.Steps {
-			if s.ID == depID && s.Completed {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	return true
-}
-
-// canSkipCurrentStep checks if current step can be skipped
-func (we *WorkflowEngine) canSkipCurrentStep(workflow *WorkflowState) bool {
-	if workflow.CurrentStepIndex >= len(workflow.Steps) {
-		return false
-	}
-	step := &workflow.Steps[workflow.CurrentStepIndex]
-	return !step.Required
-}
-
-// resetIncompleteSteps resets all incomplete steps
-func (we *WorkflowEngine) resetIncompleteSteps(workflow *WorkflowState) {
-	for i := range workflow.Steps {
-		workflow.Steps[i].Completed = false
-		workflow.Steps[i].Data = make(map[string]interface{})
-	}
-	workflow.LastModified = time.Now().UnixMilli()
-}
-
-// getAllPreviousStepIDs gets all previous step IDs for dependencies
-func (we *WorkflowEngine) getAllPreviousStepIDs(workflow *WorkflowState) []string {
-	var deps []string
-	for _, step := range workflow.Steps {
-		if step.ID != "final_confirmation" {
-			deps = append(deps, step.ID)
-		}
-	}
-	return deps
-}
-
-// parseModificationRequest parses user modification request using LLM
-func (we *WorkflowEngine) parseModificationRequest(
-	ctx *erp_modules.ModuleContext,
-	workflow *WorkflowState,
+	workflow *EnhancedWorkflowState,
 	message string,
-) (map[string]interface{}, error) {
+) bool {
+	messageLower := strings.ToLower(strings.TrimSpace(message))
 
-	// Use existing LLM parsing logic with current data
-	response, err := we.module.parseConfirmationResponse(ctx, message, workflow.CompletedData)
-	if err != nil || response.Intent != "modify" {
-		return nil, err
+	switch messageLower {
+	case "cancel", "hủy", "stop", "dừng":
+		we.cancelWorkflow(ctx.User.Id)
+		return true
+	case "restart", "bắt đầu lại", "làm lại":
+		// Reset workflow to analysis phase
+		workflow.Phase = PhaseAnalysis
+		workflow.CurrentComponent = ""
+		workflow.ComponentAnalysis = nil
+		return true
 	}
 
-	return response.Modifications, nil
+	return false
 }
 
 // HasActiveWorkflow checks if user has active workflow
-func (we *WorkflowEngine) HasActiveWorkflow(userID string) bool {
+func (we *EnhancedWorkflowEngine) HasActiveWorkflow(userID string) bool {
 	_, exists := we.activeWorkflows[userID]
 	return exists
 }
 
 // GetActiveWorkflow gets active workflow for user
-func (we *WorkflowEngine) GetActiveWorkflow(userID string) (*WorkflowState, bool) {
+func (we *EnhancedWorkflowEngine) GetActiveWorkflow(userID string) (*EnhancedWorkflowState, bool) {
 	workflow, exists := we.activeWorkflows[userID]
 	return workflow, exists
 }

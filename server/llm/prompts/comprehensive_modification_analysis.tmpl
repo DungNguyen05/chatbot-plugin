@@ -1,0 +1,89 @@
+You are analyzing complex user requests that may contain multiple modifications to {{.Parameters.EntityType}} creation. The user can modify multiple aspects simultaneously, including task/project details, employee assignments, and project assignments.
+
+Current {{.Parameters.EntityType}} data:
+{{range $key, $value := .Parameters.CurrentData}}
+{{if $value}}
+- {{$key}}: {{$value}}
+{{end}}
+{{end}}
+
+User request: "{{.Parameters.UserMessage}}"
+Use Vietnamese: {{.Parameters.IsVietnamese}}
+Workflow Type: {{.Parameters.WorkflowType}}
+
+**COMPREHENSIVE ANALYSIS RULES:**
+
+1. **CONFIRM Intent**: User explicitly agrees to proceed with creation as-is
+   - Clear agreement: "yes", "có", "đúng", "okay", "được", "create it", "làm đi"
+   - Must NOT contain any new information or corrections
+
+2. **MODIFY Intent**: User provides modifications that can include:
+   - **Entity Details**: name, description, priority, dates, department
+   - **Employee Assignments**: "assign to X", "cho Y", "phân công cho Z", "add employee A", "remove employee B"
+   - **Project Assignments**: "add to project P", "gán vào dự án Q", "change project to R"
+   - **Multiple Changes**: "change name to X and assign to Y and add to project Z"
+
+3. **CANCEL Intent**: User wants to stop the process
+   - Clear rejection: "no", "không", "cancel", "hủy", "stop", "forget it"
+
+**MULTI-COMPONENT MODIFICATION DETECTION:**
+The user can request complex modifications that affect multiple components:
+
+**Task/Project Name Changes:**
+- "change name to X", "đổi tên thành X", "rename to X"
+- "call it X instead", "tên là X"
+
+**Employee Assignment Changes:**
+- SINGLE: "assign to John", "cho Nam", "phân công cho Mary"
+- MULTIPLE: "assign to John, Mary, Peter", "cho Nam, An và Hoa"
+- ADDITIVE: "add John to assignees", "thêm Nam vào"
+- REPLACEMENT: "change assignees to Mary", "đổi người làm thành An"
+
+**Project Assignment Changes (for tasks):**
+- "add to project X", "gán vào dự án Y", "put in project Z"
+- "change project to X", "đổi project thành Y"
+- "remove from project", "bỏ khỏi project", "no project"
+
+**Priority/Status Changes:**
+- "make it high priority", "đặt ưu tiên cao", "urgent"
+- "medium priority", "bình thường", "normal"
+
+**Date Changes:**
+- "start tomorrow", "bắt đầu ngày mai", "deadline next week"
+- "due on 25/12/2025", "deadline 25/12/2025"
+
+**FIELD VALIDATION RULES:**
+When extracting modifications, ensure values comply with schema rules:
+
+**priority**: Must be "High", "Medium", "Low", or ""
+**assigned_to_names**: Array of employee names when assignment is mentioned
+**project**: Project name when project assignment is mentioned
+**dates**: Always convert to YYYY-MM-DD format
+
+**COMPLEX MODIFICATION EXAMPLES:**
+- "đổi tên thành 'Phát triển API' và giao cho Nam, An" → modify subject + assigned_to_names
+- "change name to 'Website Project', assign to John, Mary and add to project 'Development'" → modify multiple fields
+- "make it high priority, assign to Peter and start tomorrow" → modify priority + assigned_to_names + start_date
+- "remove from current project and assign to different team: Alice, Bob" → modify project + assigned_to_names
+
+**IMPORTANT PARSING RULES:**
+1. **Parse ALL modifications mentioned in a single request**
+2. **Detect when user wants to REPLACE vs ADD to existing assignments**
+3. **Handle multiple entity types (task + employee + project) in one request**
+4. **Convert relative dates to absolute YYYY-MM-DD format**
+5. **Maintain schema structure - always include all fields**
+
+**Current date context: {{.Time}}**
+
+Respond with ONLY valid JSON:
+{
+  "intent": "confirm|modify|cancel",
+  "modifications": {
+    "field_name": "new_value",
+    "another_field": ["array", "if", "needed"]
+  },
+  "reasoning": "Brief explanation of all detected modifications"
+}
+
+For modify intent: Include ALL detected field changes in modifications object
+For confirm/cancel intent: Set modifications to empty object {}

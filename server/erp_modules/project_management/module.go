@@ -17,12 +17,12 @@ import (
 
 // ProjectManagementModule handles project and task management operations with unified workflow
 type ProjectManagementModule struct {
-	config         ProjectManagementConfig
-	erpClient      *ERPClient
-	api            PluginAPI
-	prompts        PromptsInterface
-	getLLM         func() llm.LanguageModel
-	workflowEngine *WorkflowEngine
+	config                 ProjectManagementConfig
+	erpClient              *ERPClient
+	api                    PluginAPI
+	prompts                PromptsInterface
+	getLLM                 func() llm.LanguageModel
+	enhancedWorkflowEngine *EnhancedWorkflowEngine
 }
 
 // NewProjectManagementModule creates a new project management module with workflow engine
@@ -50,8 +50,8 @@ func NewProjectManagementModule(
 		getLLM:    getLLM,
 	}
 
-	// Initialize workflow engine
-	module.workflowEngine = NewWorkflowEngine(module)
+	// Initialize enhanced workflow engine
+	module.enhancedWorkflowEngine = NewEnhancedWorkflowEngine(module)
 
 	return module
 }
@@ -81,17 +81,17 @@ func (m *ProjectManagementModule) ProcessUserMessage(ctx *erp_modules.ModuleCont
 	// Sanitize user input
 	message = sanitizeUserInput(message)
 
-	// Check if user has active workflow
-	if m.workflowEngine.HasActiveWorkflow(ctx.User.Id) {
-		m.api.LogDebug("Found active workflow for user", "user_id", ctx.User.Id)
-		return m.workflowEngine.ProcessWorkflowMessage(ctx, message)
+	// Check if user has active enhanced workflow
+	if m.enhancedWorkflowEngine.HasActiveWorkflow(ctx.User.Id) {
+		m.api.LogDebug("Found active enhanced workflow for user", "user_id", ctx.User.Id)
+		return m.enhancedWorkflowEngine.ProcessWorkflowMessage(ctx, message)
 	}
 
 	// No active workflow, not handling this message
 	return nil, nil
 }
 
-// Execute processes the project management intent and starts workflow
+// Execute processes the project management intent and starts enhanced workflow
 func (m *ProjectManagementModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
 	isVietnamese := detectUserLanguage(ctx.User)
 
@@ -116,7 +116,7 @@ func (m *ProjectManagementModule) Execute(ctx *erp_modules.ModuleContext, intent
 		creatorEmail = "demo@example.com"
 	}
 
-	// Execute specific action by starting workflow
+	// Execute specific action by starting enhanced workflow
 	switch intent.Action {
 	case "create_project":
 		return m.handleCreateProjectRequest(employeeID, creatorEmail, ctx, intent)
@@ -169,13 +169,13 @@ func (m *ProjectManagementModule) handleCreateProjectRequest(
 		}, nil
 	}
 
-	// Convert to map for workflow
+	// Convert to map for enhanced workflow
 	requestMap := make(map[string]interface{})
 	requestBytes, _ := json.Marshal(projectRequest)
 	json.Unmarshal(requestBytes, &requestMap)
 
-	// Start workflow
-	return m.workflowEngine.StartWorkflow(
+	// Start enhanced workflow
+	return m.enhancedWorkflowEngine.StartWorkflow(
 		ctx,
 		"create_project",
 		"project",
@@ -219,13 +219,13 @@ func (m *ProjectManagementModule) handleCreateTaskRequest(
 		}, nil
 	}
 
-	// Convert to map for workflow
+	// Convert to map for enhanced workflow
 	requestMap := make(map[string]interface{})
 	requestBytes, _ := json.Marshal(taskRequest)
 	json.Unmarshal(requestBytes, &requestMap)
 
-	// Start workflow
-	return m.workflowEngine.StartWorkflow(
+	// Start enhanced workflow
+	return m.enhancedWorkflowEngine.StartWorkflow(
 		ctx,
 		"create_task",
 		"task",
@@ -237,10 +237,10 @@ func (m *ProjectManagementModule) handleCreateTaskRequest(
 
 // GetDescription returns a description of what this module does
 func (m *ProjectManagementModule) GetDescription() string {
-	return "Quản lý dự án và công việc: tạo dự án mới, tạo task, phân công công việc cho nhiều nhân viên với luồng xử lý thông minh và có thể mở rộng"
+	return "Quản lý dự án và công việc: tạo dự án mới, tạo task, phân công công việc cho nhiều nhân viên với luồng xử lý thông minh và linh hoạt, hỗ trợ phân tích đa thành phần và xử lý modification phức tạp"
 }
 
-// GetActionExamples returns examples of user messages for each action
+// GetActionExamples returns examples of user messages for each action with enhanced capabilities
 func (m *ProjectManagementModule) GetActionExamples() map[string][]string {
 	return map[string][]string{
 		"create_project": {
@@ -259,6 +259,8 @@ func (m *ProjectManagementModule) GetActionExamples() map[string][]string {
 			"tạo dự án cho Minh, Nam và An",
 			"create project assign to John, Mary and Peter",
 			"tạo dự án phân công cho Nguyễn Văn An, Trần Thị Hoa",
+			"tạo dự án website giao cho Nam và gắn vào team Development",
+			"create urgent project for client ABC assign to John, Mary with high priority",
 		},
 		"create_task": {
 			"tạo task mới",
@@ -281,6 +283,8 @@ func (m *ProjectManagementModule) GetActionExamples() map[string][]string {
 			"create cleaning task assign to John, Tex, Lady",
 			"tạo task code API gắn vào project website",
 			"create task for project management system",
+			"tạo task urgent fix bug giao cho team QA gắn vào project Mobile App",
+			"create high priority task 'Database optimization' assign to Alice, Bob for project 'Backend Upgrade'",
 		},
 	}
 }
