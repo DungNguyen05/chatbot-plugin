@@ -1,0 +1,71 @@
+You are analyzing user responses to multi-employee selection requests. The user can choose employees using EITHER numbers OR specific names.
+
+User response: "{{.Parameters.UserMessage}}"
+Use Vietnamese: {{.Parameters.IsVietnamese}}
+Total available employees: {{.Parameters.TotalEmployeeCount}}
+
+Available employee options:
+{{range .Parameters.EmployeeOptions}}
+{{.index}}. **{{.name}}** ({{.email}}, {{.employee_id}}) - originally searched as "{{.original_name}}"
+{{end}}
+
+**ANALYSIS RULES:**
+
+1. **INDEX_SELECTION**: User provides one or more numbers referring to the list
+   - SINGLE: "5", "chọn 5", "select 3" → selected_indexes: [5] or [3]
+   - MULTIPLE: "1, 3, 5", "2,4", "1 và 3", "chọn 1, 2, 3" → selected_indexes: [1,3,5] or [2,4]
+   - Extract all index numbers (1-based) and set selected_names to empty array
+   
+2. **NAME_SELECTION**: User provides specific employee names
+   - SINGLE: "Phạm Tiến Đạt", "chọn Duy Anh", "select Trung Đức" → selected_names: ["Phạm Tiến Đạt"] or ["Duy Anh"] or ["Trung Đức"]
+   - MULTIPLE: "Phạm Tiến Đạt, Trung Đức", "Duy Anh và Anh Tài Phan" → selected_names: ["Phạm Tiến Đạt", "Trung Đức"] or ["Duy Anh", "Anh Tài Phan"]
+   - Extract all mentioned names and set selected_indexes to empty array
+   - Be flexible with name variations and partial matches
+   
+3. **CANCEL**: User wants to cancel the assignment
+   - Examples: "cancel", "none", "skip", "hủy", "không", "bỏ qua"
+
+**SELECTION PARSING PRIORITY:**
+1. First check if the response contains recognizable employee names from the list
+2. If names are found, classify as NAME_SELECTION
+3. If no names but numbers are found, classify as INDEX_SELECTION
+4. If neither, check for cancel intent
+
+**NAME EXTRACTION RULES:**
+- Look for ANY employee names mentioned in the response, even partial matches
+- Handle Vietnamese name variations (full names, first names, last names)
+- Examples from the list:
+  - "Phạm Tiến Đạt" or "Đạt" → match "Phạm Tiến Đạt"
+  - "Trung Đức" or "Đức" → match "Trung Đức"  
+  - "Duy Anh" or "Anh" (if context is clear) → match "Duy Anh"
+  - "Anh Tài Phan" or "Tài" → match "Anh Tài Phan"
+- Extract names as they appear in the employee list (full names preferred)
+
+**INDEX EXTRACTION RULES:**
+- Look for ANY numbers in the user's response (1, 2, 3, etc.)
+- Handle various separators: commas, spaces, "and", "và"
+- Be flexible with format:
+  - "1, 3, 5" → [1, 3, 5]
+  - "2 4 6" → [2, 4, 6]
+  - "chọn số 1, 3" → [1, 3]
+
+**IMPORTANT DECISION LOGIC:**
+- If user mentions specific names from the employee list → NAME_SELECTION
+- If user only mentions numbers without names → INDEX_SELECTION  
+- Mixed responses: prioritize the clearer intent
+
+**Response Examples:**
+- User: "5" → {"intent": "index_selection", "selected_indexes": [5], "selected_names": [], "reasoning": "User selected employee by index 5"}
+- User: "1, 3, 5" → {"intent": "index_selection", "selected_indexes": [1, 3, 5], "selected_names": [], "reasoning": "User selected employees by indexes 1, 3, and 5"}
+- User: "Phạm Tiến Đạt" → {"intent": "name_selection", "selected_indexes": [], "selected_names": ["Phạm Tiến Đạt"], "reasoning": "User selected employee by name"}
+- User: "Phạm Tiến Đạt, Trung Đức" → {"intent": "name_selection", "selected_indexes": [], "selected_names": ["Phạm Tiến Đạt", "Trung Đức"], "reasoning": "User selected employees by names"}
+- User: "chọn Duy Anh và Anh Tài Phan" → {"intent": "name_selection", "selected_indexes": [], "selected_names": ["Duy Anh", "Anh Tài Phan"], "reasoning": "User selected employees by names in Vietnamese"}
+- User: "cancel" → {"intent": "cancel", "selected_indexes": [], "selected_names": [], "reasoning": "User wants to cancel"}
+
+Respond with ONLY valid JSON:
+{
+  "intent": "index_selection|name_selection|cancel",
+  "selected_indexes": [],
+  "selected_names": [],
+  "reasoning": "Brief explanation of the analysis"
+}

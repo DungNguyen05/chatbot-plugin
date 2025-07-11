@@ -1,0 +1,74 @@
+You are analyzing user responses to entity (project/task) selection. The user can choose using EITHER numbers OR specific names OR create new.
+
+User response: "{{.Parameters.UserMessage}}"
+Entity type: {{.Parameters.EntityType}}
+Number of existing entities: {{.Parameters.EntityCount}}
+Use Vietnamese: {{.Parameters.IsVietnamese}}
+
+Available entity options:
+{{range .Parameters.EntityOptions}}
+{{.index}}. **{{.name}}** (ID: {{.id}}, Status: {{.status}})
+{{end}}
+
+**ANALYSIS RULES:**
+
+1. **INDEX_SELECTION**: User provides a number referring to the list
+   - Examples: "1", "2", "3", "chọn 1", "select 2"
+   - Extract the index number (1-based) and set selected_name to empty
+
+2. **NAME_SELECTION**: User provides specific entity name
+   - Examples: "Website Project", "API Development", "chọn dự án ABC"
+   - Extract the mentioned name and set selected_index to 0
+   - Be flexible with name variations and partial matches
+   - Look for entity names from the available options
+
+3. **CREATE_NEW**: User wants to create a new entity
+   {{if .Parameters.IsVietnamese}}
+   - Examples: "tạo mới", "tạo {{.Parameters.EntityType}} mới", "làm mới", "khởi tạo mới"
+   {{else}}
+   - Examples: "create new", "new", "make new", "create", "fresh"
+   {{end}}
+
+4. **CANCEL**: User wants to cancel
+   {{if .Parameters.IsVietnamese}}
+   - Examples: "hủy", "không", "cancel", "bỏ qua", "thôi"
+   {{else}}
+   - Examples: "cancel", "no", "stop", "abort", "quit"
+   {{end}}
+
+**SELECTION PARSING PRIORITY:**
+1. First check for create_new or cancel keywords
+2. Then check if the response contains recognizable entity names from the list
+3. If names are found, classify as NAME_SELECTION
+4. If no names but numbers are found, classify as INDEX_SELECTION
+
+**NAME EXTRACTION RULES:**
+- Look for ANY entity names mentioned in the response, even partial matches
+- Match against the available entity names in the options
+- Examples:
+  - If list contains "Website Development Project" and user says "Website Development" → match
+  - If list contains "API Integration Task" and user says "API" → match (if unique enough)
+- Extract the closest matching name from the available options
+
+**INDEX EXTRACTION RULES:**
+- Look for ANY single number in the user's response
+- Valid range: 1 to {{.Parameters.EntityCount}}
+- Examples: "1", "chọn 2", "select 3"
+
+**Response Examples:**
+- User: "1" → {"intent": "index_selection", "selected_index": 1, "selected_name": "", "reasoning": "User selected entity by index 1"}
+- User: "Website Project" → {"intent": "name_selection", "selected_index": 0, "selected_name": "Website Project", "reasoning": "User selected entity by name"}
+- User: "tạo mới" → {"intent": "create_new", "selected_index": 0, "selected_name": "", "reasoning": "User wants to create new entity"}
+- User: "hủy" → {"intent": "cancel", "selected_index": 0, "selected_name": "", "reasoning": "User wants to cancel"}
+
+Respond with ONLY valid JSON:
+{
+  "intent": "index_selection|name_selection|create_new|cancel",
+  "selected_index": 0,
+  "selected_name": "",
+  "reasoning": "Brief explanation of the analysis"
+}
+
+For index_selection: set selected_index to the number (1-based), selected_name to ""
+For name_selection: set selected_index to 0, selected_name to the matched entity name
+For create_new/cancel: set both selected_index to 0 and selected_name to ""

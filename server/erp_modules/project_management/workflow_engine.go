@@ -546,12 +546,11 @@ func (we *EnhancedWorkflowEngine) handleTaskDisambiguation(
 		return we.proceedToNextComponent(ctx, workflow)
 	}
 
-	// FIX: Properly reconstruct original entity types for display
+	// Reconstruct original entity types for display
 	var existingEntities []interface{}
 
 	if workflow.EntityType == "project" {
 		// For projects, reconstruct proper Project structs from stored Task data
-		// The issue was that project data was converted to Task format, losing ProjectName display
 		for _, task := range taskInfo.ExistingTasks {
 			project := Project{
 				Name:            task.Name,
@@ -560,9 +559,8 @@ func (we *EnhancedWorkflowEngine) handleTaskDisambiguation(
 				Priority:        task.Priority,
 				Department:      task.Department,
 				MatchConfidence: task.MatchConfidence,
-				// Add other fields that might be needed
-				Doctype:   "Project",
-				Docstatus: 1,
+				Doctype:         "Project",
+				Docstatus:       1,
 			}
 			existingEntities = append(existingEntities, project)
 		}
@@ -573,16 +571,16 @@ func (we *EnhancedWorkflowEngine) handleTaskDisambiguation(
 		}
 	}
 
-	// Generate disambiguation message
+	// Use ENHANCED disambiguation message generation
 	message, err := we.module.generateExistingEntityDisambiguationMessage(ctx, workflow.EntityType, existingEntities)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate task disambiguation message: %w", err)
+		return nil, fmt.Errorf("failed to generate enhanced task disambiguation message: %w", err)
 	}
 
 	return &erp_modules.ModuleResponse{
 		Success:     true,
 		Message:     message,
-		ActionTaken: "workflow_task_disambiguation",
+		ActionTaken: "workflow_enhanced_task_disambiguation",
 		Data: map[string]interface{}{
 			"workflow_active": true,
 			"component_type":  string(ComponentTypeTask),
@@ -603,13 +601,33 @@ func (we *EnhancedWorkflowEngine) processTaskDisambiguationResponse(
 		return nil, fmt.Errorf("missing task component info")
 	}
 
-	// Parse response
-	response, err := we.module.parseExistingEntityDisambiguationResponse(ctx, message, workflow.EntityType, len(taskInfo.ExistingTasks))
+	// Reconstruct existing entities for analysis
+	var existingEntities []interface{}
+	if workflow.EntityType == "project" {
+		for _, task := range taskInfo.ExistingTasks {
+			project := Project{
+				Name:            task.Name,
+				ProjectName:     task.Subject,
+				Status:          task.Status,
+				Priority:        task.Priority,
+				Department:      task.Department,
+				MatchConfidence: task.MatchConfidence,
+			}
+			existingEntities = append(existingEntities, project)
+		}
+	} else {
+		for _, task := range taskInfo.ExistingTasks {
+			existingEntities = append(existingEntities, task)
+		}
+	}
+
+	// Use ENHANCED disambiguation response parsing
+	response, err := we.module.parseEnhancedExistingEntityDisambiguationResponse(ctx, message, workflow.EntityType, existingEntities)
 	if err != nil {
 		isVietnamese := detectUserLanguage(ctx.User)
-		errorMsg := "⚠️ Không thể hiểu lựa chọn của bạn. Vui lòng trả lời 'tạo mới', số thứ tự, hoặc 'hủy'."
+		errorMsg := "⚠️ Không thể hiểu lựa chọn của bạn. Vui lòng trả lời số thứ tự (ví dụ: 1), tên cụ thể, 'tạo mới', hoặc 'hủy'."
 		if !isVietnamese {
-			errorMsg = "⚠️ Cannot understand your selection. Please reply 'create new', number, or 'cancel'."
+			errorMsg = "⚠️ Cannot understand your selection. Please reply with number (example: 1), specific name, 'create new', or 'cancel'."
 		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
@@ -623,7 +641,7 @@ func (we *EnhancedWorkflowEngine) processTaskDisambiguationResponse(
 		taskInfo.Action = "create_new"
 		return we.proceedToNextComponent(ctx, workflow)
 
-	case "use_existing":
+	case "index_selection":
 		if response.SelectedIndex < 1 || response.SelectedIndex > len(taskInfo.ExistingTasks) {
 			isVietnamese := detectUserLanguage(ctx.User)
 			errorMsg := "⚠️ Số thứ tự không hợp lệ."
@@ -638,6 +656,32 @@ func (we *EnhancedWorkflowEngine) processTaskDisambiguationResponse(
 
 		// Store selected existing entity for later use
 		selectedTask := taskInfo.ExistingTasks[response.SelectedIndex-1]
+		taskInfo.ResolutionData = map[string]interface{}{
+			"selected_existing_entity": selectedTask,
+			"action":                   "use_existing",
+		}
+		taskInfo.Status = StatusResolved
+		taskInfo.Action = "use_existing"
+
+		return we.proceedToNextComponent(ctx, workflow)
+
+	case "name_selection":
+		// Resolve entity by name
+		_, selectedIndex, err := we.module.resolveEntityByName(response.SelectedName, workflow.EntityType, existingEntities)
+		if err != nil {
+			isVietnamese := detectUserLanguage(ctx.User)
+			errorMsg := "⚠️ Không tìm thấy " + workflow.EntityType + " với tên: " + response.SelectedName
+			if !isVietnamese {
+				errorMsg = "⚠️ Could not find " + workflow.EntityType + " with name: " + response.SelectedName
+			}
+			return &erp_modules.ModuleResponse{
+				Success: false,
+				Message: errorMsg,
+			}, nil
+		}
+
+		// Store selected existing entity for later use
+		selectedTask := taskInfo.ExistingTasks[selectedIndex]
 		taskInfo.ResolutionData = map[string]interface{}{
 			"selected_existing_entity": selectedTask,
 			"action":                   "use_existing",
@@ -682,16 +726,16 @@ func (we *EnhancedWorkflowEngine) handleEmployeeDisambiguation(
 		RequiresDisambiguation:    true,
 	}
 
-	// Generate disambiguation message
+	// Use ENHANCED disambiguation message generation
 	message, err := we.module.generateMultiEmployeeDisambiguationMessage(ctx, assigneeResult)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate employee disambiguation message: %w", err)
+		return nil, fmt.Errorf("failed to generate enhanced employee disambiguation message: %w", err)
 	}
 
 	return &erp_modules.ModuleResponse{
 		Success:     true,
 		Message:     message,
-		ActionTaken: "workflow_employee_disambiguation",
+		ActionTaken: "workflow_enhanced_employee_disambiguation",
 		Data: map[string]interface{}{
 			"workflow_active":  true,
 			"component_type":   string(ComponentTypeEmployee),
@@ -713,13 +757,13 @@ func (we *EnhancedWorkflowEngine) processEmployeeDisambiguationResponse(
 		return nil, fmt.Errorf("missing employee component info")
 	}
 
-	// Parse disambiguation response
-	response, err := we.module.parseMultiEmployeeDisambiguationResponse(ctx, message, employeeInfo.UnresolvedMatches)
+	// Use ENHANCED disambiguation response parsing
+	response, err := we.module.parseEnhancedMultiEmployeeDisambiguationResponse(ctx, message, employeeInfo.UnresolvedMatches)
 	if err != nil {
 		isVietnamese := detectUserLanguage(ctx.User)
-		errorMsg := "⚠️ Không thể hiểu lựa chọn của bạn. Vui lòng chọn bằng số thứ tự (ví dụ: 1, 3, 5)."
+		errorMsg := "⚠️ Không thể hiểu lựa chọn của bạn. Vui lòng chọn bằng số thứ tự (ví dụ: 1, 3, 5) hoặc tên cụ thể (ví dụ: Phạm Tiến Đạt, Trung Đức)."
 		if !isVietnamese {
-			errorMsg = "⚠️ Cannot understand your selection. Please choose by numbers (example: 1, 3, 5)."
+			errorMsg = "⚠️ Cannot understand your selection. Please choose by numbers (example: 1, 3, 5) or specific names (example: Phạm Tiến Đạt, Trung Đức)."
 		}
 		return &erp_modules.ModuleResponse{
 			Success: false,
@@ -741,7 +785,7 @@ func (we *EnhancedWorkflowEngine) processEmployeeDisambiguationResponse(
 			}, nil
 		}
 
-		// Resolve selected employees
+		// Resolve selected employees by indexes
 		selectedEmployees, err := we.module.resolveDisambiguatedEmployees(employeeInfo.UnresolvedMatches, response.SelectedIndexes)
 		if err != nil {
 			isVietnamese := detectUserLanguage(ctx.User)
@@ -753,6 +797,52 @@ func (we *EnhancedWorkflowEngine) processEmployeeDisambiguationResponse(
 				Success: false,
 				Message: errorMsg,
 			}, nil
+		}
+
+		// Combine with previously resolved employees
+		allResolvedEmployees := append(employeeInfo.ResolvedEmployees, selectedEmployees...)
+		employeeInfo.ResolvedEmployees = allResolvedEmployees
+		employeeInfo.Status = StatusResolved
+
+		// Update completed data
+		workflow.CompletedData["assigned_to_employees"] = allResolvedEmployees
+
+		return we.proceedToNextComponent(ctx, workflow)
+
+	case "name_selection":
+		if len(response.SelectedNames) == 0 {
+			isVietnamese := detectUserLanguage(ctx.User)
+			errorMsg := "⚠️ Vui lòng chọn ít nhất một nhân viên."
+			if !isVietnamese {
+				errorMsg = "⚠️ Please select at least one employee."
+			}
+			return &erp_modules.ModuleResponse{
+				Success: false,
+				Message: errorMsg,
+			}, nil
+		}
+
+		// Resolve selected employees by names
+		selectedEmployees, err := we.module.resolveEmployeesByNames(employeeInfo.UnresolvedMatches, response.SelectedNames)
+		if err != nil {
+			isVietnamese := detectUserLanguage(ctx.User)
+			errorMsg := "⚠️ Có lỗi xảy ra khi xử lý lựa chọn nhân viên: " + err.Error()
+			if !isVietnamese {
+				errorMsg = "⚠️ An error occurred while processing employee selection: " + err.Error()
+			}
+			return &erp_modules.ModuleResponse{
+				Success: false,
+				Message: errorMsg,
+			}, nil
+		}
+
+		// Check if we need further disambiguation for the resolved names
+		if len(selectedEmployees) < len(response.SelectedNames) {
+			// Some names couldn't be resolved - might need further clarification
+			// For now, proceed with what we could resolve
+			we.module.api.LogWarn("Some employee names could not be resolved",
+				"requested_count", len(response.SelectedNames),
+				"resolved_count", len(selectedEmployees))
 		}
 
 		// Combine with previously resolved employees

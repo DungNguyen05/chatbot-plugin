@@ -87,9 +87,9 @@ func (m *ProjectManagementModule) generateMultiEmployeeDisambiguationMessage(ctx
 
 	// Show employees that need disambiguation
 	if isVietnamese {
-		message.WriteString(" **Cần làm rõ cho các nhân viên sau:**\n\n")
+		message.WriteString("**Cần làm rõ cho các nhân viên sau:**\n\n")
 	} else {
-		message.WriteString(" **Need clarification for the following employees:**\n\n")
+		message.WriteString("**Need clarification for the following employees:**\n\n")
 	}
 
 	globalIndex := 1
@@ -111,12 +111,25 @@ func (m *ProjectManagementModule) generateMultiEmployeeDisambiguationMessage(ctx
 		message.WriteString("\n")
 	}
 
+	// Enhanced selection instructions
 	if isVietnamese {
-		message.WriteString("Vui lòng chọn nhân viên bằng cách trả lời các số thứ tự tương ứng.\n")
-		message.WriteString("**Ví dụ:** `1, 3, 5` để chọn nhân viên thứ 1, 3 và 5.")
+		message.WriteString("**Bạn có thể chọn nhân viên bằng 2 cách:**\n\n")
+		message.WriteString("**1. Chọn bằng số thứ tự:**\n")
+		message.WriteString("   - Ví dụ: `1, 3, 5` để chọn nhân viên thứ 1, 3 và 5\n")
+		message.WriteString("   - Ví dụ: `2, 7` để chọn nhân viên thứ 2 và 7\n\n")
+		message.WriteString("**2. Chọn bằng tên cụ thể:**\n")
+		message.WriteString("   - Ví dụ: `Phạm Tiến Đạt, Trung Đức` để chọn các nhân viên này\n")
+		message.WriteString("   - Ví dụ: `Duy Anh, Anh Tài Phan` để chọn các nhân viên này\n\n")
+		message.WriteString("Hoặc trả lời `hủy` để hủy bỏ yêu cầu.")
 	} else {
-		message.WriteString("Please select employees by replying with the corresponding numbers.\n")
-		message.WriteString("**Example:** `1, 3, 5` to select employees 1, 3, and 5.")
+		message.WriteString("**You can select employees in 2 ways:**\n\n")
+		message.WriteString("**1. Select by numbers:**\n")
+		message.WriteString("   - Example: `1, 3, 5` to select employees 1, 3, and 5\n")
+		message.WriteString("   - Example: `2, 7` to select employees 2 and 7\n\n")
+		message.WriteString("**2. Select by specific names:**\n")
+		message.WriteString("   - Example: `Phạm Tiến Đạt, Trung Đức` to select these employees\n")
+		message.WriteString("   - Example: `Duy Anh, Anh Tài Phan` to select these employees\n\n")
+		message.WriteString("Or reply `cancel` to cancel the request.")
 	}
 
 	return message.String(), nil
@@ -124,64 +137,33 @@ func (m *ProjectManagementModule) generateMultiEmployeeDisambiguationMessage(ctx
 
 // parseMultiEmployeeDisambiguationResponse parses user response to multi-employee selection using LLM
 func (m *ProjectManagementModule) parseMultiEmployeeDisambiguationResponse(ctx *erp_modules.ModuleContext, message string, unresolvedMatches []UnresolvedEmployeeMatch) (*MultiEmployeeDisambiguationResponse, error) {
-	// Create LLM context
-	llmContext := &llm.Context{
-		RequestingUser: ctx.User,
-		Time:           time.Now().Format(time.RFC1123),
-	}
-
-	// Detect user language
-	isVietnamese := detectUserLanguage(ctx.User)
-
-	llmContext.Parameters = map[string]interface{}{
-		"UserMessage":               message,
-		"UnresolvedEmployeeMatches": unresolvedMatches,
-		"IsVietnamese":              isVietnamese,
-	}
-
-	// Format the disambiguation analysis prompt
-	systemPrompt, err := m.prompts.Format("employee_disambiguation_analysis", llmContext)
+	// Use enhanced parsing
+	enhancedResponse, err := m.parseEnhancedMultiEmployeeDisambiguationResponse(ctx, message, unresolvedMatches)
 	if err != nil {
-		return nil, fmt.Errorf("failed to format multi-employee disambiguation prompt: %w", err)
+		return nil, err
 	}
 
-	// Create completion request
-	completionRequest := llm.CompletionRequest{
-		Posts: []llm.Post{
-			{
-				Role:    llm.PostRoleSystem,
-				Message: systemPrompt,
-			},
-			{
-				Role:    llm.PostRoleUser,
-				Message: message,
-			},
-		},
-		Context: llmContext,
+	// Convert to old format for backward compatibility
+	oldResponse := &MultiEmployeeDisambiguationResponse{
+		Intent:    enhancedResponse.Intent,
+		Reasoning: enhancedResponse.Reasoning,
 	}
 
-	// Get LLM response
-	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(200))
-	if err != nil {
-		return nil, fmt.Errorf("failed to analyze multi-employee disambiguation with LLM: %w", err)
+	// Handle different intents
+	switch enhancedResponse.Intent {
+	case "index_selection":
+		oldResponse.SelectedIndexes = enhancedResponse.SelectedIndexes
+	case "name_selection":
+		// For name selection, we need to resolve names to indexes
+		// This is handled by the new resolveEmployeesByNames method
+		oldResponse.Intent = "index_selection" // Convert to index selection for compatibility
+		// The actual resolution will be handled in the workflow engine
+	case "cancel":
+		oldResponse.Intent = "cancel"
+		oldResponse.SelectedIndexes = []int{}
 	}
 
-	// Parse JSON response
-	var disambiguationResponse MultiEmployeeDisambiguationResponse
-	response = strings.TrimSpace(response)
-	start := strings.Index(response, "{")
-	end := strings.LastIndex(response, "}") + 1
-
-	if start == -1 || end <= start {
-		return nil, fmt.Errorf("no valid JSON found in LLM response: %s", response)
-	}
-
-	jsonStr := response[start:end]
-	if err := json.Unmarshal([]byte(jsonStr), &disambiguationResponse); err != nil {
-		return nil, fmt.Errorf("failed to parse LLM disambiguation response as JSON: %w", err)
-	}
-
-	return &disambiguationResponse, nil
+	return oldResponse, nil
 }
 
 // analyzeProjectCreation uses LLM to extract project details with multi-employee support
