@@ -224,8 +224,8 @@ func (we *EnhancedWorkflowEngine) analyzeTaskComponent(
 		} else {
 			taskInfo.Action = "create_new"
 		}
-	} else {
-		// For projects, similar logic
+	} else if workflow.EntityType == "project" {
+		// FIX: For projects, search projects and convert to Task format while preserving project name
 		projects, err := we.module.erpClient.SearchProjectsByName(taskName)
 		if err == nil {
 			var highConfidenceProjects []Project
@@ -235,15 +235,16 @@ func (we *EnhancedWorkflowEngine) analyzeTaskComponent(
 				}
 			}
 			if len(highConfidenceProjects) > 0 {
-				// Convert to Task format for consistent handling
+				// Convert to Task format but preserve project name in Subject field
 				for _, project := range highConfidenceProjects {
 					task := Task{
 						Name:            project.Name,
-						Subject:         project.ProjectName,
+						Subject:         project.ProjectName, // IMPORTANT: Store project name in Subject
 						Status:          project.Status,
 						Priority:        project.Priority,
 						Department:      project.Department,
 						MatchConfidence: project.MatchConfidence,
+						Doctype:         "Task", // Mark as converted for internal tracking
 					}
 					taskInfo.ExistingTasks = append(taskInfo.ExistingTasks, task)
 				}
@@ -545,23 +546,23 @@ func (we *EnhancedWorkflowEngine) handleTaskDisambiguation(
 		return we.proceedToNextComponent(ctx, workflow)
 	}
 
-	// Convert Task to interface{} for generateExistingEntityDisambiguationMessage
-	// FIX: Don't convert - use the original data type for proper display
+	// FIX: Properly reconstruct original entity types for display
 	var existingEntities []interface{}
 
-	// If this is for projects, we should preserve the original Project structs
 	if workflow.EntityType == "project" {
-		// Get the original projects from the analysis
-		// We need to reconstruct the original Project structs from the Task structs
+		// For projects, reconstruct proper Project structs from stored Task data
+		// The issue was that project data was converted to Task format, losing ProjectName display
 		for _, task := range taskInfo.ExistingTasks {
-			// Convert back to Project format for proper display
 			project := Project{
 				Name:            task.Name,
-				ProjectName:     task.Subject, // This should have the project name
+				ProjectName:     task.Subject, // Task.Subject contains the original project name
 				Status:          task.Status,
 				Priority:        task.Priority,
 				Department:      task.Department,
 				MatchConfidence: task.MatchConfidence,
+				// Add other fields that might be needed
+				Doctype:   "Project",
+				Docstatus: 1,
 			}
 			existingEntities = append(existingEntities, project)
 		}
@@ -1099,16 +1100,25 @@ func (we *EnhancedWorkflowEngine) generateExistingEntityAssignmentConfirmation(
 	var message strings.Builder
 	var entityName, entityID string
 
-	// Extract entity information
+	// FIX: Better extraction of entity information
 	if workflow.EntityType == "project" {
+		// Try to extract from Project struct first
 		if entityBytes, err := json.Marshal(existingEntity); err == nil {
 			var project Project
-			if json.Unmarshal(entityBytes, &project) == nil {
+			if json.Unmarshal(entityBytes, &project) == nil && project.ProjectName != "" {
 				entityName = project.ProjectName
 				entityID = project.Name
+			} else {
+				// Fallback: try Task struct (converted project)
+				var task Task
+				if json.Unmarshal(entityBytes, &task) == nil && task.Subject != "" {
+					entityName = task.Subject // Subject contains project name for converted projects
+					entityID = task.Name
+				}
 			}
 		}
 	} else {
+		// For tasks
 		if entityBytes, err := json.Marshal(existingEntity); err == nil {
 			var task Task
 			if json.Unmarshal(entityBytes, &task) == nil {
@@ -1116,6 +1126,14 @@ func (we *EnhancedWorkflowEngine) generateExistingEntityAssignmentConfirmation(
 				entityID = task.Name
 			}
 		}
+	}
+
+	// FIX: Ensure we have a name to display
+	if entityName == "" {
+		entityName = "[Unknown Name]"
+	}
+	if entityID == "" {
+		entityID = "[Unknown ID]"
 	}
 
 	if isVietnamese {
@@ -1253,17 +1271,26 @@ func (we *EnhancedWorkflowEngine) executeExistingEntityAssignment(
 		assignedEmployees = employees
 	}
 
-	// Get entity information
+	// FIX: Better entity information extraction
 	var entityID, entityName string
 	if workflow.EntityType == "project" {
+		// Try Project struct first
 		if entityBytes, err := json.Marshal(existingEntity); err == nil {
 			var project Project
-			if json.Unmarshal(entityBytes, &project) == nil {
+			if json.Unmarshal(entityBytes, &project) == nil && project.ProjectName != "" {
 				entityID = project.Name
 				entityName = project.ProjectName
+			} else {
+				// Fallback: try Task struct (converted project)
+				var task Task
+				if json.Unmarshal(entityBytes, &task) == nil {
+					entityID = task.Name
+					entityName = task.Subject // Subject contains project name
+				}
 			}
 		}
 	} else {
+		// For tasks
 		if entityBytes, err := json.Marshal(existingEntity); err == nil {
 			var task Task
 			if json.Unmarshal(entityBytes, &task) == nil {
@@ -1271,6 +1298,14 @@ func (we *EnhancedWorkflowEngine) executeExistingEntityAssignment(
 				entityName = task.Subject
 			}
 		}
+	}
+
+	// FIX: Ensure we have names to display
+	if entityName == "" {
+		entityName = "[Unknown Name]"
+	}
+	if entityID == "" {
+		entityID = "[Unknown ID]"
 	}
 
 	if len(assignedEmployees) == 0 {
@@ -1338,6 +1373,7 @@ func (we *EnhancedWorkflowEngine) executeExistingEntityAssignment(
 	if len(assignmentErrors) == 0 {
 		if isVietnamese {
 			if workflow.EntityType == "project" {
+				// FIX: This is where the original bug was - entityName was empty
 				successMsg = fmt.Sprintf("Đã phân công dự án có sẵn **%s** cho **%s**!", entityName, assigneesStr)
 			} else {
 				successMsg = fmt.Sprintf("Đã phân công task có sẵn **%s** cho **%s**!", entityName, assigneesStr)
