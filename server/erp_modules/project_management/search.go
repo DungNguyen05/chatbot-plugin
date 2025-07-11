@@ -350,6 +350,41 @@ func calculateFuzzyMatch(s1, s2 string) float64 {
 	return 0
 }
 
+// calculateNameSimilarity calculates similarity between two names
+func calculateNameSimilarity(name1, name2 string) float64 {
+	name1 = strings.ToLower(strings.TrimSpace(name1))
+	name2 = strings.ToLower(strings.TrimSpace(name2))
+
+	if name1 == name2 {
+		return 1.0
+	}
+
+	// Check if one name contains the other
+	if strings.Contains(name2, name1) || strings.Contains(name1, name2) {
+		return 0.9
+	}
+
+	// Check word-by-word similarity
+	words1 := strings.Fields(name1)
+	words2 := strings.Fields(name2)
+
+	if len(words1) == 0 || len(words2) == 0 {
+		return 0.0
+	}
+
+	var matchCount float64
+	for _, word1 := range words1 {
+		for _, word2 := range words2 {
+			if strings.Contains(word2, word1) || strings.Contains(word1, word2) {
+				matchCount++
+				break
+			}
+		}
+	}
+
+	return matchCount / float64(len(words1))
+}
+
 // Helper function for minimum of 3 integers
 func minInt(a, b, c int) int {
 	if a <= b && a <= c {

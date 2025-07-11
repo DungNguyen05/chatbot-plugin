@@ -708,6 +708,101 @@ func (we *EnhancedWorkflowEngine) processTaskDisambiguationResponse(
 	return nil, fmt.Errorf("unhandled intent: %s", response.Intent)
 }
 
+// resolveEntityByName resolves entity from name-based selection
+func (m *ProjectManagementModule) resolveEntityByName(
+	selectedName, entityType string,
+	existingEntities []interface{},
+) (interface{}, int, error) {
+	selectedName = strings.TrimSpace(selectedName)
+	if selectedName == "" {
+		return nil, -1, fmt.Errorf("selected name cannot be empty")
+	}
+
+	// Try exact match first
+	for i, entity := range existingEntities {
+		var entityName string
+
+		if entityType == "project" {
+			if projectBytes, err := json.Marshal(entity); err == nil {
+				var project Project
+				if json.Unmarshal(projectBytes, &project) == nil && project.ProjectName != "" {
+					entityName = project.ProjectName
+				} else {
+					var task Task
+					if json.Unmarshal(projectBytes, &task) == nil && task.Subject != "" {
+						entityName = task.Subject
+					}
+				}
+			}
+		} else {
+			if taskBytes, err := json.Marshal(entity); err == nil {
+				var task Task
+				if json.Unmarshal(taskBytes, &task) == nil && task.Subject != "" {
+					entityName = task.Subject
+				}
+			}
+		}
+
+		// Exact match
+		if strings.EqualFold(entityName, selectedName) {
+			m.api.LogInfo("Entity resolved by exact name match",
+				"selected_name", selectedName,
+				"entity_name", entityName,
+				"entity_type", entityType,
+				"index", i+1)
+			return entity, i, nil
+		}
+	}
+
+	// Try fuzzy matching if exact match fails
+	bestMatch := -1
+	bestScore := 0.0
+	var bestEntity interface{}
+
+	for i, entity := range existingEntities {
+		var entityName string
+
+		if entityType == "project" {
+			if projectBytes, err := json.Marshal(entity); err == nil {
+				var project Project
+				if json.Unmarshal(projectBytes, &project) == nil && project.ProjectName != "" {
+					entityName = project.ProjectName
+				} else {
+					var task Task
+					if json.Unmarshal(projectBytes, &task) == nil && task.Subject != "" {
+						entityName = task.Subject
+					}
+				}
+			}
+		} else {
+			if taskBytes, err := json.Marshal(entity); err == nil {
+				var task Task
+				if json.Unmarshal(taskBytes, &task) == nil && task.Subject != "" {
+					entityName = task.Subject
+				}
+			}
+		}
+
+		score := calculateNameSimilarity(selectedName, entityName)
+		if score > bestScore && score >= 0.7 { // 70% similarity threshold
+			bestScore = score
+			bestMatch = i
+			bestEntity = entity
+		}
+	}
+
+	if bestMatch >= 0 {
+		m.api.LogInfo("Entity resolved by fuzzy name matching",
+			"selected_name", selectedName,
+			"entity_type", entityType,
+			"similarity_score", bestScore,
+			"index", bestMatch+1)
+		return bestEntity, bestMatch, nil
+	}
+
+	return nil, -1, fmt.Errorf("no entity found matching name: %s", selectedName)
+}
+
 // handleEmployeeDisambiguation handles employee disambiguation
 func (we *EnhancedWorkflowEngine) handleEmployeeDisambiguation(
 	ctx *erp_modules.ModuleContext,
@@ -870,6 +965,110 @@ func (we *EnhancedWorkflowEngine) processEmployeeDisambiguationResponse(
 	}
 
 	return nil, fmt.Errorf("unhandled intent: %s", response.Intent)
+}
+
+// resolveEmployeesByNames resolves employees from name-based selection
+func (m *ProjectManagementModule) resolveEmployeesByNames(
+	unresolvedMatches []UnresolvedEmployeeMatch,
+	selectedNames []string,
+) ([]AssignedEmployee, error) {
+	var resolvedEmployees []AssignedEmployee
+
+	// Create a map of all available employees for easy lookup
+	employeeByName := make(map[string]Employee)
+	employeeByOriginalName := make(map[string]string) // Maps employee name to original search name
+
+	for _, unresolvedMatch := range unresolvedMatches {
+		for _, emp := range unresolvedMatch.MatchingEmployees {
+			employeeByName[emp.EmployeeName] = emp
+			employeeByOriginalName[emp.EmployeeName] = unresolvedMatch.OriginalName
+		}
+	}
+
+	// Track which employees we've already added to avoid duplicates
+	addedEmployees := make(map[string]bool)
+
+	// Resolve each selected name
+	for _, selectedName := range selectedNames {
+		selectedName = strings.TrimSpace(selectedName)
+		if selectedName == "" {
+			continue
+		}
+
+		// Try exact match first
+		if emp, exists := employeeByName[selectedName]; exists {
+			if addedEmployees[emp.Name] {
+				m.api.LogInfo("Skipping duplicate employee selection by name",
+					"employee_name", emp.EmployeeName,
+					"employee_id", emp.Name)
+				continue
+			}
+
+			originalName := employeeByOriginalName[emp.EmployeeName]
+			resolvedEmployees = append(resolvedEmployees, AssignedEmployee{
+				EmployeeID:   emp.Name,
+				EmployeeName: emp.EmployeeName,
+				Email:        emp.CompanyEmail,
+				OriginalName: originalName,
+			})
+
+			addedEmployees[emp.Name] = true
+
+			m.api.LogInfo("Employee resolved by name",
+				"selected_name", selectedName,
+				"employee_id", emp.Name,
+				"employee_name", emp.EmployeeName,
+				"original_name", originalName)
+		} else {
+			// Try fuzzy matching if exact match fails
+			var bestMatch Employee
+			var bestMatchOriginal string
+			bestScore := 0.0
+
+			for _, unresolvedMatch := range unresolvedMatches {
+				for _, emp := range unresolvedMatch.MatchingEmployees {
+					score := calculateNameSimilarity(selectedName, emp.EmployeeName)
+					if score > bestScore && score >= 0.7 { // 70% similarity threshold
+						bestScore = score
+						bestMatch = emp
+						bestMatchOriginal = unresolvedMatch.OriginalName
+					}
+				}
+			}
+
+			if bestScore >= 0.7 && !addedEmployees[bestMatch.Name] {
+				resolvedEmployees = append(resolvedEmployees, AssignedEmployee{
+					EmployeeID:   bestMatch.Name,
+					EmployeeName: bestMatch.EmployeeName,
+					Email:        bestMatch.CompanyEmail,
+					OriginalName: bestMatchOriginal,
+				})
+
+				addedEmployees[bestMatch.Name] = true
+
+				m.api.LogInfo("Employee resolved by fuzzy name matching",
+					"selected_name", selectedName,
+					"matched_name", bestMatch.EmployeeName,
+					"employee_id", bestMatch.Name,
+					"similarity_score", bestScore,
+					"original_name", bestMatchOriginal)
+			} else {
+				m.api.LogWarn("Could not resolve employee by name",
+					"selected_name", selectedName,
+					"best_score", bestScore)
+			}
+		}
+	}
+
+	if len(resolvedEmployees) == 0 {
+		return nil, fmt.Errorf("no valid employees were resolved from the selected names")
+	}
+
+	m.api.LogInfo("Successfully resolved employees by names",
+		"total_selected", len(resolvedEmployees),
+		"input_names_count", len(selectedNames))
+
+	return resolvedEmployees, nil
 }
 
 // handleProjectDisambiguation handles project disambiguation
