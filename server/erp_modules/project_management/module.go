@@ -326,15 +326,15 @@ func (m *ProjectManagementModule) generateExistingEntityDisambiguationMessage(
 
 	if isVietnamese {
 		if entityType == "project" {
-			message.WriteString("🔍 **Tìm thấy dự án tương tự:**\n\n")
+			message.WriteString("**Tìm thấy dự án tương tự:**\n\n")
 		} else {
-			message.WriteString("🔍 **Tìm thấy task tương tự:**\n\n")
+			message.WriteString("**Tìm thấy task tương tự:**\n\n")
 		}
 	} else {
 		if entityType == "project" {
-			message.WriteString("🔍 **Found similar projects:**\n\n")
+			message.WriteString("**Found similar projects:**\n\n")
 		} else {
-			message.WriteString("🔍 **Found similar tasks:**\n\n")
+			message.WriteString("**Found similar tasks:**\n\n")
 		}
 	}
 
@@ -404,9 +404,9 @@ func (m *ProjectManagementModule) generateProjectTaskDisambiguationMessage(
 	var message strings.Builder
 
 	if isVietnamese {
-		message.WriteString("🔍 **Tìm thấy nhiều dự án phù hợp:**\n\n")
+		message.WriteString("**Tìm thấy nhiều dự án phù hợp:**\n\n")
 	} else {
-		message.WriteString("🔍 **Found multiple matching projects:**\n\n")
+		message.WriteString("**Found multiple matching projects:**\n\n")
 	}
 
 	// List matching projects

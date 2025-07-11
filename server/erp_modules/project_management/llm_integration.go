@@ -75,9 +75,9 @@ func (m *ProjectManagementModule) generateMultiEmployeeDisambiguationMessage(ctx
 	// Show successfully resolved employees if any
 	if len(assigneeResult.ResolvedEmployees) > 0 {
 		if isVietnamese {
-			message.WriteString("✅ **Đã xác định thành công:**\n")
+			message.WriteString("**Đã xác định thành công:**\n")
 		} else {
-			message.WriteString("✅ **Successfully identified:**\n")
+			message.WriteString("**Successfully identified:**\n")
 		}
 		for _, emp := range assigneeResult.ResolvedEmployees {
 			message.WriteString(fmt.Sprintf("- **%s** (%s)\n", emp.EmployeeName, emp.Email))
@@ -87,9 +87,9 @@ func (m *ProjectManagementModule) generateMultiEmployeeDisambiguationMessage(ctx
 
 	// Show employees that need disambiguation
 	if isVietnamese {
-		message.WriteString("❓ **Cần làm rõ cho các nhân viên sau:**\n\n")
+		message.WriteString(" **Cần làm rõ cho các nhân viên sau:**\n\n")
 	} else {
-		message.WriteString("❓ **Need clarification for the following employees:**\n\n")
+		message.WriteString(" **Need clarification for the following employees:**\n\n")
 	}
 
 	globalIndex := 1

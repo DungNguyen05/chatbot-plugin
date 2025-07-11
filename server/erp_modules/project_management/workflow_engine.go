@@ -628,9 +628,9 @@ func (we *EnhancedWorkflowEngine) processTaskDisambiguationResponse(
 	case "cancel":
 		we.cancelWorkflow(ctx.User.Id)
 		isVietnamese := detectUserLanguage(ctx.User)
-		cancelMsg := "✅ Đã hủy bỏ yêu cầu."
+		cancelMsg := "Đã hủy bỏ yêu cầu."
 		if !isVietnamese {
-			cancelMsg = "✅ Request cancelled."
+			cancelMsg = "Request cancelled."
 		}
 		return &erp_modules.ModuleResponse{
 			Success:     true,
@@ -746,9 +746,9 @@ func (we *EnhancedWorkflowEngine) processEmployeeDisambiguationResponse(
 	case "cancel":
 		we.cancelWorkflow(ctx.User.Id)
 		isVietnamese := detectUserLanguage(ctx.User)
-		cancelMsg := "✅ Đã hủy bỏ yêu cầu."
+		cancelMsg := "Đã hủy bỏ yêu cầu."
 		if !isVietnamese {
-			cancelMsg = "✅ Request cancelled."
+			cancelMsg = "Request cancelled."
 		}
 		return &erp_modules.ModuleResponse{
 			Success:     true,
@@ -848,9 +848,9 @@ func (we *EnhancedWorkflowEngine) processProjectDisambiguationResponse(
 	case "cancel":
 		we.cancelWorkflow(ctx.User.Id)
 		isVietnamese := detectUserLanguage(ctx.User)
-		cancelMsg := "✅ Đã hủy bỏ yêu cầu."
+		cancelMsg := "Đã hủy bỏ yêu cầu."
 		if !isVietnamese {
-			cancelMsg = "✅ Request cancelled."
+			cancelMsg = "Request cancelled."
 		}
 		return &erp_modules.ModuleResponse{
 			Success:     true,
@@ -969,15 +969,15 @@ func (we *EnhancedWorkflowEngine) generateComprehensiveConfirmation(
 	// Regular new entity creation confirmation
 	if isVietnamese {
 		if workflow.EntityType == "project" {
-			message.WriteString("📋 **Xác nhận thông tin dự án mới:**\n\n")
+			message.WriteString("**Xác nhận thông tin dự án mới:**\n\n")
 		} else {
-			message.WriteString("📋 **Xác nhận thông tin task mới:**\n\n")
+			message.WriteString("**Xác nhận thông tin task mới:**\n\n")
 		}
 	} else {
 		if workflow.EntityType == "project" {
-			message.WriteString("📋 **Confirm New Project Information:**\n\n")
+			message.WriteString("**Confirm New Project Information:**\n\n")
 		} else {
-			message.WriteString("📋 **Confirm New Task Information:**\n\n")
+			message.WriteString("**Confirm New Task Information:**\n\n")
 		}
 	}
 
@@ -1107,18 +1107,18 @@ func (we *EnhancedWorkflowEngine) generateExistingEntityAssignmentConfirmation(
 
 	if isVietnamese {
 		if workflow.EntityType == "project" {
-			message.WriteString("🔗 **Xác nhận phân công dự án hiện có:**\n\n")
+			message.WriteString("**Xác nhận phân công dự án hiện có:**\n\n")
 			message.WriteString(fmt.Sprintf("• **Dự án:** %s (ID: %s)\n", entityName, entityID))
 		} else {
-			message.WriteString("🔗 **Xác nhận phân công task hiện có:**\n\n")
+			message.WriteString("**Xác nhận phân công task hiện có:**\n\n")
 			message.WriteString(fmt.Sprintf("• **Task:** %s (ID: %s)\n", entityName, entityID))
 		}
 	} else {
 		if workflow.EntityType == "project" {
-			message.WriteString("🔗 **Confirm Existing Project Assignment:**\n\n")
+			message.WriteString("**Confirm Existing Project Assignment:**\n\n")
 			message.WriteString(fmt.Sprintf("• **Project:** %s (ID: %s)\n", entityName, entityID))
 		} else {
-			message.WriteString("🔗 **Confirm Existing Task Assignment:**\n\n")
+			message.WriteString("**Confirm Existing Task Assignment:**\n\n")
 			message.WriteString(fmt.Sprintf("• **Task:** %s (ID: %s)\n", entityName, entityID))
 		}
 	}
@@ -1189,9 +1189,9 @@ func (we *EnhancedWorkflowEngine) processConfirmationResponse(
 	case "cancel":
 		we.cancelWorkflow(ctx.User.Id)
 		isVietnamese := detectUserLanguage(ctx.User)
-		cancelMsg := "✅ Đã hủy bỏ yêu cầu."
+		cancelMsg := "Đã hủy bỏ yêu cầu."
 		if !isVietnamese {
-			cancelMsg = "✅ Request cancelled."
+			cancelMsg = "Request cancelled."
 		}
 		return &erp_modules.ModuleResponse{
 			Success:     true,
@@ -1269,15 +1269,15 @@ func (we *EnhancedWorkflowEngine) executeExistingEntityAssignment(
 		var successMsg string
 		if isVietnamese {
 			if workflow.EntityType == "project" {
-				successMsg = fmt.Sprintf("✅ Đã chọn dự án hiện có: **%s**. Tuy nhiên, không có nhân viên nào được chỉ định để phân công.", entityName)
+				successMsg = fmt.Sprintf("Đã chọn dự án hiện có: **%s**. Tuy nhiên, không có nhân viên nào được chỉ định để phân công.", entityName)
 			} else {
-				successMsg = fmt.Sprintf("✅ Đã chọn task hiện có: **%s**. Tuy nhiên, không có nhân viên nào được chỉ định để phân công.", entityName)
+				successMsg = fmt.Sprintf("Đã chọn task hiện có: **%s**. Tuy nhiên, không có nhân viên nào được chỉ định để phân công.", entityName)
 			}
 		} else {
 			if workflow.EntityType == "project" {
-				successMsg = fmt.Sprintf("✅ Selected existing project: **%s**. However, no employees were specified for assignment.", entityName)
+				successMsg = fmt.Sprintf("Selected existing project: **%s**. However, no employees were specified for assignment.", entityName)
 			} else {
-				successMsg = fmt.Sprintf("✅ Selected existing task: **%s**. However, no employees were specified for assignment.", entityName)
+				successMsg = fmt.Sprintf("Selected existing task: **%s**. However, no employees were specified for assignment.", entityName)
 			}
 		}
 
@@ -1329,32 +1329,32 @@ func (we *EnhancedWorkflowEngine) executeExistingEntityAssignment(
 	if len(assignmentErrors) == 0 {
 		if isVietnamese {
 			if workflow.EntityType == "project" {
-				successMsg = fmt.Sprintf("✅ Đã phân công dự án hiện có **%s** cho **%s**!", entityName, assigneesStr)
+				successMsg = fmt.Sprintf("Đã phân công dự án hiện có **%s** cho **%s**!", entityName, assigneesStr)
 			} else {
-				successMsg = fmt.Sprintf("✅ Đã phân công task hiện có **%s** cho **%s**!", entityName, assigneesStr)
+				successMsg = fmt.Sprintf("Đã phân công task hiện có **%s** cho **%s**!", entityName, assigneesStr)
 			}
 		} else {
 			if workflow.EntityType == "project" {
-				successMsg = fmt.Sprintf("✅ Successfully assigned existing project **%s** to **%s**!", entityName, assigneesStr)
+				successMsg = fmt.Sprintf("Successfully assigned existing project **%s** to **%s**!", entityName, assigneesStr)
 			} else {
-				successMsg = fmt.Sprintf("✅ Successfully assigned existing task **%s** to **%s**!", entityName, assigneesStr)
+				successMsg = fmt.Sprintf("Successfully assigned existing task **%s** to **%s**!", entityName, assigneesStr)
 			}
 		}
 	} else {
 		if isVietnamese {
 			if workflow.EntityType == "project" {
-				successMsg = fmt.Sprintf("✅ Đã phân công dự án hiện có **%s**. Thành công: **%s**. Lỗi: **%s**.",
+				successMsg = fmt.Sprintf("Đã phân công dự án hiện có **%s**. Thành công: **%s**. Lỗi: **%s**.",
 					entityName, assigneesStr, strings.Join(assignmentErrors, ", "))
 			} else {
-				successMsg = fmt.Sprintf("✅ Đã phân công task hiện có **%s**. Thành công: **%s**. Lỗi: **%s**.",
+				successMsg = fmt.Sprintf("Đã phân công task hiện có **%s**. Thành công: **%s**. Lỗi: **%s**.",
 					entityName, assigneesStr, strings.Join(assignmentErrors, ", "))
 			}
 		} else {
 			if workflow.EntityType == "project" {
-				successMsg = fmt.Sprintf("✅ Assigned existing project **%s**. Successful: **%s**. Failed: **%s**.",
+				successMsg = fmt.Sprintf("Assigned existing project **%s**. Successful: **%s**. Failed: **%s**.",
 					entityName, assigneesStr, strings.Join(assignmentErrors, ", "))
 			} else {
-				successMsg = fmt.Sprintf("✅ Assigned existing task **%s**. Successful: **%s**. Failed: **%s**.",
+				successMsg = fmt.Sprintf("Assigned existing task **%s**. Successful: **%s**. Failed: **%s**.",
 					entityName, assigneesStr, strings.Join(assignmentErrors, ", "))
 			}
 		}
@@ -1423,24 +1423,24 @@ func (we *EnhancedWorkflowEngine) executeProjectCreation(
 
 		if len(assignmentErrors) == 0 {
 			if isVietnamese {
-				successMsg = fmt.Sprintf("✅ Đã tạo dự án thành công: **%s** và phân công cho **%s**!", projectID, assigneesStr)
+				successMsg = fmt.Sprintf("Đã tạo dự án thành công: **%s** và phân công cho **%s**!", projectID, assigneesStr)
 			} else {
-				successMsg = fmt.Sprintf("✅ Successfully created project: **%s** and assigned to **%s**!", projectID, assigneesStr)
+				successMsg = fmt.Sprintf("Successfully created project: **%s** and assigned to **%s**!", projectID, assigneesStr)
 			}
 		} else {
 			if isVietnamese {
-				successMsg = fmt.Sprintf("✅ Đã tạo dự án: **%s**. Phân công thành công cho **%s**. Lỗi phân công: **%s**.",
+				successMsg = fmt.Sprintf("Đã tạo dự án: **%s**. Phân công thành công cho **%s**. Lỗi phân công: **%s**.",
 					projectID, assigneesStr, strings.Join(assignmentErrors, ", "))
 			} else {
-				successMsg = fmt.Sprintf("✅ Created project: **%s**. Successfully assigned to **%s**. Assignment failed for: **%s**.",
+				successMsg = fmt.Sprintf("Created project: **%s**. Successfully assigned to **%s**. Assignment failed for: **%s**.",
 					projectID, assigneesStr, strings.Join(assignmentErrors, ", "))
 			}
 		}
 	} else {
 		if isVietnamese {
-			successMsg = fmt.Sprintf("✅ Đã tạo dự án thành công: **%s**!", projectID)
+			successMsg = fmt.Sprintf("Đã tạo dự án thành công: **%s**!", projectID)
 		} else {
-			successMsg = fmt.Sprintf("✅ Successfully created project: **%s**!", projectID)
+			successMsg = fmt.Sprintf("Successfully created project: **%s**!", projectID)
 		}
 	}
 
@@ -1506,24 +1506,24 @@ func (we *EnhancedWorkflowEngine) executeTaskCreation(
 
 		if len(assignmentErrors) == 0 {
 			if isVietnamese {
-				successMsg = fmt.Sprintf("✅ Đã tạo task thành công: **%s** và phân công cho **%s**!", taskID, assigneesStr)
+				successMsg = fmt.Sprintf("Đã tạo task thành công: **%s** và phân công cho **%s**!", taskID, assigneesStr)
 			} else {
-				successMsg = fmt.Sprintf("✅ Successfully created task: **%s** and assigned to **%s**!", taskID, assigneesStr)
+				successMsg = fmt.Sprintf("Successfully created task: **%s** and assigned to **%s**!", taskID, assigneesStr)
 			}
 		} else {
 			if isVietnamese {
-				successMsg = fmt.Sprintf("✅ Đã tạo task: **%s**. Phân công thành công cho **%s**. Lỗi phân công: **%s**.",
+				successMsg = fmt.Sprintf("Đã tạo task: **%s**. Phân công thành công cho **%s**. Lỗi phân công: **%s**.",
 					taskID, assigneesStr, strings.Join(assignmentErrors, ", "))
 			} else {
-				successMsg = fmt.Sprintf("✅ Created task: **%s**. Successfully assigned to **%s**. Assignment failed for: **%s**.",
+				successMsg = fmt.Sprintf("Created task: **%s**. Successfully assigned to **%s**. Assignment failed for: **%s**.",
 					taskID, assigneesStr, strings.Join(assignmentErrors, ", "))
 			}
 		}
 	} else {
 		if isVietnamese {
-			successMsg = fmt.Sprintf("✅ Đã tạo task thành công: **%s**!", taskID)
+			successMsg = fmt.Sprintf("Đã tạo task thành công: **%s**!", taskID)
 		} else {
-			successMsg = fmt.Sprintf("✅ Successfully created task: **%s**!", taskID)
+			successMsg = fmt.Sprintf("Successfully created task: **%s**!", taskID)
 		}
 	}
 
