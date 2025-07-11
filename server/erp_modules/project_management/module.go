@@ -314,7 +314,7 @@ func (m *ProjectManagementModule) getEmployeeEmailFromUser(user *model.User) (st
 	return email, nil
 }
 
-// generateExistingEntityDisambiguationMessage generates message for existing entity selection
+// In module.go, update the generateExistingEntityDisambiguationMessage method:
 func (m *ProjectManagementModule) generateExistingEntityDisambiguationMessage(
 	ctx *erp_modules.ModuleContext,
 	entityType string,
@@ -338,22 +338,39 @@ func (m *ProjectManagementModule) generateExistingEntityDisambiguationMessage(
 		}
 	}
 
-	// List existing entities
+	// List existing entities - FIX: Better handling of entity names
 	for i, entity := range existingEntities {
 		if entityType == "project" {
+			// Handle both Project struct and converted Task struct
 			if projectBytes, err := json.Marshal(entity); err == nil {
+				// Try Project struct first
 				var project Project
-				if json.Unmarshal(projectBytes, &project) == nil {
+				if json.Unmarshal(projectBytes, &project) == nil && project.ProjectName != "" {
 					message.WriteString(fmt.Sprintf("%d. **%s** (ID: %s, Status: %s)\n",
 						i+1, project.ProjectName, project.Name, project.Status))
+				} else {
+					// Try Task struct (converted from Project)
+					var task Task
+					if json.Unmarshal(projectBytes, &task) == nil && task.Subject != "" {
+						message.WriteString(fmt.Sprintf("%d. **%s** (ID: %s, Status: %s)\n",
+							i+1, task.Subject, task.Name, task.Status))
+					} else {
+						// Fallback: use name field
+						message.WriteString(fmt.Sprintf("%d. **[Project]** (ID: %s)\n",
+							i+1, getEntityID(entity)))
+					}
 				}
 			}
 		} else {
 			if taskBytes, err := json.Marshal(entity); err == nil {
 				var task Task
-				if json.Unmarshal(taskBytes, &task) == nil {
+				if json.Unmarshal(taskBytes, &task) == nil && task.Subject != "" {
 					message.WriteString(fmt.Sprintf("%d. **%s** (ID: %s, Status: %s)\n",
 						i+1, task.Subject, task.Name, task.Status))
+				} else {
+					// Fallback: use name field
+					message.WriteString(fmt.Sprintf("%d. **[Task]** (ID: %s)\n",
+						i+1, getEntityID(entity)))
 				}
 			}
 		}
@@ -392,6 +409,19 @@ func (m *ProjectManagementModule) generateExistingEntityDisambiguationMessage(
 	}
 
 	return message.String(), nil
+}
+
+// Helper function to safely extract entity ID
+func getEntityID(entity interface{}) string {
+	if entityBytes, err := json.Marshal(entity); err == nil {
+		var entityMap map[string]interface{}
+		if json.Unmarshal(entityBytes, &entityMap) == nil {
+			if id, ok := entityMap["name"].(string); ok {
+				return id
+			}
+		}
+	}
+	return "unknown"
 }
 
 // generateProjectTaskDisambiguationMessage generates message for project selection

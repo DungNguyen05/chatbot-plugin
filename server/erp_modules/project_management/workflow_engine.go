@@ -546,9 +546,30 @@ func (we *EnhancedWorkflowEngine) handleTaskDisambiguation(
 	}
 
 	// Convert Task to interface{} for generateExistingEntityDisambiguationMessage
+	// FIX: Don't convert - use the original data type for proper display
 	var existingEntities []interface{}
-	for _, task := range taskInfo.ExistingTasks {
-		existingEntities = append(existingEntities, task)
+
+	// If this is for projects, we should preserve the original Project structs
+	if workflow.EntityType == "project" {
+		// Get the original projects from the analysis
+		// We need to reconstruct the original Project structs from the Task structs
+		for _, task := range taskInfo.ExistingTasks {
+			// Convert back to Project format for proper display
+			project := Project{
+				Name:            task.Name,
+				ProjectName:     task.Subject, // This should have the project name
+				Status:          task.Status,
+				Priority:        task.Priority,
+				Department:      task.Department,
+				MatchConfidence: task.MatchConfidence,
+			}
+			existingEntities = append(existingEntities, project)
+		}
+	} else {
+		// For tasks, use as-is
+		for _, task := range taskInfo.ExistingTasks {
+			existingEntities = append(existingEntities, task)
+		}
 	}
 
 	// Generate disambiguation message
