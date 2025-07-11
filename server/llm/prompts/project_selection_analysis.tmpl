@@ -4,12 +4,17 @@ User response: "{{.Parameters.UserMessage}}"
 Number of projects: {{.Parameters.ProjectCount}}
 Use Vietnamese: {{.Parameters.IsVietnamese}}
 
+Available project options:
+{{range $index, $project := .Parameters.AvailableProjects}}
+{{$index}}. **{{$project.project_name}}** (ID: {{$project.name}})
+{{end}}
+
 **ANALYSIS RULES:**
 
-1. **SELECT_PROJECT Intent**: User provides a number to select a project
-   - SINGLE: "1", "2", "3", "chọn 1", "select 2" → selected_index: 1, 2, 3
-   - Extract the index number (1-based)
-   - Handle various formats: "1", "chọn 1", "select 2", "số 3"
+1. **SELECT_PROJECT Intent**: User provides a number OR project name to select a project
+   - BY INDEX: "1", "2", "3", "chọn 1", "select 2" → selected_index: 1, 2, 3
+   - BY NAME: "ABCF", "abcd", "chọn ABCF" → find matching project name
+   - Handle various formats and partial name matches
 
 2. **NO_PROJECT Intent**: User wants to proceed without selecting any project
    {{if .Parameters.IsVietnamese}}
@@ -25,24 +30,31 @@ Use Vietnamese: {{.Parameters.IsVietnamese}}
    - Examples: "cancel", "stop", "abort", "quit"
    {{end}}
 
-**INDEX PARSING:**
-- Look for ANY numbers in the user's response (1, 2, 3, etc.)
-- Handle single number selection:
-  - "1" → selected_index: 1
-  - "chọn 2" → selected_index: 2  
-  - "select 3" → selected_index: 3
-- If number found, classify as select_project
+**PARSING PRIORITY:**
+1. First check for cancel/no_project keywords
+2. Check if response matches any project names (exact or partial)
+3. Check if response contains valid index numbers
+4. Default to select_project if reasonable match found
 
-**IMPORTANT:**
-- Extract the number mentioned in the response
-- If multiple numbers, use the first one
-- Distinguish between "no project" and "cancel" - no_project continues task creation without project, cancel stops everything
+**NAME MATCHING RULES:**
+- Try exact match first: "ABCF" matches project "ABCF"
+- Try case-insensitive match: "abcf" matches project "ABCF"  
+- Try partial match: "abc" could match "ABCD" if unique enough
+- If multiple matches, pick the best one
+- Convert matched name to corresponding index (1-based)
+
+**IMPORTANT INDEX CONVERSION:**
+The available projects are shown with 0-based indexing in the template, but you must return 1-based indexing:
+- If user selects project at template position 0 → return selected_index: 1
+- If user selects project at template position 1 → return selected_index: 2
+- If user selects project at template position 2 → return selected_index: 3
+- etc.
 
 **Response Examples:**
-- User says "1" → {"intent": "select_project", "selected_index": 1, "reasoning": "User selected project 1"}
+- User says "1" → {"intent": "select_project", "selected_index": 1, "reasoning": "User selected project by index 1"}
+- User says "ABCF" → {"intent": "select_project", "selected_index": 4, "reasoning": "User selected project ABCF by name, which corresponds to index 4"}
+- User says "abcd" → {"intent": "select_project", "selected_index": 1, "reasoning": "User selected project ABCD by name, which corresponds to index 1"}
 - User says "không" → {"intent": "no_project", "selected_index": 0, "reasoning": "User wants no project"}
-- User says "no project" → {"intent": "no_project", "selected_index": 0, "reasoning": "User wants to proceed without project"}
-- User says "hủy" → {"intent": "cancel", "selected_index": 0, "reasoning": "User wants to cancel"}
 
 Respond with ONLY valid JSON:
 {
@@ -51,5 +63,5 @@ Respond with ONLY valid JSON:
   "reasoning": "Brief explanation"
 }
 
-For select_project: set selected_index to the number mentioned (1-based)
+For select_project: set selected_index to the matched project index (1-based)
 For no_project/cancel: set selected_index to 0

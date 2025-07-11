@@ -196,9 +196,22 @@ func (we *EnhancedWorkflowEngine) analyzeTaskComponent(
 	}
 
 	if taskName == "" {
+		// **SỬA: Nếu component đã resolved và không có task name mới, giữ nguyên**
+		if analysis.TaskComponent != nil && analysis.TaskComponent.Status == StatusResolved {
+			return nil
+		}
 		return nil // No task component to analyze
 	}
 
+	// **SỬA: Kiểm tra xem task name có thay đổi không**
+	if analysis.TaskComponent != nil && analysis.TaskComponent.Status == StatusResolved {
+		if strings.EqualFold(strings.TrimSpace(taskName), strings.TrimSpace(analysis.TaskComponent.Name)) {
+			we.module.api.LogDebug("Task name unchanged, keeping resolved status")
+			return nil // Giữ nguyên component đã resolved
+		}
+	}
+
+	// Tiếp tục logic phân tích như cũ...
 	taskInfo := &TaskComponentInfo{
 		Status: StatusPending,
 		Name:   taskName,
@@ -270,6 +283,10 @@ func (we *EnhancedWorkflowEngine) analyzeEmployeeComponent(
 
 	assigneeNames, ok := workflow.CompletedData["assigned_to_names"].([]interface{})
 	if !ok || len(assigneeNames) == 0 {
+		// **SỬA: Nếu không có assignment mới và component đã resolved, giữ nguyên**
+		if analysis.EmployeeComponent != nil && analysis.EmployeeComponent.Status == StatusResolved {
+			return nil
+		}
 		return nil // No employee assignment
 	}
 
@@ -282,9 +299,23 @@ func (we *EnhancedWorkflowEngine) analyzeEmployeeComponent(
 	}
 
 	if len(nameStrings) == 0 {
+		// **SỬA: Nếu không có names mới và component đã resolved, giữ nguyên**
+		if analysis.EmployeeComponent != nil && analysis.EmployeeComponent.Status == StatusResolved {
+			return nil
+		}
 		return nil
 	}
 
+	// **SỬA: Kiểm tra xem names có thay đổi so với lần trước không**
+	if analysis.EmployeeComponent != nil && analysis.EmployeeComponent.Status == StatusResolved {
+		// So sánh với names đã resolved trước đó
+		if we.isSameEmployeeNames(nameStrings, analysis.EmployeeComponent.Names) {
+			we.module.api.LogDebug("Employee names unchanged, keeping resolved status")
+			return nil // Giữ nguyên component đã resolved
+		}
+	}
+
+	// Tiếp tục logic phân tích như cũ...
 	employeeInfo := &EmployeeComponentInfo{
 		Status: StatusPending,
 		Names:  nameStrings,
@@ -310,6 +341,34 @@ func (we *EnhancedWorkflowEngine) analyzeEmployeeComponent(
 
 	analysis.EmployeeComponent = employeeInfo
 	return nil
+}
+
+// isSameEmployeeNames checks if two name slices are the same
+func (we *EnhancedWorkflowEngine) isSameEmployeeNames(names1, names2 []string) bool {
+	if len(names1) != len(names2) {
+		return false
+	}
+
+	// Create maps for comparison
+	map1 := make(map[string]bool)
+	map2 := make(map[string]bool)
+
+	for _, name := range names1 {
+		map1[strings.ToLower(strings.TrimSpace(name))] = true
+	}
+
+	for _, name := range names2 {
+		map2[strings.ToLower(strings.TrimSpace(name))] = true
+	}
+
+	// Compare maps
+	for name := range map1 {
+		if !map2[name] {
+			return false
+		}
+	}
+
+	return true
 }
 
 // analyzeProjectComponent analyzes project assignment needs (for tasks)
@@ -370,18 +429,27 @@ func (we *EnhancedWorkflowEngine) proceedWithResolution(
 
 	workflow.Phase = PhaseResolution
 
-	// Find first component that needs disambiguation
-	if workflow.ComponentAnalysis.TaskComponent != nil && workflow.ComponentAnalysis.TaskComponent.NeedsDisambiguation {
+	// **SỬA: Thêm check để bỏ qua component đã resolved**
+	// Task component - chỉ handle nếu chưa resolved hoặc cần re-analysis
+	if workflow.ComponentAnalysis.TaskComponent != nil &&
+		workflow.ComponentAnalysis.TaskComponent.NeedsDisambiguation &&
+		workflow.ComponentAnalysis.TaskComponent.Status != StatusResolved {
 		workflow.CurrentComponent = ComponentTypeTask
 		return we.handleTaskDisambiguation(ctx, workflow)
 	}
 
-	if workflow.ComponentAnalysis.EmployeeComponent != nil && workflow.ComponentAnalysis.EmployeeComponent.NeedsDisambiguation {
+	// Employee component - chỉ handle nếu chưa resolved hoặc cần re-analysis
+	if workflow.ComponentAnalysis.EmployeeComponent != nil &&
+		workflow.ComponentAnalysis.EmployeeComponent.NeedsDisambiguation &&
+		workflow.ComponentAnalysis.EmployeeComponent.Status != StatusResolved {
 		workflow.CurrentComponent = ComponentTypeEmployee
 		return we.handleEmployeeDisambiguation(ctx, workflow)
 	}
 
-	if workflow.ComponentAnalysis.ProjectComponent != nil && workflow.ComponentAnalysis.ProjectComponent.NeedsDisambiguation {
+	// Project component - chỉ handle nếu chưa resolved hoặc cần re-analysis
+	if workflow.ComponentAnalysis.ProjectComponent != nil &&
+		workflow.ComponentAnalysis.ProjectComponent.NeedsDisambiguation &&
+		workflow.ComponentAnalysis.ProjectComponent.Status != StatusResolved {
 		workflow.CurrentComponent = ComponentTypeProject
 		return we.handleProjectDisambiguation(ctx, workflow)
 	}
@@ -445,14 +513,91 @@ func (we *EnhancedWorkflowEngine) handleComprehensiveModification(
 		workflow.CompletedData[key] = value
 	}
 
-	// Re-run comprehensive analysis with new data
-	response, err := we.performComprehensiveAnalysis(ctx, workflow)
+	// **SỬA: Gọi function với error handling**
+	response, err := we.performIncrementalAnalysis(ctx, workflow, modifications)
 	if err != nil {
-		we.module.api.LogError("Failed to re-analyze after modification", "error", err.Error())
+		we.module.api.LogError("Failed to perform incremental analysis", "error", err.Error())
 		return nil
 	}
 
 	return response
+}
+
+// performIncrementalAnalysis only re-analyzes components affected by modifications
+func (we *EnhancedWorkflowEngine) performIncrementalAnalysis(
+	ctx *erp_modules.ModuleContext,
+	workflow *EnhancedWorkflowState,
+	modifications map[string]interface{},
+) (*erp_modules.ModuleResponse, error) {
+
+	workflow.Phase = PhaseAnalysis
+	workflow.LastModified = time.Now().UnixMilli()
+
+	// Kiểm tra modification có ảnh hưởng đến component nào
+	needsTaskReanalysis := false
+	needsEmployeeReanalysis := false
+	needsProjectReanalysis := false
+
+	// Kiểm tra các field ảnh hưởng đến task component
+	taskFields := []string{"subject", "project_name"}
+	for _, field := range taskFields {
+		if _, exists := modifications[field]; exists {
+			needsTaskReanalysis = true
+			break
+		}
+	}
+
+	// Kiểm tra các field ảnh hưởng đến employee component
+	employeeFields := []string{"assigned_to_names", "assigned_to_employees"}
+	for _, field := range employeeFields {
+		if _, exists := modifications[field]; exists {
+			needsEmployeeReanalysis = true
+			break
+		}
+	}
+
+	// Kiểm tra các field ảnh hưởng đến project component (chỉ cho tasks)
+	if workflow.EntityType == "task" {
+		projectFields := []string{"project"}
+		for _, field := range projectFields {
+			if _, exists := modifications[field]; exists {
+				needsProjectReanalysis = true
+				break
+			}
+		}
+	}
+
+	// Tái phân tích chỉ những component cần thiết
+	analysis := workflow.ComponentAnalysis
+	if analysis == nil {
+		analysis = &ComponentAnalysis{}
+	}
+
+	if needsTaskReanalysis {
+		we.module.api.LogDebug("Re-analyzing task component due to modifications")
+		if err := we.analyzeTaskComponent(workflow, analysis); err != nil {
+			we.module.api.LogError("Failed to re-analyze task component", "error", err.Error())
+		}
+	}
+
+	if needsEmployeeReanalysis {
+		we.module.api.LogDebug("Re-analyzing employee component due to modifications")
+		if err := we.analyzeEmployeeComponent(workflow, analysis); err != nil {
+			we.module.api.LogError("Failed to re-analyze employee component", "error", err.Error())
+		}
+	}
+
+	if needsProjectReanalysis {
+		we.module.api.LogDebug("Re-analyzing project component due to modifications")
+		if err := we.analyzeProjectComponent(workflow, analysis); err != nil {
+			we.module.api.LogError("Failed to re-analyze project component", "error", err.Error())
+		}
+	}
+
+	workflow.ComponentAnalysis = analysis
+
+	// Tiếp tục với resolution
+	return we.proceedWithResolution(ctx, workflow)
 }
 
 // parseComprehensiveModification parses complex modification requests
@@ -1144,7 +1289,15 @@ func (we *EnhancedWorkflowEngine) processProjectDisambiguationResponse(
 		selectedProject := projectInfo.MatchingProjects[response.SelectedIndex-1]
 		projectInfo.SelectedProject = selectedProject.Name
 		projectInfo.Status = StatusResolved
+
+		// **SỬA: Đảm bảo project được apply vào workflow.CompletedData**
 		workflow.CompletedData["project"] = selectedProject.Name
+
+		// **SỬA: Log để debug**
+		we.module.api.LogDebug("Project selected and applied to workflow data",
+			"project_name", selectedProject.ProjectName,
+			"project_id", selectedProject.Name,
+			"workflow_completed_data", workflow.CompletedData)
 
 		return we.proceedToNextComponent(ctx, workflow)
 
@@ -1247,6 +1400,11 @@ func (we *EnhancedWorkflowEngine) applyResolvedComponentData(workflow *EnhancedW
 		workflow.ComponentAnalysis.ProjectComponent.Status == StatusResolved {
 		if workflow.ComponentAnalysis.ProjectComponent.SelectedProject != "" {
 			workflow.CompletedData["project"] = workflow.ComponentAnalysis.ProjectComponent.SelectedProject
+
+			// **SỬA: Thêm log debug**
+			we.module.api.LogDebug("Applied project resolution to completed data",
+				"selected_project", workflow.ComponentAnalysis.ProjectComponent.SelectedProject,
+				"completed_data_project", workflow.CompletedData["project"])
 		}
 	}
 
@@ -1260,6 +1418,7 @@ func (we *EnhancedWorkflowEngine) applyResolvedComponentData(workflow *EnhancedW
 	}
 }
 
+// generateComprehensiveConfirmation generates comprehensive confirmation message
 // generateComprehensiveConfirmation generates comprehensive confirmation message
 func (we *EnhancedWorkflowEngine) generateComprehensiveConfirmation(
 	ctx *erp_modules.ModuleContext,
@@ -1329,10 +1488,23 @@ func (we *EnhancedWorkflowEngine) generateComprehensiveConfirmation(
 				message.WriteString(fmt.Sprintf("• **Task Name:** %v\n", value))
 			}
 		case "project":
-			if isVietnamese {
-				message.WriteString(fmt.Sprintf("• **Thuộc dự án:** %v\n", value))
-			} else {
-				message.WriteString(fmt.Sprintf("• **Project:** %v\n", value))
+			// **SỬA: Đảm bảo hiển thị project trong confirmation**
+			if projectName, ok := value.(string); ok && projectName != "" {
+				// Tìm project name từ matching projects nếu có
+				displayName := projectName
+				if workflow.ComponentAnalysis.ProjectComponent != nil {
+					for _, proj := range workflow.ComponentAnalysis.ProjectComponent.MatchingProjects {
+						if proj.Name == projectName {
+							displayName = proj.ProjectName
+							break
+						}
+					}
+				}
+				if isVietnamese {
+					message.WriteString(fmt.Sprintf("• **Thuộc dự án:** %s\n", displayName))
+				} else {
+					message.WriteString(fmt.Sprintf("• **Project:** %s\n", displayName))
+				}
 			}
 		case "priority":
 			if isVietnamese {
