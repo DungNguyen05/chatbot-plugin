@@ -131,7 +131,7 @@ func validateTaskSubject(subject string) error {
 	return nil
 }
 
-// validateEmployeeEmail validates employee email format - NEW FUNCTION
+// validateEmployeeEmail validates employee email format
 func validateEmployeeEmail(email string) error {
 	if email == "" {
 		return fmt.Errorf("employee email cannot be empty")
@@ -163,7 +163,7 @@ func validateEmployeeEmail(email string) error {
 	return nil
 }
 
-// validateToDoAssignment validates ToDo assignment data - NEW FUNCTION
+// validateToDoAssignment validates ToDo assignment data
 func validateToDoAssignment(assignedBy, allocatedTo, referenceType, referenceName string) error {
 	if err := validateEmployeeEmail(assignedBy); err != nil {
 		return fmt.Errorf("invalid assigned_by email: %w", err)
@@ -198,7 +198,7 @@ func isValidAction(action string) bool {
 	return validActions[action]
 }
 
-// validatePriority validates priority field - NEW FUNCTION
+// validatePriority validates priority field
 func validatePriority(priority string) error {
 	if priority == "" {
 		return nil // Empty priority is allowed
@@ -217,7 +217,7 @@ func validatePriority(priority string) error {
 	return nil
 }
 
-// validateCompany validates company field - NEW FUNCTION
+// validateCompany validates company field
 func validateCompany(company string) error {
 	if company == "" {
 		return nil // Empty company is allowed

@@ -14,7 +14,7 @@ import (
 )
 
 // generateConfirmationMessage generates confirmation message using LLM
-func (m *ProjectManagementModule) generateConfirmationMessage(ctx *erp_modules.ModuleContext, confirmationType string, data interface{}) (string, error) {
+func (m *ProjectManagementModule) generateConfirmationMessage(ctx *erp_modules.ModuleContext, confirmationType string, data map[string]interface{}) (string, error) {
 	// Create LLM context
 	llmContext := &llm.Context{
 		RequestingUser: ctx.User,
@@ -24,14 +24,9 @@ func (m *ProjectManagementModule) generateConfirmationMessage(ctx *erp_modules.M
 	// Detect user language
 	isVietnamese := detectUserLanguage(ctx.User)
 
-	// Convert data to map for template access
-	dataMap := make(map[string]interface{})
-	dataBytes, _ := json.Marshal(data)
-	json.Unmarshal(dataBytes, &dataMap)
-
 	llmContext.Parameters = map[string]interface{}{
 		"Type":         confirmationType,
-		"Data":         dataMap,
+		"Data":         data,
 		"IsVietnamese": isVietnamese,
 	}
 
@@ -71,74 +66,64 @@ func (m *ProjectManagementModule) generateConfirmationMessage(ctx *erp_modules.M
 	return strings.TrimSpace(response), nil
 }
 
-// parseConfirmationResponse parses user confirmation response using LLM
-func (m *ProjectManagementModule) parseConfirmationResponse(ctx *erp_modules.ModuleContext, message string, pending *ProjectManagementConfirmation) (*UserResponse, error) {
-	// Create LLM context
-	llmContext := &llm.Context{
-		RequestingUser: ctx.User,
-		Time:           time.Now().Format(time.RFC1123),
+// generateMultiEmployeeDisambiguationMessage generates message asking user to choose employees
+func (m *ProjectManagementModule) generateMultiEmployeeDisambiguationMessage(ctx *erp_modules.ModuleContext, assigneeResult *AssigneeResolutionResult) (string, error) {
+	isVietnamese := detectUserLanguage(ctx.User)
+
+	var message strings.Builder
+
+	// Show successfully resolved employees if any
+	if len(assigneeResult.ResolvedEmployees) > 0 {
+		if isVietnamese {
+			message.WriteString("✅ **Đã xác định thành công:**\n")
+		} else {
+			message.WriteString("✅ **Successfully identified:**\n")
+		}
+		for _, emp := range assigneeResult.ResolvedEmployees {
+			message.WriteString(fmt.Sprintf("- **%s** (%s)\n", emp.EmployeeName, emp.Email))
+		}
+		message.WriteString("\n")
 	}
 
-	llmContext.Parameters = map[string]interface{}{
-		"UserMessage":    message,
-		"PendingType":    pending.Type,
-		"PendingData":    pending.Data,
-		"OriginalSchema": m.getOriginalSchema(pending.Type),
+	// Show employees that need disambiguation
+	if isVietnamese {
+		message.WriteString("❓ **Cần làm rõ cho các nhân viên sau:**\n\n")
+	} else {
+		message.WriteString("❓ **Need clarification for the following employees:**\n\n")
 	}
 
-	// Use appropriate template based on type
-	templateName := "project_modification_analysis"
-	if pending.Type == "task" {
-		templateName = "task_modification_analysis"
+	globalIndex := 1
+	for _, unresolvedMatch := range assigneeResult.UnresolvedEmployeeMatches {
+		if isVietnamese {
+			message.WriteString(fmt.Sprintf("**Tên '%s'** có thể là:\n", unresolvedMatch.OriginalName))
+		} else {
+			message.WriteString(fmt.Sprintf("**Name '%s'** could be:\n", unresolvedMatch.OriginalName))
+		}
+
+		for _, emp := range unresolvedMatch.MatchingEmployees {
+			message.WriteString(fmt.Sprintf("%d. **%s** (%s, %s)\n",
+				globalIndex,
+				emp.EmployeeName,
+				emp.CompanyEmail,
+				emp.Name))
+			globalIndex++
+		}
+		message.WriteString("\n")
 	}
 
-	// Format the analysis prompt
-	systemPrompt, err := m.prompts.Format(templateName, llmContext)
-	if err != nil {
-		return nil, fmt.Errorf("failed to format modification analysis prompt: %w", err)
+	if isVietnamese {
+		message.WriteString("Vui lòng chọn nhân viên bằng cách trả lời các số thứ tự tương ứng.\n")
+		message.WriteString("**Ví dụ:** `1, 3, 5` để chọn nhân viên thứ 1, 3 và 5.")
+	} else {
+		message.WriteString("Please select employees by replying with the corresponding numbers.\n")
+		message.WriteString("**Example:** `1, 3, 5` to select employees 1, 3, and 5.")
 	}
 
-	// Create completion request
-	completionRequest := llm.CompletionRequest{
-		Posts: []llm.Post{
-			{
-				Role:    llm.PostRoleSystem,
-				Message: systemPrompt,
-			},
-			{
-				Role:    llm.PostRoleUser,
-				Message: message,
-			},
-		},
-		Context: llmContext,
-	}
-
-	// Get LLM response
-	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(300))
-	if err != nil {
-		return nil, fmt.Errorf("failed to analyze user response with LLM: %w", err)
-	}
-
-	// Parse JSON response
-	var userResponse UserResponse
-	response = strings.TrimSpace(response)
-	start := strings.Index(response, "{")
-	end := strings.LastIndex(response, "}") + 1
-
-	if start == -1 || end <= start {
-		return nil, fmt.Errorf("no valid JSON found in LLM response: %s", response)
-	}
-
-	jsonStr := response[start:end]
-	if err := json.Unmarshal([]byte(jsonStr), &userResponse); err != nil {
-		return nil, fmt.Errorf("failed to parse LLM response as JSON: %w", err)
-	}
-
-	return &userResponse, nil
+	return message.String(), nil
 }
 
 // parseMultiEmployeeDisambiguationResponse parses user response to multi-employee selection using LLM
-func (m *ProjectManagementModule) parseMultiEmployeeDisambiguationResponse(ctx *erp_modules.ModuleContext, message string, disambiguation *MultiEmployeeDisambiguationConfirmation) (*MultiEmployeeDisambiguationResponse, error) {
+func (m *ProjectManagementModule) parseMultiEmployeeDisambiguationResponse(ctx *erp_modules.ModuleContext, message string, unresolvedMatches []UnresolvedEmployeeMatch) (*MultiEmployeeDisambiguationResponse, error) {
 	// Create LLM context
 	llmContext := &llm.Context{
 		RequestingUser: ctx.User,
@@ -150,7 +135,7 @@ func (m *ProjectManagementModule) parseMultiEmployeeDisambiguationResponse(ctx *
 
 	llmContext.Parameters = map[string]interface{}{
 		"UserMessage":               message,
-		"UnresolvedEmployeeMatches": disambiguation.UnresolvedEmployeeMatches,
+		"UnresolvedEmployeeMatches": unresolvedMatches,
 		"IsVietnamese":              isVietnamese,
 	}
 
@@ -315,240 +300,31 @@ func (m *ProjectManagementModule) analyzeTaskCreation(ctx *erp_modules.ModuleCon
 	return &taskRequest, nil
 }
 
-// generateExistingEntityDisambiguationMessage generates message asking user to choose between creating new or using existing
-func (m *ProjectManagementModule) generateExistingEntityDisambiguationMessage(ctx *erp_modules.ModuleContext, disambiguation *ExistingEntityDisambiguationConfirmation) (string, error) {
-	isVietnamese := detectUserLanguage(ctx.User)
-
-	var message strings.Builder
-
-	if isVietnamese {
-		if disambiguation.EntityType == "project" {
-			message.WriteString("🔍 **Tìm thấy dự án tương tự:**\n\n")
-		} else {
-			message.WriteString("🔍 **Tìm thấy task tương tự:**\n\n")
+// getOriginalSchema returns the original schema for the given type with multi-employee support
+func (m *ProjectManagementModule) getOriginalSchema(confirmationType string) map[string]interface{} {
+	if confirmationType == "project" {
+		return map[string]interface{}{
+			"project_name":        "",
+			"description":         "",
+			"priority":            "",
+			"project_type":        "",
+			"expected_start_date": "",
+			"expected_end_date":   "",
+			"department":          "",
+			"customer":            "",
+			"assigned_to_names":   []string{},
 		}
-	} else {
-		if disambiguation.EntityType == "project" {
-			message.WriteString("🔍 **Found similar projects:**\n\n")
-		} else {
-			message.WriteString("🔍 **Found similar tasks:**\n\n")
-		}
-	}
-
-	// List existing entities
-	for i, entity := range disambiguation.ExistingEntities {
-		if disambiguation.EntityType == "project" {
-			if projectBytes, err := json.Marshal(entity); err == nil {
-				var project Project
-				if json.Unmarshal(projectBytes, &project) == nil {
-					message.WriteString(fmt.Sprintf("%d. **%s** (ID: %s, Status: %s)\n",
-						i+1, project.ProjectName, project.Name, project.Status))
-				}
-			}
-		} else {
-			if taskBytes, err := json.Marshal(entity); err == nil {
-				var task Task
-				if json.Unmarshal(taskBytes, &task) == nil {
-					message.WriteString(fmt.Sprintf("%d. **%s** (ID: %s, Status: %s)\n",
-						i+1, task.Subject, task.Name, task.Status))
-				}
-			}
+	} else if confirmationType == "task" {
+		return map[string]interface{}{
+			"subject":           "",
+			"description":       "",
+			"priority":          "",
+			"project":           "",
+			"assigned_to_names": []string{},
+			"exp_start_date":    "",
+			"exp_end_date":      "",
+			"department":        "",
 		}
 	}
-
-	message.WriteString("\n")
-
-	if isVietnamese {
-		if disambiguation.EntityType == "project" {
-			message.WriteString("Bạn muốn:\n")
-			message.WriteString("• **Tạo mới** - Tạo dự án mới\n")
-			message.WriteString("• **Chọn số** - Sử dụng dự án hiện có (ví dụ: '1')\n")
-			message.WriteString("• **Hủy** - Hủy bỏ yêu cầu\n\n")
-			message.WriteString("Vui lòng trả lời: 'tạo mới', số thứ tự, hoặc 'hủy'")
-		} else {
-			message.WriteString("Bạn muốn:\n")
-			message.WriteString("• **Tạo mới** - Tạo task mới\n")
-			message.WriteString("• **Chọn số** - Sử dụng task hiện có (ví dụ: '1')\n")
-			message.WriteString("• **Hủy** - Hủy bỏ yêu cầu\n\n")
-			message.WriteString("Vui lòng trả lời: 'tạo mới', số thứ tự, hoặc 'hủy'")
-		}
-	} else {
-		if disambiguation.EntityType == "project" {
-			message.WriteString("Do you want to:\n")
-			message.WriteString("• **Create new** - Create a new project\n")
-			message.WriteString("• **Select number** - Use existing project (example: '1')\n")
-			message.WriteString("• **Cancel** - Cancel the request\n\n")
-			message.WriteString("Please reply: 'create new', number, or 'cancel'")
-		} else {
-			message.WriteString("Do you want to:\n")
-			message.WriteString("• **Create new** - Create a new task\n")
-			message.WriteString("• **Select number** - Use existing task (example: '1')\n")
-			message.WriteString("• **Cancel** - Cancel the request\n\n")
-			message.WriteString("Please reply: 'create new', number, or 'cancel'")
-		}
-	}
-
-	return message.String(), nil
-}
-
-// generateProjectTaskDisambiguationMessage generates message asking user to select a project for task
-func (m *ProjectManagementModule) generateProjectTaskDisambiguationMessage(ctx *erp_modules.ModuleContext, disambiguation *ProjectTaskDisambiguationConfirmation) (string, error) {
-	isVietnamese := detectUserLanguage(ctx.User)
-
-	var message strings.Builder
-
-	if isVietnamese {
-		message.WriteString("🔍 **Tìm thấy nhiều dự án phù hợp:**\n\n")
-	} else {
-		message.WriteString("🔍 **Found multiple matching projects:**\n\n")
-	}
-
-	// List matching projects
-	for i, project := range disambiguation.MatchingProjects {
-		message.WriteString(fmt.Sprintf("%d. **%s** (ID: %s, Status: %s)\n",
-			i+1, project.ProjectName, project.Name, project.Status))
-	}
-
-	message.WriteString("\n")
-
-	if isVietnamese {
-		message.WriteString("Bạn muốn:\n")
-		message.WriteString("• **Chọn số** - Gán task vào dự án (ví dụ: '1')\n")
-		message.WriteString("• **Không** - Tạo task không thuộc dự án nào\n")
-		message.WriteString("• **Hủy** - Hủy bỏ yêu cầu\n\n")
-		message.WriteString("Vui lòng trả lời: số thứ tự, 'không', hoặc 'hủy'")
-	} else {
-		message.WriteString("Do you want to:\n")
-		message.WriteString("• **Select number** - Assign task to project (example: '1')\n")
-		message.WriteString("• **No project** - Create task without project\n")
-		message.WriteString("• **Cancel** - Cancel the request\n\n")
-		message.WriteString("Please reply: number, 'no project', or 'cancel'")
-	}
-
-	return message.String(), nil
-}
-
-// parseExistingEntityDisambiguationResponse parses user response to existing entity selection using LLM
-func (m *ProjectManagementModule) parseExistingEntityDisambiguationResponse(ctx *erp_modules.ModuleContext, message string, disambiguation *ExistingEntityDisambiguationConfirmation) (*ExistingEntityDisambiguationResponse, error) {
-	// Create LLM context
-	llmContext := &llm.Context{
-		RequestingUser: ctx.User,
-		Time:           time.Now().Format(time.RFC1123),
-	}
-
-	// Detect user language
-	isVietnamese := detectUserLanguage(ctx.User)
-
-	llmContext.Parameters = map[string]interface{}{
-		"UserMessage":  message,
-		"EntityType":   disambiguation.EntityType,
-		"EntityCount":  len(disambiguation.ExistingEntities),
-		"IsVietnamese": isVietnamese,
-	}
-
-	// Format the disambiguation analysis prompt
-	systemPrompt, err := m.prompts.Format("existing_entity_disambiguation_analysis", llmContext)
-	if err != nil {
-		return nil, fmt.Errorf("failed to format existing entity disambiguation prompt: %w", err)
-	}
-
-	// Create completion request
-	completionRequest := llm.CompletionRequest{
-		Posts: []llm.Post{
-			{
-				Role:    llm.PostRoleSystem,
-				Message: systemPrompt,
-			},
-			{
-				Role:    llm.PostRoleUser,
-				Message: message,
-			},
-		},
-		Context: llmContext,
-	}
-
-	// Get LLM response
-	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(200))
-	if err != nil {
-		return nil, fmt.Errorf("failed to analyze existing entity disambiguation with LLM: %w", err)
-	}
-
-	// Parse JSON response
-	var disambiguationResponse ExistingEntityDisambiguationResponse
-	response = strings.TrimSpace(response)
-	start := strings.Index(response, "{")
-	end := strings.LastIndex(response, "}") + 1
-
-	if start == -1 || end <= start {
-		return nil, fmt.Errorf("no valid JSON found in LLM response: %s", response)
-	}
-
-	jsonStr := response[start:end]
-	if err := json.Unmarshal([]byte(jsonStr), &disambiguationResponse); err != nil {
-		return nil, fmt.Errorf("failed to parse LLM existing entity disambiguation response as JSON: %w", err)
-	}
-
-	return &disambiguationResponse, nil
-}
-
-// parseProjectSelectionResponse parses user response to project selection using LLM
-func (m *ProjectManagementModule) parseProjectSelectionResponse(ctx *erp_modules.ModuleContext, message string, disambiguation *ProjectTaskDisambiguationConfirmation) (*ProjectSelectionResponse, error) {
-	// Create LLM context
-	llmContext := &llm.Context{
-		RequestingUser: ctx.User,
-		Time:           time.Now().Format(time.RFC1123),
-	}
-
-	// Detect user language
-	isVietnamese := detectUserLanguage(ctx.User)
-
-	llmContext.Parameters = map[string]interface{}{
-		"UserMessage":  message,
-		"ProjectCount": len(disambiguation.MatchingProjects),
-		"IsVietnamese": isVietnamese,
-	}
-
-	// Format the project selection analysis prompt
-	systemPrompt, err := m.prompts.Format("project_selection_analysis", llmContext)
-	if err != nil {
-		return nil, fmt.Errorf("failed to format project selection analysis prompt: %w", err)
-	}
-
-	// Create completion request
-	completionRequest := llm.CompletionRequest{
-		Posts: []llm.Post{
-			{
-				Role:    llm.PostRoleSystem,
-				Message: systemPrompt,
-			},
-			{
-				Role:    llm.PostRoleUser,
-				Message: message,
-			},
-		},
-		Context: llmContext,
-	}
-
-	// Get LLM response
-	response, err := m.getLLM().ChatCompletionNoStream(completionRequest, llm.WithMaxGeneratedTokens(200))
-	if err != nil {
-		return nil, fmt.Errorf("failed to analyze project selection with LLM: %w", err)
-	}
-
-	// Parse JSON response
-	var selectionResponse ProjectSelectionResponse
-	response = strings.TrimSpace(response)
-	start := strings.Index(response, "{")
-	end := strings.LastIndex(response, "}") + 1
-
-	if start == -1 || end <= start {
-		return nil, fmt.Errorf("no valid JSON found in LLM response: %s", response)
-	}
-
-	jsonStr := response[start:end]
-	if err := json.Unmarshal([]byte(jsonStr), &selectionResponse); err != nil {
-		return nil, fmt.Errorf("failed to parse LLM project selection response as JSON: %w", err)
-	}
-
-	return &selectionResponse, nil
+	return make(map[string]interface{})
 }

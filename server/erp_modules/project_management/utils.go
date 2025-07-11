@@ -33,32 +33,3 @@ func GetVietnamTime() (time.Time, error) {
 	}
 	return time.Now().In(loc), nil
 }
-
-// getOriginalSchema returns the original schema for the given type with multi-employee support
-func (m *ProjectManagementModule) getOriginalSchema(confirmationType string) map[string]interface{} {
-	if confirmationType == "project" {
-		return map[string]interface{}{
-			"project_name":        "",
-			"description":         "",
-			"priority":            "",
-			"project_type":        "",
-			"expected_start_date": "",
-			"expected_end_date":   "",
-			"department":          "",
-			"customer":            "",
-			"assigned_to_names":   []string{},
-		}
-	} else if confirmationType == "task" {
-		return map[string]interface{}{
-			"subject":           "",
-			"description":       "",
-			"priority":          "",
-			"project":           "",
-			"assigned_to_names": []string{},
-			"exp_start_date":    "",
-			"exp_end_date":      "",
-			"department":        "",
-		}
-	}
-	return make(map[string]interface{})
-}

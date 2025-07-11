@@ -28,9 +28,9 @@ func (c *ERPClient) SearchEmployeesByName(searchName string) ([]Employee, error)
 		employeeNameLower := strings.ToLower(employee.EmployeeName)
 		employeeIDLower := strings.ToLower(employee.Name)
 		employeeNumberLower := strings.ToLower(employee.EmployeeNumber)
-		employeeEmailLower := strings.ToLower(employee.CompanyEmail) // UPDATED to use CompanyEmail
+		employeeEmailLower := strings.ToLower(employee.CompanyEmail)
 
-		// Calculate confidence score (UPDATED to include company email)
+		// Calculate confidence score
 		confidence := calculateNameMatchConfidence(searchNameLower, employeeNameLower, employeeIDLower, employeeNumberLower, employeeEmailLower)
 
 		// Only include employees with confidence above threshold
@@ -232,22 +232,7 @@ func calculateTaskMatchConfidence(searchName, taskSubject, taskID string) float6
 	return maxConfidence
 }
 
-// removeDuplicateEmployees removes duplicate employees from the list
-func removeDuplicateEmployees(employees []Employee) []Employee {
-	seen := make(map[string]bool)
-	var unique []Employee
-
-	for _, emp := range employees {
-		if !seen[emp.Name] {
-			seen[emp.Name] = true
-			unique = append(unique, emp)
-		}
-	}
-
-	return unique
-}
-
-// calculateNameMatchConfidence calculates name matching confidence (UPDATED to include email)
+// calculateNameMatchConfidence calculates name matching confidence
 func calculateNameMatchConfidence(searchName, employeeName, employeeID, employeeNumber, employeeEmail string) float64 {
 	var maxConfidence float64
 
@@ -295,7 +280,7 @@ func calculateNameMatchConfidence(searchName, employeeName, employeeID, employee
 		maxConfidence = math.Max(maxConfidence, 0.95)
 	}
 
-	// Check employee company email match (UPDATED field name)
+	// Check employee company email match
 	if employeeEmail != "" && strings.Contains(employeeEmail, searchName) {
 		maxConfidence = math.Max(maxConfidence, 0.9)
 	}

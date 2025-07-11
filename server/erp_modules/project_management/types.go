@@ -87,7 +87,7 @@ type Task struct {
 	ExpEndDate      string  `json:"exp_end_date,omitempty"`
 	Department      string  `json:"department,omitempty"`
 	Company         string  `json:"company,omitempty"`
-	MatchConfidence float64 `json:"match_confidence"` // NEW FIELD
+	MatchConfidence float64 `json:"match_confidence"`
 }
 
 // ProjectCreationRequest represents parsed project creation intent with multi-employee support
@@ -127,45 +127,11 @@ type AssignedEmployee struct {
 	OriginalName string `json:"original_name"` // The original name from user input
 }
 
-// ProjectManagementConfirmation represents pending confirmation
-type ProjectManagementConfirmation struct {
-	UserID       string                 `json:"user_id"`
-	Type         string                 `json:"type"`   // "project" or "task"
-	Action       string                 `json:"action"` // "create_project", "create_task"
-	Data         map[string]interface{} `json:"data"`   // Complete schema data
-	CreatedAt    int64                  `json:"created_at"`
-	EmployeeID   string                 `json:"employee_id"`
-	CreatorEmail string                 `json:"creator_email"`
-}
-
-// MultiEmployeeDisambiguationConfirmation represents pending multiple employee selection
-type MultiEmployeeDisambiguationConfirmation struct {
-	UserID                    string                         `json:"user_id"`
-	Type                      string                         `json:"type"`   // "project" or "task"
-	Action                    string                         `json:"action"` // "create_project", "create_task"
-	Data                      map[string]interface{}         `json:"data"`   // Complete schema data
-	CreatedAt                 int64                          `json:"created_at"`
-	EmployeeID                string                         `json:"employee_id"`
-	CreatorEmail              string                         `json:"creator_email"`
-	UnresolvedEmployeeMatches []UnresolvedEmployeeMatch      `json:"unresolved_employee_matches"`     // All unresolved employees
-	ResolvedEmployees         []AssignedEmployee             `json:"resolved_employees"`              // Successfully resolved employees
-	IsModification            bool                           `json:"is_modification"`                 // Whether this is during modification
-	OriginalConfirmation      *ProjectManagementConfirmation `json:"original_confirmation,omitempty"` // For modifications
-	PendingModifications      map[string]interface{}         `json:"pending_modifications,omitempty"` // For modifications
-}
-
 // UnresolvedEmployeeMatch represents an employee name that needs disambiguation
 type UnresolvedEmployeeMatch struct {
 	OriginalName      string     `json:"original_name"`
 	MatchingEmployees []Employee `json:"matching_employees"`
 	Index             int        `json:"index"` // Display index for user selection (1-based)
-}
-
-// UserResponse represents parsed user response to confirmation
-type UserResponse struct {
-	Intent        string                 `json:"intent"`        // "confirm", "modify", "cancel"
-	Modifications map[string]interface{} `json:"modifications"` // Fields to modify
-	Reasoning     string                 `json:"reasoning"`     // LLM reasoning
 }
 
 // MultiEmployeeDisambiguationResponse represents parsed user response to multiple employee selection
@@ -202,44 +168,4 @@ type ToDoAssignment struct {
 	Description   string `json:"description"`    // Assignment description
 	Priority      string `json:"priority"`       // Priority level
 	Status        string `json:"status"`         // Usually "Open"
-}
-
-// ExistingEntityDisambiguationConfirmation represents pending existing entity selection
-type ExistingEntityDisambiguationConfirmation struct {
-	UserID                 string                                   `json:"user_id"`
-	Type                   string                                   `json:"type"`             // "project" or "task"
-	Action                 string                                   `json:"action"`           // "create_project", "create_task"
-	OriginalRequest        map[string]interface{}                   `json:"original_request"` // Original parsed request
-	CreatedAt              int64                                    `json:"created_at"`
-	EmployeeID             string                                   `json:"employee_id"`
-	CreatorEmail           string                                   `json:"creator_email"`
-	ExistingEntities       []interface{}                            `json:"existing_entities"`                 // []Project or []Task
-	EntityType             string                                   `json:"entity_type"`                       // "project" or "task"
-	ResolvedEmployees      []AssignedEmployee                       `json:"resolved_employees"`                // Already resolved employees
-	EmployeeDisambiguation *MultiEmployeeDisambiguationConfirmation `json:"employee_disambiguation,omitempty"` // If employee disambiguation needed
-}
-
-// ExistingEntityDisambiguationResponse represents parsed user response to existing entity selection
-type ExistingEntityDisambiguationResponse struct {
-	Intent        string `json:"intent"`         // "create_new", "use_existing", "cancel"
-	SelectedIndex int    `json:"selected_index"` // 1-based index for use_existing
-	Reasoning     string `json:"reasoning"`      // LLM reasoning
-}
-
-// ProjectTaskDisambiguationConfirmation handles project selection for task creation
-type ProjectTaskDisambiguationConfirmation struct {
-	UserID              string               `json:"user_id"`
-	OriginalTaskRequest *TaskCreationRequest `json:"original_task_request"`
-	CreatedAt           int64                `json:"created_at"`
-	EmployeeID          string               `json:"employee_id"`
-	CreatorEmail        string               `json:"creator_email"`
-	MatchingProjects    []Project            `json:"matching_projects"`
-	ResolvedEmployees   []AssignedEmployee   `json:"resolved_employees"`
-}
-
-// ProjectSelectionResponse represents parsed user response to project selection
-type ProjectSelectionResponse struct {
-	Intent        string `json:"intent"`         // "select_project", "no_project", "cancel"
-	SelectedIndex int    `json:"selected_index"` // 1-based index for select_project
-	Reasoning     string `json:"reasoning"`      // LLM reasoning
 }
