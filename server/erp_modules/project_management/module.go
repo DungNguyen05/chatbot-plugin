@@ -324,49 +324,49 @@ func (m *ProjectManagementModule) generateExistingEntityDisambiguationMessage(
 
 	var message strings.Builder
 
+	// Header
 	if isVietnamese {
 		if entityType == "project" {
-			message.WriteString("**Tìm thấy dự án tương tự:**\n\n")
+			message.WriteString("**Tìm thấy các dự án tương tự:**\n\n")
+			message.WriteString("| STT | Tên dự án | Mã |\n")
 		} else {
-			message.WriteString("**Tìm thấy task tương tự:**\n\n")
+			message.WriteString("**Tìm thấy các task tương tự:**\n\n")
+			message.WriteString("| STT | Tên task | Mã |\n")
 		}
+		message.WriteString("|-----|------------|-----|\n")
 	} else {
 		if entityType == "project" {
 			message.WriteString("**Found similar projects:**\n\n")
+			message.WriteString("| No. | Project Name | ID |\n")
 		} else {
 			message.WriteString("**Found similar tasks:**\n\n")
+			message.WriteString("| No. | Task Name | ID |\n")
 		}
+		message.WriteString("|-----|--------------|-----|\n")
 	}
 
-	// List existing entities with enhanced information
-	var entityNames []string
+	// Table rows
 	for i, entity := range existingEntities {
-		var entityName, entityID, entityStatus string
+		var entityName, entityID string
+
+		entityBytes, err := json.Marshal(entity)
+		if err != nil {
+			continue
+		}
 
 		if entityType == "project" {
-			if projectBytes, err := json.Marshal(entity); err == nil {
-				var project Project
-				if json.Unmarshal(projectBytes, &project) == nil && project.ProjectName != "" {
-					entityName = project.ProjectName
-					entityID = project.Name
-					entityStatus = project.Status
-				} else {
-					var task Task
-					if json.Unmarshal(projectBytes, &task) == nil && task.Subject != "" {
-						entityName = task.Subject
-						entityID = task.Name
-						entityStatus = task.Status
-					}
-				}
+			var project Project
+			if err := json.Unmarshal(entityBytes, &project); err == nil && project.ProjectName != "" {
+				entityName = project.ProjectName
+				entityID = project.Name
 			}
-		} else {
-			if taskBytes, err := json.Marshal(entity); err == nil {
-				var task Task
-				if json.Unmarshal(taskBytes, &task) == nil && task.Subject != "" {
-					entityName = task.Subject
-					entityID = task.Name
-					entityStatus = task.Status
-				}
+		}
+
+		if entityName == "" {
+			var task Task
+			if err := json.Unmarshal(entityBytes, &task); err == nil && task.Subject != "" {
+				entityName = task.Subject
+				entityID = task.Name
 			}
 		}
 
@@ -377,47 +377,14 @@ func (m *ProjectManagementModule) generateExistingEntityDisambiguationMessage(
 			entityID = "[Unknown ID]"
 		}
 
-		message.WriteString(fmt.Sprintf("%d. **%s** (ID: %s, Status: %s)\n",
-			i+1, entityName, entityID, entityStatus))
-
-		entityNames = append(entityNames, entityName)
+		message.WriteString(fmt.Sprintf("| %d | %s | %s |\n", i+1, entityName, entityID))
 	}
 
-	message.WriteString("\n")
-
-	// Enhanced selection instructions
+	// Short instruction
 	if isVietnamese {
-		message.WriteString("**Bạn có thể chọn bằng 3 cách:**\n\n")
-		message.WriteString("**1. Chọn bằng số thứ tự:**\n")
-		message.WriteString("   - Ví dụ: `1` để chọn mục thứ nhất\n")
-		message.WriteString("   - Ví dụ: `3` để chọn mục thứ ba\n\n")
-		message.WriteString("**2. Chọn bằng tên cụ thể:**\n")
-		if len(entityNames) > 0 {
-			message.WriteString(fmt.Sprintf("   - Ví dụ: `%s` để chọn %s này\n", entityNames[0], entityType))
-			if len(entityNames) > 1 {
-				message.WriteString(fmt.Sprintf("   - Ví dụ: `%s` để chọn %s này\n", entityNames[1], entityType))
-			}
-		}
-		message.WriteString("\n")
-		message.WriteString("**3. Tạo mới:**\n")
-		message.WriteString("   - Trả lời `tạo mới` để tạo " + entityType + " mới\n\n")
-		message.WriteString("Hoặc trả lời `hủy` để hủy bỏ yêu cầu.")
+		message.WriteString("Vui lòng chọn " + entityType + " có sẵn hoặc yêu cầu tạo mới.\n")
 	} else {
-		message.WriteString("**You can choose in 3 ways:**\n\n")
-		message.WriteString("**1. Select by number:**\n")
-		message.WriteString("   - Example: `1` to select the first item\n")
-		message.WriteString("   - Example: `3` to select the third item\n\n")
-		message.WriteString("**2. Select by specific name:**\n")
-		if len(entityNames) > 0 {
-			message.WriteString(fmt.Sprintf("   - Example: `%s` to select this %s\n", entityNames[0], entityType))
-			if len(entityNames) > 1 {
-				message.WriteString(fmt.Sprintf("   - Example: `%s` to select this %s\n", entityNames[1], entityType))
-			}
-		}
-		message.WriteString("\n")
-		message.WriteString("**3. Create new:**\n")
-		message.WriteString("   - Reply `create new` to create a new " + entityType + "\n\n")
-		message.WriteString("Or reply `cancel` to cancel the request.")
+		message.WriteString("Please select an existing " + entityType + " or create new.\n")
 	}
 
 	return message.String(), nil
@@ -445,32 +412,41 @@ func (m *ProjectManagementModule) generateProjectTaskDisambiguationMessage(
 
 	var message strings.Builder
 
+	// Tiêu đề và bảng
 	if isVietnamese {
 		message.WriteString("**Tìm thấy nhiều dự án phù hợp:**\n\n")
+		message.WriteString("| STT | Tên dự án | Mã |\n")
+		message.WriteString("|-----|------------|-----|\n")
 	} else {
 		message.WriteString("**Found multiple matching projects:**\n\n")
+		message.WriteString("| No. | Project Name | ID |\n")
+		message.WriteString("|-----|---------------|-----|\n")
 	}
 
-	// List matching projects
+	// Dữ liệu bảng
 	for i, project := range matchingProjects {
-		message.WriteString(fmt.Sprintf("%d. **%s** (ID: %s, Status: %s)\n",
-			i+1, project.ProjectName, project.Name, project.Status))
+		name := project.ProjectName
+		id := project.Name
+
+		if name == "" {
+			name = "[Unknown]"
+		}
+		if id == "" {
+			id = "[Unknown ID]"
+		}
+
+		message.WriteString(fmt.Sprintf("| %d | %s | %s |\n", i+1, name, id))
 	}
 
 	message.WriteString("\n")
 
+	// Hướng dẫn lựa chọn (giống mẫu bạn dùng)
 	if isVietnamese {
-		message.WriteString("Bạn muốn:\n")
-		message.WriteString("• **Chọn số** - Gán task vào dự án (ví dụ: '1')\n")
-		message.WriteString("• **Không** - Tạo task không thuộc dự án nào\n")
-		message.WriteString("• **Hủy** - Hủy bỏ yêu cầu\n\n")
-		message.WriteString("Vui lòng trả lời: số thứ tự, 'không', hoặc 'hủy'")
+		message.WriteString("**Vui lòng chọn dự án bằng số thứ tự hoặc tên.**\n")
+		message.WriteString("Bạn cũng có thể huỷ bỏ yêu cầu.")
 	} else {
-		message.WriteString("Do you want to:\n")
-		message.WriteString("• **Select number** - Assign task to project (example: '1')\n")
-		message.WriteString("• **No project** - Create task without project\n")
-		message.WriteString("• **Cancel** - Cancel the request\n\n")
-		message.WriteString("Please reply: number, 'no project', or 'cancel'")
+		message.WriteString("**Please select project by number or name.**\n")
+		message.WriteString("You can also cancel this request.")
 	}
 
 	return message.String(), nil

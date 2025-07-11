@@ -69,67 +69,58 @@ func (m *ProjectManagementModule) generateConfirmationMessage(ctx *erp_modules.M
 // generateMultiEmployeeDisambiguationMessage generates message asking user to choose employees
 func (m *ProjectManagementModule) generateMultiEmployeeDisambiguationMessage(ctx *erp_modules.ModuleContext, assigneeResult *AssigneeResolutionResult) (string, error) {
 	isVietnamese := detectUserLanguage(ctx.User)
-
 	var message strings.Builder
 
-	// Show successfully resolved employees if any
 	if len(assigneeResult.ResolvedEmployees) > 0 {
 		if isVietnamese {
-			message.WriteString("**Đã xác định thành công:**\n")
+			message.WriteString("**Đã xác định thành công:**\n\n")
+			message.WriteString("| STT | Tên nhân viên | Email |\n")
+			message.WriteString("|-----|----------------|--------------------------|\n")
 		} else {
-			message.WriteString("**Successfully identified:**\n")
+			message.WriteString("**Successfully identified:**\n\n")
+			message.WriteString("| No. | Employee Name | Email |\n")
+			message.WriteString("|-----|----------------|--------------------------|\n")
 		}
-		for _, emp := range assigneeResult.ResolvedEmployees {
-			message.WriteString(fmt.Sprintf("- **%s** (%s)\n", emp.EmployeeName, emp.Email))
+		for i, emp := range assigneeResult.ResolvedEmployees {
+			message.WriteString(fmt.Sprintf("| %d | %s | %s |\n", i+1, emp.EmployeeName, emp.Email))
 		}
-		message.WriteString("\n")
+		message.WriteString("\n---\n")
 	}
 
-	// Show employees that need disambiguation
 	if isVietnamese {
-		message.WriteString("**Cần làm rõ cho các nhân viên sau:**\n\n")
+		message.WriteString("**⚠️ Cần làm rõ thông tin các nhân viên sau:**\n\n")
 	} else {
-		message.WriteString("**Need clarification for the following employees:**\n\n")
+		message.WriteString("**⚠️ Need clarification for the following employees:**\n\n")
 	}
 
 	globalIndex := 1
 	for _, unresolvedMatch := range assigneeResult.UnresolvedEmployeeMatches {
 		if isVietnamese {
-			message.WriteString(fmt.Sprintf("**Tên '%s'** có thể là:\n", unresolvedMatch.OriginalName))
+			message.WriteString(fmt.Sprintf("**Tên không rõ: '%s'** có thể là các nhân viên sau:\n\n", unresolvedMatch.OriginalName))
+			message.WriteString("| STT | Tên nhân viên | Email | Mã nhân viên |\n")
+			message.WriteString("|-----|----------------|------------------------|----------------|\n")
 		} else {
-			message.WriteString(fmt.Sprintf("**Name '%s'** could be:\n", unresolvedMatch.OriginalName))
+			message.WriteString(fmt.Sprintf("**Unclear name: '%s'** might refer to:\n\n", unresolvedMatch.OriginalName))
+			message.WriteString("| No. | Employee Name | Company Email | Employee ID |\n")
+			message.WriteString("|-----|----------------|------------------------|----------------|\n")
 		}
 
 		for _, emp := range unresolvedMatch.MatchingEmployees {
-			message.WriteString(fmt.Sprintf("%d. **%s** (%s, %s)\n",
+			message.WriteString(fmt.Sprintf("| %d | %s | %s | %s |\n",
 				globalIndex,
 				emp.EmployeeName,
 				emp.CompanyEmail,
 				emp.Name))
 			globalIndex++
 		}
-		message.WriteString("\n")
 	}
 
-	// Enhanced selection instructions
 	if isVietnamese {
-		message.WriteString("**Bạn có thể chọn nhân viên bằng 2 cách:**\n\n")
-		message.WriteString("**1. Chọn bằng số thứ tự:**\n")
-		message.WriteString("   - Ví dụ: `1, 3, 5` để chọn nhân viên thứ 1, 3 và 5\n")
-		message.WriteString("   - Ví dụ: `2, 7` để chọn nhân viên thứ 2 và 7\n\n")
-		message.WriteString("**2. Chọn bằng tên cụ thể:**\n")
-		message.WriteString("   - Ví dụ: `Phạm Tiến Đạt, Trung Đức` để chọn các nhân viên này\n")
-		message.WriteString("   - Ví dụ: `Duy Anh, Anh Tài Phan` để chọn các nhân viên này\n\n")
-		message.WriteString("Hoặc trả lời `hủy` để hủy bỏ yêu cầu.")
+		message.WriteString("**Vui lòng chọn nhân viên bằng số thứ tự hoặc tên.**\n")
+		message.WriteString("Bạn cũng có thể huỷ bỏ yêu cầu.")
 	} else {
-		message.WriteString("**You can select employees in 2 ways:**\n\n")
-		message.WriteString("**1. Select by numbers:**\n")
-		message.WriteString("   - Example: `1, 3, 5` to select employees 1, 3, and 5\n")
-		message.WriteString("   - Example: `2, 7` to select employees 2 and 7\n\n")
-		message.WriteString("**2. Select by specific names:**\n")
-		message.WriteString("   - Example: `Phạm Tiến Đạt, Trung Đức` to select these employees\n")
-		message.WriteString("   - Example: `Duy Anh, Anh Tài Phan` to select these employees\n\n")
-		message.WriteString("Or reply `cancel` to cancel the request.")
+		message.WriteString("**Please select employees by number or name.**\n")
+		message.WriteString("You can also cancel this request.")
 	}
 
 	return message.String(), nil
