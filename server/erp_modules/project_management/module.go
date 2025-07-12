@@ -653,8 +653,10 @@ func (m *ProjectManagementModule) generateExistingEntityDisambiguationMessage(
 	// Short instruction
 	if isVietnamese {
 		message.WriteString("Vui lòng chọn " + entityType + " có sẵn hoặc yêu cầu tạo mới.\n")
+		message.WriteString("Có thể chọn bằng số thứ tự hoặc tên.\n")
 	} else {
-		message.WriteString("Please select an existing " + entityType + " or create new.\n")
+		message.WriteString("Please select an existing " + entityType + " or request to create a new one.\n")
+		message.WriteString("You can select by number or name.\n")
 	}
 
 	return message.String(), nil
