@@ -63,7 +63,7 @@ func (m *ProjectManagementModule) GetCategory() string {
 
 // GetSupportedActions returns list of actions this module supports
 func (m *ProjectManagementModule) GetSupportedActions() []string {
-	return []string{"create_project", "create_task"}
+	return []string{"create_project", "create_task", "show_project", "show_task"}
 }
 
 // CanHandle determines if this module can handle the given intent
@@ -95,33 +95,58 @@ func (m *ProjectManagementModule) ProcessUserMessage(ctx *erp_modules.ModuleCont
 func (m *ProjectManagementModule) Execute(ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
 	isVietnamese := detectUserLanguage(ctx.User)
 
-	// Get employee ID
-	employeeID, err := m.getEmployeeIDFromUser(ctx.User)
-	if err != nil {
-		errorMsg := "Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
-		if !isVietnamese {
-			errorMsg = "Cannot find your employee information in the ERP system. Please contact administrator."
-		}
-		return &erp_modules.ModuleResponse{
-			Success: false,
-			Message: errorMsg,
-			Error:   err.Error(),
-		}, nil
-	}
-
-	// Get creator's email
-	creatorEmail, err := m.getEmployeeEmailFromUser(ctx.User)
-	if err != nil {
-		m.api.LogWarn("Failed to get creator email", "error", err.Error())
-		creatorEmail = "demo@example.com"
-	}
-
-	// Execute specific action by starting enhanced workflow
+	// Execute specific action based on intent.Action
 	switch intent.Action {
 	case "create_project":
+		// Get employee ID for create actions
+		employeeID, err := m.getEmployeeIDFromUser(ctx.User)
+		if err != nil {
+			errorMsg := "Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
+			if !isVietnamese {
+				errorMsg = "Cannot find your employee information in the ERP system. Please contact administrator."
+			}
+			return &erp_modules.ModuleResponse{
+				Success: false,
+				Message: errorMsg,
+				Error:   err.Error(),
+			}, nil
+		}
+		// Get creator's email
+		creatorEmail, err := m.getEmployeeEmailFromUser(ctx.User)
+		if err != nil {
+			m.api.LogWarn("Failed to get creator email", "error", err.Error())
+			creatorEmail = "demo@example.com"
+		}
 		return m.handleCreateProjectRequest(employeeID, creatorEmail, ctx, intent)
+
 	case "create_task":
+		// Get employee ID for create actions
+		employeeID, err := m.getEmployeeIDFromUser(ctx.User)
+		if err != nil {
+			errorMsg := "Không tìm thấy thông tin nhân viên của bạn trong hệ thống ERP. Vui lòng liên hệ quản trị viên."
+			if !isVietnamese {
+				errorMsg = "Cannot find your employee information in the ERP system. Please contact administrator."
+			}
+			return &erp_modules.ModuleResponse{
+				Success: false,
+				Message: errorMsg,
+				Error:   err.Error(),
+			}, nil
+		}
+		// Get creator's email
+		creatorEmail, err := m.getEmployeeEmailFromUser(ctx.User)
+		if err != nil {
+			m.api.LogWarn("Failed to get creator email", "error", err.Error())
+			creatorEmail = "demo@example.com"
+		}
 		return m.handleCreateTaskRequest(employeeID, creatorEmail, ctx, intent)
+
+	case "show_project":
+		return m.handleShowProjectRequest(ctx, intent)
+
+	case "show_task":
+		return m.handleShowTaskRequest(ctx, intent)
+
 	default:
 		errorMsg := "Hành động không được hỗ trợ"
 		if !isVietnamese {
@@ -235,6 +260,216 @@ func (m *ProjectManagementModule) handleCreateTaskRequest(
 	)
 }
 
+// handleShowProjectRequest processes show project request
+func (m *ProjectManagementModule) handleShowProjectRequest(ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
+	isVietnamese := detectUserLanguage(ctx.User)
+
+	// Get all projects from ERP
+	projects, err := m.erpClient.GetAllProjects()
+	if err != nil {
+		errorMsg := "⚠️ Không thể lấy danh sách dự án từ hệ thống ERP."
+		if !isVietnamese {
+			errorMsg = "⚠️ Cannot retrieve projects from ERP system."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	if len(projects) == 0 {
+		errorMsg := "Không có dự án nào trong hệ thống."
+		if !isVietnamese {
+			errorMsg = "No projects found in the system."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: true,
+			Message: errorMsg,
+		}, nil
+	}
+
+	// Generate formatted project list
+	message := m.formatProjectList(projects, isVietnamese)
+
+	return &erp_modules.ModuleResponse{
+		Success:     true,
+		Message:     message,
+		ActionTaken: "show_project",
+		Data: map[string]interface{}{
+			"project_count": len(projects),
+			"projects":      projects,
+		},
+	}, nil
+}
+
+// handleShowTaskRequest processes show task request
+func (m *ProjectManagementModule) handleShowTaskRequest(ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
+	isVietnamese := detectUserLanguage(ctx.User)
+
+	// Get all tasks from ERP
+	tasks, err := m.erpClient.GetAllTasks()
+	if err != nil {
+		errorMsg := "⚠️ Không thể lấy danh sách task từ hệ thống ERP."
+		if !isVietnamese {
+			errorMsg = "⚠️ Cannot retrieve tasks from ERP system."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: false,
+			Message: errorMsg,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	if len(tasks) == 0 {
+		errorMsg := "Không có task nào trong hệ thống."
+		if !isVietnamese {
+			errorMsg = "No tasks found in the system."
+		}
+		return &erp_modules.ModuleResponse{
+			Success: true,
+			Message: errorMsg,
+		}, nil
+	}
+
+	// Generate formatted task list
+	message := m.formatTaskList(tasks, isVietnamese)
+
+	return &erp_modules.ModuleResponse{
+		Success:     true,
+		Message:     message,
+		ActionTaken: "show_task",
+		Data: map[string]interface{}{
+			"task_count": len(tasks),
+			"tasks":      tasks,
+		},
+	}, nil
+}
+
+// formatProjectList formats the project list into a readable table message
+func (m *ProjectManagementModule) formatProjectList(projects []Project, isVietnamese bool) string {
+	var message strings.Builder
+
+	if isVietnamese {
+		message.WriteString("**Danh sách dự án trong hệ thống:**\n\n")
+		message.WriteString("| STT | Tên dự án | Trạng thái | Ưu tiên | Khách hàng |\n")
+		message.WriteString("|-----|-----------|------------|---------|------------|\n")
+	} else {
+		message.WriteString("**Projects in the system:**\n\n")
+		message.WriteString("| No. | Project Name | Status | Priority | Customer |\n")
+		message.WriteString("|-----|--------------|--------|----------|----------|\n")
+	}
+
+	// Limit display to prevent overwhelming messages
+	displayLimit := 50
+	displayedCount := 0
+
+	for i, project := range projects {
+		if displayedCount >= displayLimit {
+			remaining := len(projects) - displayedCount
+			if isVietnamese {
+				message.WriteString(fmt.Sprintf("| ... | *...và %d dự án khác* | ... | ... | ... |\n", remaining))
+			} else {
+				message.WriteString(fmt.Sprintf("| ... | *...and %d more projects* | ... | ... | ... |\n", remaining))
+			}
+			break
+		}
+
+		// Safely handle empty fields
+		projectName := project.ProjectName
+		if projectName == "" {
+			projectName = "[Không có tên]"
+			if !isVietnamese {
+				projectName = "[No name]"
+			}
+		}
+
+		status := project.Status
+		if status == "" {
+			status = "N/A"
+		}
+
+		priority := project.Priority
+		if priority == "" {
+			priority = "N/A"
+		}
+
+		customer := project.Customer
+		if customer == "" {
+			customer = "N/A"
+		}
+
+		message.WriteString(fmt.Sprintf("| %d | %s | %s | %s | %s |\n",
+			i+1, projectName, status, priority, customer))
+
+		displayedCount++
+	}
+
+	return message.String()
+}
+
+// formatTaskList formats the task list into a readable table message
+func (m *ProjectManagementModule) formatTaskList(tasks []Task, isVietnamese bool) string {
+	var message strings.Builder
+
+	if isVietnamese {
+		message.WriteString("**Danh sách task trong hệ thống:**\n\n")
+		message.WriteString("| STT | Tên task | Trạng thái | Ưu tiên | Dự án |\n")
+		message.WriteString("|-----|----------|------------|---------|-------|\n")
+	} else {
+		message.WriteString("**Tasks in the system:**\n\n")
+		message.WriteString("| No. | Task Name | Status | Priority | Project |\n")
+		message.WriteString("|-----|-----------|--------|----------|----------|\n")
+	}
+
+	// Limit display to prevent overwhelming messages
+	displayLimit := 50
+	displayedCount := 0
+
+	for i, task := range tasks {
+		if displayedCount >= displayLimit {
+			remaining := len(tasks) - displayedCount
+			if isVietnamese {
+				message.WriteString(fmt.Sprintf("| ... | *...và %d task khác* | ... | ... | ... |\n", remaining))
+			} else {
+				message.WriteString(fmt.Sprintf("| ... | *...and %d more tasks* | ... | ... | ... |\n", remaining))
+			}
+			break
+		}
+
+		// Safely handle empty fields
+		taskName := task.Subject
+		if taskName == "" {
+			taskName = "[Không có tên]"
+			if !isVietnamese {
+				taskName = "[No name]"
+			}
+		}
+
+		status := task.Status
+		if status == "" {
+			status = "N/A"
+		}
+
+		priority := task.Priority
+		if priority == "" {
+			priority = "N/A"
+		}
+
+		project := task.Project
+		if project == "" {
+			project = "N/A"
+		}
+
+		message.WriteString(fmt.Sprintf("| %d | %s | %s | %s | %s |\n",
+			i+1, taskName, status, priority, project))
+
+		displayedCount++
+	}
+
+	return message.String()
+}
+
 // GetDescription returns a description of what this module does
 func (m *ProjectManagementModule) GetDescription() string {
 	return "Quản lý dự án và công việc: tạo dự án mới, tạo task, phân công công việc cho nhiều nhân viên với luồng xử lý thông minh và linh hoạt, hỗ trợ phân tích đa thành phần và xử lý modification phức tạp"
@@ -285,6 +520,38 @@ func (m *ProjectManagementModule) GetActionExamples() map[string][]string {
 			"create task for project management system",
 			"tạo task urgent fix bug giao cho team QA gắn vào project Mobile App",
 			"create high priority task 'Database optimization' assign to Alice, Bob for project 'Backend Upgrade'",
+		},
+		"show_project": {
+			"hiển thị dự án",
+			"xem dự án",
+			"danh sách dự án",
+			"liệt kê dự án",
+			"show projects",
+			"list projects",
+			"display projects",
+			"view projects",
+			"dự án nào đang có",
+			"có dự án gì",
+			"what projects are available",
+			"show me all projects",
+			"xem tất cả dự án",
+			"cho tôi xem dự án",
+		},
+		"show_task": {
+			"hiển thị task",
+			"xem task",
+			"danh sách task",
+			"liệt kê task",
+			"show tasks",
+			"list tasks",
+			"display tasks",
+			"view tasks",
+			"task nào đang có",
+			"có task gì",
+			"what tasks are available",
+			"show me all tasks",
+			"xem tất cả task",
+			"cho tôi xem task",
 		},
 	}
 }

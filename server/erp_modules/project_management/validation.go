@@ -193,6 +193,8 @@ func isValidAction(action string) bool {
 	validActions := map[string]bool{
 		"create_project": true,
 		"create_task":    true,
+		"show_project":   true,
+		"show_task":      true,
 	}
 
 	return validActions[action]
