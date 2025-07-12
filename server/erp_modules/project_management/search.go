@@ -1,3 +1,4 @@
+// Enhanced search.go with improved fuzzy matching algorithms
 // Copyright (c) 2023-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
@@ -7,9 +8,10 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"unicode"
 )
 
-// SearchEmployeesByName searches for employees by name using fuzzy matching
+// SearchEmployeesByName searches for employees by name using enhanced fuzzy matching
 func (c *ERPClient) SearchEmployeesByName(searchName string) ([]Employee, error) {
 	c.api.LogDebug("Searching employees by name for project management", "search_name", searchName)
 
@@ -19,22 +21,22 @@ func (c *ERPClient) SearchEmployeesByName(searchName string) ([]Employee, error)
 		return nil, err
 	}
 
-	// Filter employees using fuzzy matching
+	// Filter employees using enhanced fuzzy matching
 	var matchedEmployees []Employee
-	searchNameLower := strings.ToLower(searchName)
+	searchNameNormalized := normalizeText(searchName)
 
 	for _, employee := range allEmployees {
-		// Check multiple fields for matches
-		employeeNameLower := strings.ToLower(employee.EmployeeName)
+		// Check multiple fields for matches with enhanced algorithm
+		employeeNameNormalized := normalizeText(employee.EmployeeName)
 		employeeIDLower := strings.ToLower(employee.Name)
 		employeeNumberLower := strings.ToLower(employee.EmployeeNumber)
 		employeeEmailLower := strings.ToLower(employee.CompanyEmail)
 
-		// Calculate confidence score
-		confidence := calculateNameMatchConfidence(searchNameLower, employeeNameLower, employeeIDLower, employeeNumberLower, employeeEmailLower)
+		// Calculate enhanced confidence score
+		confidence := calculateNameMatchConfidence(searchNameNormalized, employeeNameNormalized, employeeIDLower, employeeNumberLower, employeeEmailLower)
 
-		// Only include employees with confidence above threshold
-		if confidence >= 0.8 { // 80% confidence threshold
+		// Use lower threshold for better recall and more user choices
+		if confidence >= 0.4 { // Further lowered to give users more relevant options
 			employee.MatchConfidence = confidence
 			matchedEmployees = append(matchedEmployees, employee)
 		}
@@ -45,12 +47,17 @@ func (c *ERPClient) SearchEmployeesByName(searchName string) ([]Employee, error)
 		return matchedEmployees[i].MatchConfidence > matchedEmployees[j].MatchConfidence
 	})
 
+	// Increase results limit to give users more choices
+	if len(matchedEmployees) > 25 {
+		matchedEmployees = matchedEmployees[:25]
+	}
+
 	c.api.LogDebug("Found matching employees for project management", "count", len(matchedEmployees), "search_name", searchName)
 
 	return matchedEmployees, nil
 }
 
-// SearchProjectsByName searches for projects by name using fuzzy matching
+// SearchProjectsByName searches for projects by name using enhanced fuzzy matching
 func (c *ERPClient) SearchProjectsByName(searchName string) ([]Project, error) {
 	c.api.LogDebug("Searching projects by name", "search_name", searchName)
 
@@ -60,20 +67,20 @@ func (c *ERPClient) SearchProjectsByName(searchName string) ([]Project, error) {
 		return nil, err
 	}
 
-	// Filter projects using fuzzy matching
+	// Filter projects using enhanced fuzzy matching
 	var matchedProjects []Project
-	searchNameLower := strings.ToLower(searchName)
+	searchNameNormalized := normalizeText(searchName)
 
 	for _, project := range allProjects {
-		// Check project name for matches
-		projectNameLower := strings.ToLower(project.ProjectName)
+		// Check project name for matches with enhanced algorithm
+		projectNameNormalized := normalizeText(project.ProjectName)
 		projectIDLower := strings.ToLower(project.Name)
 
-		// Calculate confidence score
-		confidence := calculateProjectMatchConfidence(searchNameLower, projectNameLower, projectIDLower)
+		// Calculate enhanced confidence score
+		confidence := calculateProjectMatchConfidence(searchNameNormalized, projectNameNormalized, projectIDLower)
 
-		// Only include projects with confidence above threshold
-		if confidence >= 0.8 { // 80% confidence threshold
+		// Use lower threshold for better recall
+		if confidence >= 0.4 { // Further lowered to catch more relevant matches
 			project.MatchConfidence = confidence
 			matchedProjects = append(matchedProjects, project)
 		}
@@ -84,12 +91,17 @@ func (c *ERPClient) SearchProjectsByName(searchName string) ([]Project, error) {
 		return matchedProjects[i].MatchConfidence > matchedProjects[j].MatchConfidence
 	})
 
+	// Increase results limit
+	if len(matchedProjects) > 25 {
+		matchedProjects = matchedProjects[:25]
+	}
+
 	c.api.LogDebug("Found matching projects", "count", len(matchedProjects), "search_name", searchName)
 
 	return matchedProjects, nil
 }
 
-// SearchTasksByName searches for tasks by name using fuzzy matching
+// SearchTasksByName searches for tasks by name using enhanced fuzzy matching
 func (c *ERPClient) SearchTasksByName(searchName string) ([]Task, error) {
 	c.api.LogDebug("Searching tasks by name", "search_name", searchName)
 
@@ -99,20 +111,20 @@ func (c *ERPClient) SearchTasksByName(searchName string) ([]Task, error) {
 		return nil, err
 	}
 
-	// Filter tasks using fuzzy matching
+	// Filter tasks using enhanced fuzzy matching
 	var matchedTasks []Task
-	searchNameLower := strings.ToLower(searchName)
+	searchNameNormalized := normalizeText(searchName)
 
 	for _, task := range allTasks {
-		// Check task subject for matches
-		taskSubjectLower := strings.ToLower(task.Subject)
+		// Check task subject for matches with enhanced algorithm
+		taskSubjectNormalized := normalizeText(task.Subject)
 		taskIDLower := strings.ToLower(task.Name)
 
-		// Calculate confidence score
-		confidence := calculateTaskMatchConfidence(searchNameLower, taskSubjectLower, taskIDLower)
+		// Calculate enhanced confidence score
+		confidence := calculateTaskMatchConfidence(searchNameNormalized, taskSubjectNormalized, taskIDLower)
 
-		// Only include tasks with confidence above threshold
-		if confidence >= 0.8 { // 80% confidence threshold
+		// Use lower threshold for better recall
+		if confidence >= 0.4 { // Further lowered
 			task.MatchConfidence = confidence
 			matchedTasks = append(matchedTasks, task)
 		}
@@ -123,184 +135,455 @@ func (c *ERPClient) SearchTasksByName(searchName string) ([]Task, error) {
 		return matchedTasks[i].MatchConfidence > matchedTasks[j].MatchConfidence
 	})
 
+	// Increase results limit
+	if len(matchedTasks) > 25 {
+		matchedTasks = matchedTasks[:25]
+	}
+
 	c.api.LogDebug("Found matching tasks", "count", len(matchedTasks), "search_name", searchName)
 
 	return matchedTasks, nil
 }
 
-// calculateProjectMatchConfidence calculates project name matching confidence
+// normalizeText normalizes text for better matching (handles Vietnamese characters, etc.)
+func normalizeText(text string) string {
+	// Convert to lowercase
+	text = strings.ToLower(text)
+
+	// Remove extra spaces and trim
+	text = strings.TrimSpace(text)
+	text = strings.Join(strings.Fields(text), " ")
+
+	// Vietnamese character normalization mapping
+	vietnameseMap := map[string]string{
+		"à": "a", "á": "a", "ạ": "a", "ả": "a", "ã": "a",
+		"â": "a", "ầ": "a", "ấ": "a", "ậ": "a", "ẩ": "a", "ẫ": "a",
+		"ă": "a", "ằ": "a", "ắ": "a", "ặ": "a", "ẳ": "a", "ẵ": "a",
+		"è": "e", "é": "e", "ẹ": "e", "ẻ": "e", "ẽ": "e",
+		"ê": "e", "ề": "e", "ế": "e", "ệ": "e", "ể": "e", "ễ": "e",
+		"ì": "i", "í": "i", "ị": "i", "ỉ": "i", "ĩ": "i",
+		"ò": "o", "ó": "o", "ọ": "o", "ỏ": "o", "õ": "o",
+		"ô": "o", "ồ": "o", "ố": "o", "ộ": "o", "ổ": "o", "ỗ": "o",
+		"ơ": "o", "ờ": "o", "ớ": "o", "ợ": "o", "ở": "o", "ỡ": "o",
+		"ù": "u", "ú": "u", "ụ": "u", "ủ": "u", "ũ": "u",
+		"ư": "u", "ừ": "u", "ứ": "u", "ự": "u", "ử": "u", "ữ": "u",
+		"ỳ": "y", "ý": "y", "ỵ": "y", "ỷ": "y", "ỹ": "y",
+		"đ": "d",
+	}
+
+	// Apply Vietnamese normalization
+	for vietnamese, latin := range vietnameseMap {
+		text = strings.ReplaceAll(text, vietnamese, latin)
+	}
+
+	return text
+}
+
+// calculateProjectMatchConfidence calculates project name matching confidence with enhanced algorithm
 func calculateProjectMatchConfidence(searchName, projectName, projectID string) float64 {
 	var maxConfidence float64
 
-	// Exact match
+	// Early exit for empty inputs
+	if searchName == "" || projectName == "" {
+		return 0.0
+	}
+
+	// 1. Exact match (highest priority)
 	if searchName == projectName {
 		return 1.0
 	}
 
-	// Check if search name is contained in project name
+	// 2. Case-insensitive exact match
+	if strings.EqualFold(searchName, projectName) {
+		maxConfidence = math.Max(maxConfidence, 0.98)
+	}
+
+	// 3. Full substring matches
 	if strings.Contains(projectName, searchName) {
-		maxConfidence = math.Max(maxConfidence, 0.9)
+		// Score based on how much of the target string the search covers
+		coverage := float64(len(searchName)) / float64(len(projectName))
+		substringScore := 0.85 + (coverage * 0.1) // 0.85 - 0.95
+		maxConfidence = math.Max(maxConfidence, substringScore)
 	}
 
-	// Check if project name is contained in search name
 	if strings.Contains(searchName, projectName) {
-		maxConfidence = math.Max(maxConfidence, 0.85)
+		maxConfidence = math.Max(maxConfidence, 0.88)
 	}
 
-	// Check individual words
-	searchWords := strings.Fields(searchName)
-	projectWords := strings.Fields(projectName)
+	// 4. Word-based matching (very important for multi-word names)
+	wordScore := calculateWordBasedScore(searchName, projectName)
+	maxConfidence = math.Max(maxConfidence, wordScore)
 
-	var matchCount float64
-	for _, searchWord := range searchWords {
-		for _, projWord := range projectWords {
-			if strings.Contains(projWord, searchWord) || strings.Contains(searchWord, projWord) {
-				matchCount++
-				break
-			}
-		}
+	// 5. N-gram matching (for partial word matches)
+	ngramScore := calculateNGramScore(searchName, projectName, 3)
+	maxConfidence = math.Max(maxConfidence, ngramScore*0.8) // Scale down n-gram scores
+
+	// 6. Enhanced fuzzy matching with better scoring
+	if len(searchName) > 2 && len(projectName) > 2 {
+		fuzzyScore := calculateEnhancedFuzzyMatch(searchName, projectName)
+		maxConfidence = math.Max(maxConfidence, fuzzyScore)
 	}
 
-	if len(searchWords) > 0 {
-		wordMatchConfidence := matchCount / float64(len(searchWords)) * 0.8
-		maxConfidence = math.Max(maxConfidence, wordMatchConfidence)
-	}
-
-	// Check project ID match
+	// 7. Project ID matching (high confidence for exact matches)
 	if strings.Contains(projectID, searchName) {
 		maxConfidence = math.Max(maxConfidence, 0.95)
 	}
 
-	// Fuzzy string matching using Levenshtein distance
-	if len(searchName) > 2 && len(projectName) > 2 {
-		fuzzyConfidence := calculateFuzzyMatch(searchName, projectName)
-		maxConfidence = math.Max(maxConfidence, fuzzyConfidence)
-	}
+	// 8. Initials matching (for abbreviated searches)
+	initialsScore := calculateInitialsScore(searchName, projectName)
+	maxConfidence = math.Max(maxConfidence, initialsScore)
 
 	return maxConfidence
 }
 
-// calculateTaskMatchConfidence calculates task name matching confidence
+// calculateTaskMatchConfidence calculates task name matching confidence with enhanced algorithm
 func calculateTaskMatchConfidence(searchName, taskSubject, taskID string) float64 {
 	var maxConfidence float64
 
-	// Exact match
+	// Early exit for empty inputs
+	if searchName == "" || taskSubject == "" {
+		return 0.0
+	}
+
+	// 1. Exact match (highest priority)
 	if searchName == taskSubject {
 		return 1.0
 	}
 
-	// Check if search name is contained in task subject
+	// 2. Case-insensitive exact match
+	if strings.EqualFold(searchName, taskSubject) {
+		maxConfidence = math.Max(maxConfidence, 0.98)
+	}
+
+	// 3. Full substring matches
 	if strings.Contains(taskSubject, searchName) {
-		maxConfidence = math.Max(maxConfidence, 0.9)
+		coverage := float64(len(searchName)) / float64(len(taskSubject))
+		substringScore := 0.85 + (coverage * 0.1)
+		maxConfidence = math.Max(maxConfidence, substringScore)
 	}
 
-	// Check if task subject is contained in search name
 	if strings.Contains(searchName, taskSubject) {
-		maxConfidence = math.Max(maxConfidence, 0.85)
+		maxConfidence = math.Max(maxConfidence, 0.88)
 	}
 
-	// Check individual words
-	searchWords := strings.Fields(searchName)
-	taskWords := strings.Fields(taskSubject)
+	// 4. Word-based matching
+	wordScore := calculateWordBasedScore(searchName, taskSubject)
+	maxConfidence = math.Max(maxConfidence, wordScore)
 
-	var matchCount float64
-	for _, searchWord := range searchWords {
-		for _, taskWord := range taskWords {
-			if strings.Contains(taskWord, searchWord) || strings.Contains(searchWord, taskWord) {
-				matchCount++
-				break
-			}
-		}
+	// 5. N-gram matching
+	ngramScore := calculateNGramScore(searchName, taskSubject, 3)
+	maxConfidence = math.Max(maxConfidence, ngramScore*0.8)
+
+	// 6. Enhanced fuzzy matching
+	if len(searchName) > 2 && len(taskSubject) > 2 {
+		fuzzyScore := calculateEnhancedFuzzyMatch(searchName, taskSubject)
+		maxConfidence = math.Max(maxConfidence, fuzzyScore)
 	}
 
-	if len(searchWords) > 0 {
-		wordMatchConfidence := matchCount / float64(len(searchWords)) * 0.8
-		maxConfidence = math.Max(maxConfidence, wordMatchConfidence)
-	}
-
-	// Check task ID match
+	// 7. Task ID matching
 	if strings.Contains(taskID, searchName) {
 		maxConfidence = math.Max(maxConfidence, 0.95)
 	}
 
-	// Fuzzy string matching using Levenshtein distance
-	if len(searchName) > 2 && len(taskSubject) > 2 {
-		fuzzyConfidence := calculateFuzzyMatch(searchName, taskSubject)
-		maxConfidence = math.Max(maxConfidence, fuzzyConfidence)
-	}
+	// 8. Initials matching
+	initialsScore := calculateInitialsScore(searchName, taskSubject)
+	maxConfidence = math.Max(maxConfidence, initialsScore)
 
 	return maxConfidence
 }
 
-// calculateNameMatchConfidence calculates name matching confidence
+// calculateNameMatchConfidence calculates name matching confidence with enhanced algorithm
 func calculateNameMatchConfidence(searchName, employeeName, employeeID, employeeNumber, employeeEmail string) float64 {
 	var maxConfidence float64
 
-	// Exact match
+	// Early exit for empty inputs
+	if searchName == "" || employeeName == "" {
+		return 0.0
+	}
+
+	// 1. Exact match (highest priority)
 	if searchName == employeeName {
 		return 1.0
 	}
 
-	// Check if search name is contained in employee name
+	// 2. Case-insensitive exact match
+	if strings.EqualFold(searchName, employeeName) {
+		maxConfidence = math.Max(maxConfidence, 0.98)
+	}
+
+	// 3. Full substring matches
 	if strings.Contains(employeeName, searchName) {
-		maxConfidence = math.Max(maxConfidence, 0.9)
+		coverage := float64(len(searchName)) / float64(len(employeeName))
+		substringScore := 0.85 + (coverage * 0.1)
+		maxConfidence = math.Max(maxConfidence, substringScore)
 	}
 
-	// Check if employee name is contained in search name
 	if strings.Contains(searchName, employeeName) {
-		maxConfidence = math.Max(maxConfidence, 0.85)
+		maxConfidence = math.Max(maxConfidence, 0.88)
 	}
 
-	// Check individual words
-	searchWords := strings.Fields(searchName)
-	employeeWords := strings.Fields(employeeName)
+	// 4. Word-based matching (critical for names like "Nguyen Van An")
+	wordScore := calculateWordBasedScore(searchName, employeeName)
+	maxConfidence = math.Max(maxConfidence, wordScore)
 
-	var matchCount float64
-	for _, searchWord := range searchWords {
-		for _, empWord := range employeeWords {
-			if strings.Contains(empWord, searchWord) || strings.Contains(searchWord, empWord) {
-				matchCount++
-				break
-			}
-		}
+	// 5. Name-specific matching (first name, last name combinations)
+	nameScore := calculateNameSpecificScore(searchName, employeeName)
+	maxConfidence = math.Max(maxConfidence, nameScore)
+
+	// 6. N-gram matching
+	ngramScore := calculateNGramScore(searchName, employeeName, 3)
+	maxConfidence = math.Max(maxConfidence, ngramScore*0.75)
+
+	// 7. Enhanced fuzzy matching
+	if len(searchName) > 2 && len(employeeName) > 2 {
+		fuzzyScore := calculateEnhancedFuzzyMatch(searchName, employeeName)
+		maxConfidence = math.Max(maxConfidence, fuzzyScore)
 	}
 
-	if len(searchWords) > 0 {
-		wordMatchConfidence := matchCount / float64(len(searchWords)) * 0.8
-		maxConfidence = math.Max(maxConfidence, wordMatchConfidence)
-	}
-
-	// Check employee ID match
-	if strings.Contains(employeeID, searchName) {
+	// 8. Employee ID matching (high confidence)
+	if employeeID != "" && strings.Contains(employeeID, searchName) {
 		maxConfidence = math.Max(maxConfidence, 0.95)
 	}
 
-	// Check employee number match
+	// 9. Employee number matching (high confidence)
 	if employeeNumber != "" && strings.Contains(employeeNumber, searchName) {
 		maxConfidence = math.Max(maxConfidence, 0.95)
 	}
 
-	// Check employee company email match
+	// 10. Email matching (medium confidence)
 	if employeeEmail != "" && strings.Contains(employeeEmail, searchName) {
-		maxConfidence = math.Max(maxConfidence, 0.9)
+		maxConfidence = math.Max(maxConfidence, 0.85)
 	}
 
-	// Fuzzy string matching using Levenshtein distance
-	if len(searchName) > 2 && len(employeeName) > 2 {
-		fuzzyConfidence := calculateFuzzyMatch(searchName, employeeName)
-		maxConfidence = math.Max(maxConfidence, fuzzyConfidence)
-	}
+	// 11. Initials matching
+	initialsScore := calculateInitialsScore(searchName, employeeName)
+	maxConfidence = math.Max(maxConfidence, initialsScore)
 
 	return maxConfidence
 }
 
-// calculateFuzzyMatch calculates fuzzy matching using Levenshtein distance
-func calculateFuzzyMatch(s1, s2 string) float64 {
+// calculateWordBasedScore calculates matching score based on word overlap
+func calculateWordBasedScore(searchName, targetName string) float64 {
+	searchWords := strings.Fields(searchName)
+	targetWords := strings.Fields(targetName)
+
+	if len(searchWords) == 0 || len(targetWords) == 0 {
+		return 0.0
+	}
+
+	var totalMatches float64
+	var partialMatches float64
+
+	for _, searchWord := range searchWords {
+		bestWordMatch := 0.0
+
+		for _, targetWord := range targetWords {
+			// Exact word match
+			if searchWord == targetWord {
+				bestWordMatch = 1.0
+				break
+			}
+
+			// Substring match within words
+			if strings.Contains(targetWord, searchWord) && len(searchWord) >= 2 {
+				coverage := float64(len(searchWord)) / float64(len(targetWord))
+				wordScore := 0.7 + (coverage * 0.25) // 0.7 - 0.95
+				bestWordMatch = math.Max(bestWordMatch, wordScore)
+			}
+
+			if strings.Contains(searchWord, targetWord) && len(targetWord) >= 2 {
+				bestWordMatch = math.Max(bestWordMatch, 0.8)
+			}
+
+			// Fuzzy match within words (for typos)
+			if len(searchWord) > 2 && len(targetWord) > 2 {
+				wordFuzzy := calculateSimpleEditDistance(searchWord, targetWord)
+				if wordFuzzy >= 0.7 {
+					bestWordMatch = math.Max(bestWordMatch, wordFuzzy*0.85)
+				}
+			}
+		}
+
+		if bestWordMatch >= 0.7 {
+			totalMatches += bestWordMatch
+		} else if bestWordMatch > 0.0 {
+			partialMatches += bestWordMatch
+		}
+	}
+
+	// Calculate final score
+	fullMatchScore := totalMatches / float64(len(searchWords))
+	partialMatchScore := partialMatches / float64(len(searchWords))
+
+	// Combine scores with weights favoring full matches
+	combinedScore := (fullMatchScore * 0.8) + (partialMatchScore * 0.2)
+
+	// Boost score if most words matched well
+	if totalMatches >= float64(len(searchWords))*0.7 {
+		combinedScore *= 0.9 // Scale to max ~0.81
+	} else {
+		combinedScore *= 0.8 // Scale to max ~0.72
+	}
+
+	return combinedScore
+}
+
+// calculateNameSpecificScore handles name-specific matching patterns
+func calculateNameSpecificScore(searchName, fullName string) float64 {
+	searchWords := strings.Fields(searchName)
+	nameWords := strings.Fields(fullName)
+
+	if len(searchWords) == 0 || len(nameWords) == 0 {
+		return 0.0
+	}
+
+	// Handle common Vietnamese name patterns
+	if len(nameWords) >= 2 {
+		firstName := nameWords[len(nameWords)-1] // Last word is usually first name in Vietnamese
+		lastName := nameWords[0]                 // First word is usually family name
+
+		// Check if search matches first name or last name exactly
+		for _, searchWord := range searchWords {
+			if searchWord == firstName {
+				return 0.85 // High confidence for first name match
+			}
+			if searchWord == lastName {
+				return 0.75 // Good confidence for family name match
+			}
+		}
+
+		// Check if search is combination of first + family name
+		if len(searchWords) == 2 {
+			if (searchWords[0] == lastName && searchWords[1] == firstName) ||
+				(searchWords[0] == firstName && searchWords[1] == lastName) {
+				return 0.9
+			}
+		}
+	}
+
+	return 0.0
+}
+
+// calculateNGramScore calculates similarity using n-gram analysis
+func calculateNGramScore(s1, s2 string, n int) float64 {
+	if len(s1) < n || len(s2) < n {
+		return 0.0
+	}
+
+	ngrams1 := generateNGrams(s1, n)
+	ngrams2 := generateNGrams(s2, n)
+
+	if len(ngrams1) == 0 || len(ngrams2) == 0 {
+		return 0.0
+	}
+
+	intersection := 0
+	ngrams2Set := make(map[string]bool)
+	for _, ngram := range ngrams2 {
+		ngrams2Set[ngram] = true
+	}
+
+	for _, ngram := range ngrams1 {
+		if ngrams2Set[ngram] {
+			intersection++
+		}
+	}
+
+	// Jaccard similarity
+	union := len(ngrams1) + len(ngrams2) - intersection
+	if union == 0 {
+		return 0.0
+	}
+
+	return float64(intersection) / float64(union)
+}
+
+// generateNGrams generates n-grams from a string
+func generateNGrams(s string, n int) []string {
+	if len(s) < n {
+		return []string{}
+	}
+
+	var ngrams []string
+	for i := 0; i <= len(s)-n; i++ {
+		ngrams = append(ngrams, s[i:i+n])
+	}
+	return ngrams
+}
+
+// calculateInitialsScore checks if search matches initials
+func calculateInitialsScore(searchName, fullName string) float64 {
+	words := strings.Fields(fullName)
+	if len(words) <= 1 {
+		return 0.0
+	}
+
+	var initials strings.Builder
+	for _, word := range words {
+		if len(word) > 0 {
+			initials.WriteByte(byte(unicode.ToLower(rune(word[0]))))
+		}
+	}
+
+	initialsStr := initials.String()
+	if len(initialsStr) > 0 && strings.Contains(initialsStr, strings.ToLower(searchName)) {
+		return 0.7 // Medium confidence for initials match
+	}
+
+	return 0.0
+}
+
+// calculateEnhancedFuzzyMatch provides better fuzzy matching than simple Levenshtein
+func calculateEnhancedFuzzyMatch(s1, s2 string) float64 {
+	if len(s1) == 0 || len(s2) == 0 {
+		return 0.0
+	}
+
+	// Use Damerau-Levenshtein distance (allows transpositions)
+	distance := calculateDamerauLevenshteinDistance(s1, s2)
+	maxLen := maxInt(len(s1), len(s2))
+
+	if maxLen == 0 {
+		return 1.0
+	}
+
+	similarity := 1.0 - float64(distance)/float64(maxLen)
+
+	// Apply more generous thresholds for fuzzy matches
+	if similarity >= 0.85 {
+		return similarity * 0.9 // High fuzzy match
+	} else if similarity >= 0.75 {
+		return similarity * 0.8 // Good fuzzy match
+	} else if similarity >= 0.65 {
+		return similarity * 0.7 // Moderate fuzzy match
+	}
+
+	return 0.0 // Too dissimilar
+}
+
+// calculateSimpleEditDistance calculates edit distance similarity (for word-level matching)
+func calculateSimpleEditDistance(s1, s2 string) float64 {
+	if len(s1) == 0 || len(s2) == 0 {
+		return 0.0
+	}
+
+	distance := calculateLevenshteinDistance(s1, s2)
+	maxLen := maxInt(len(s1), len(s2))
+
+	if maxLen == 0 {
+		return 1.0
+	}
+
+	return 1.0 - float64(distance)/float64(maxLen)
+}
+
+// calculateLevenshteinDistance calculates Levenshtein distance
+func calculateLevenshteinDistance(s1, s2 string) int {
 	if len(s1) == 0 {
-		return 0
+		return len(s2)
 	}
 	if len(s2) == 0 {
-		return 0
+		return len(s1)
 	}
 
 	// Create matrix
@@ -333,73 +616,83 @@ func calculateFuzzyMatch(s1, s2 string) float64 {
 		}
 	}
 
-	distance := matrix[len(s1)][len(s2)]
-	maxLen := maxInt(len(s1), len(s2))
-
-	if maxLen == 0 {
-		return 1.0
-	}
-
-	similarity := 1.0 - float64(distance)/float64(maxLen)
-
-	// Only return as fuzzy match if similarity is reasonable
-	if similarity >= 0.6 {
-		return similarity * 0.7 // Scale down fuzzy matches
-	}
-
-	return 0
+	return matrix[len(s1)][len(s2)]
 }
 
-// calculateNameSimilarity calculates similarity between two names
+// calculateDamerauLevenshteinDistance calculates Damerau-Levenshtein distance (includes transpositions)
+func calculateDamerauLevenshteinDistance(s1, s2 string) int {
+	len1, len2 := len(s1), len(s2)
+
+	if len1 == 0 {
+		return len2
+	}
+	if len2 == 0 {
+		return len1
+	}
+
+	// Create matrix
+	h := make([][]int, len1+2)
+	for i := range h {
+		h[i] = make([]int, len2+2)
+	}
+
+	maxdist := len1 + len2
+	h[0][0] = maxdist
+
+	// Initialize first row and column
+	for i := 0; i <= len1; i++ {
+		h[i+1][0] = maxdist
+		h[i+1][1] = i
+	}
+	for j := 0; j <= len2; j++ {
+		h[0][j+1] = maxdist
+		h[1][j+1] = j
+	}
+
+	// Character frequency map
+	charMap := make(map[rune]int)
+	for _, char := range s1 + s2 {
+		charMap[char] = 0
+	}
+
+	for i := 1; i <= len1; i++ {
+		db := 0
+		for j := 1; j <= len2; j++ {
+			k := charMap[rune(s2[j-1])]
+			l := db
+			cost := 1
+			if s1[i-1] == s2[j-1] {
+				cost = 0
+				db = j
+			}
+
+			h[i+1][j+1] = minInt4(
+				h[i][j]+cost,              // substitution
+				h[i+1][j]+1,               // insertion
+				h[i][j+1]+1,               // deletion
+				h[k][l]+(i-k-1)+1+(j-l-1), // transposition
+			)
+		}
+		charMap[rune(s1[i-1])] = i
+	}
+
+	return h[len1+1][len2+1]
+}
+
+// calculateFuzzyMatch - kept for compatibility but now calls enhanced version
+func calculateFuzzyMatch(s1, s2 string) float64 {
+	return calculateEnhancedFuzzyMatch(s1, s2)
+}
+
+// calculateNameSimilarity - enhanced version of the existing function
 func calculateNameSimilarity(name1, name2 string) float64 {
-	name1 = strings.ToLower(strings.TrimSpace(name1))
-	name2 = strings.ToLower(strings.TrimSpace(name2))
+	name1 = normalizeText(name1)
+	name2 = normalizeText(name2)
 
 	if name1 == name2 {
 		return 1.0
 	}
 
-	// Check if one name contains the other
-	if strings.Contains(name2, name1) || strings.Contains(name1, name2) {
-		return 0.9
-	}
-
-	// Check word-by-word similarity
-	words1 := strings.Fields(name1)
-	words2 := strings.Fields(name2)
-
-	if len(words1) == 0 || len(words2) == 0 {
-		return 0.0
-	}
-
-	var matchCount float64
-	for _, word1 := range words1 {
-		for _, word2 := range words2 {
-			if strings.Contains(word2, word1) || strings.Contains(word1, word2) {
-				matchCount++
-				break
-			}
-		}
-	}
-
-	return matchCount / float64(len(words1))
-}
-
-// Helper function for minimum of 3 integers
-func minInt(a, b, c int) int {
-	if a <= b && a <= c {
-		return a
-	}
-	if b <= c {
-		return b
-	}
-	return c
-}
-
-// Helper function for maximum of 2 integers
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
+	// Use the enhanced matching algorithm
+	return calculateNameMatchConfidence(name1, name2, "", "", "")
 }

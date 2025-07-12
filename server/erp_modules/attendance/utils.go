@@ -124,6 +124,14 @@ func minInt(a, b, c int) int {
 	return c
 }
 
+// Helper function for maximum of 2 integers
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 // Helper function for minimum of 2 integers
 func minInt2(a, b int) int {
 	if a < b {
@@ -132,10 +140,18 @@ func minInt2(a, b int) int {
 	return b
 }
 
-// Helper function for maximum of 2 integers
-func maxInt(a, b int) int {
-	if a > b {
+// minInt3 returns the minimum of 3 integers
+func minInt3(a, b, c int) int {
+	if a <= b && a <= c {
 		return a
 	}
-	return b
+	if b <= c {
+		return b
+	}
+	return c
+}
+
+// minInt4 returns the minimum of 4 integers
+func minInt4(a, b, c, d int) int {
+	return minInt3(minInt3(a, b, c), d, d)
 }

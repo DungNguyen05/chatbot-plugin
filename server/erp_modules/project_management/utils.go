@@ -33,3 +33,29 @@ func GetVietnamTime() (time.Time, error) {
 	}
 	return time.Now().In(loc), nil
 }
+
+// Helper functions
+
+// minInt returns the minimum of 3 integers
+func minInt(a, b, c int) int {
+	if a <= b && a <= c {
+		return a
+	}
+	if b <= c {
+		return b
+	}
+	return c
+}
+
+// minInt4 returns the minimum of 4 integers
+func minInt4(a, b, c, d int) int {
+	return minInt(minInt(a, b, c), d, d)
+}
+
+// maxInt returns the maximum of 2 integers
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
