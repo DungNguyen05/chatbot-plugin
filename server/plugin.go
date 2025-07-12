@@ -8,6 +8,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"net/http"
 	"os"
@@ -84,6 +85,10 @@ type Plugin struct {
 	moduleManager         *erp_modules.ModuleManager
 	moduleRegistry        *erp_modules.Registry
 	intentAnalyzer        *erp_modules.LLMIntentAnalyzer
+}
+
+type ProjectManagementNotificationSender struct {
+	plugin *Plugin
 }
 
 func resolveffmpegPath() string {
@@ -410,6 +415,9 @@ func (p *Plugin) initializeProjectManagementModule() error {
 	// Create prompts adapter (still needed for LLM analysis)
 	promptsAdapter := &PromptsAdapter{prompts: p.prompts}
 
+	// Create notification sender - THÊM DÒNG NÀY
+	notificationSender := &ProjectManagementNotificationSender{plugin: p}
+
 	// Create project management module (simplified parameters)
 	projectManagementModule := project_management.NewProjectManagementModule(
 		projectManagementConfig,
@@ -417,6 +425,7 @@ func (p *Plugin) initializeProjectManagementModule() error {
 		promptsAdapter,
 		func() llm.LanguageModel { return p.getLLM(p.getDefaultBot().cfg) },
 		apiAdapter,
+		notificationSender,
 	)
 
 	// Register the module
@@ -550,6 +559,162 @@ func (p *Plugin) processERPRequest(bot *Bot, user *model.User, channel *model.Ch
 	}
 
 	return response, err
+}
+
+func (n *ProjectManagementNotificationSender) SendTaskAssignmentNotification(userID, taskID, taskName, assignerName, priority, projectName, startDate, endDate string) error {
+	// Get user info
+	user, err := n.plugin.pluginAPI.User.Get(userID)
+	if err != nil {
+		return fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// Detect user language
+	isVietnamese := strings.HasPrefix(user.Locale, "vi")
+
+	// Create notification message
+	var message string
+	if isVietnamese {
+		message = fmt.Sprintf("**Bạn có công việc mới được giao!**\n\n"+
+			"• **Tên công việc:** %s\n"+
+			"• **Mã công việc:** %s\n"+
+			"• **Người giao:** %s\n"+
+			"• **Độ ưu tiên:** %s",
+			taskName, taskID, assignerName, priority)
+
+		// Add project info if available
+		if projectName != "" {
+			message += fmt.Sprintf("\n• **Thuộc dự án:** %s", projectName)
+		}
+
+		// Add start date if available
+		if startDate != "" {
+			message += fmt.Sprintf("\n• **Ngày bắt đầu:** %s", startDate)
+		}
+
+		// Add end date if available
+		if endDate != "" {
+			message += fmt.Sprintf("\n• **Ngày kết thúc:** %s", endDate)
+		}
+
+		message += "\n\nVui lòng kiểm tra và thực hiện công việc theo thời hạn yêu cầu."
+	} else {
+		message = fmt.Sprintf("**You have been assigned a new task!**\n\n"+
+			"• **Task Name:** %s\n"+
+			"• **Task ID:** %s\n"+
+			"• **Assigned by:** %s\n"+
+			"• **Priority:** %s",
+			taskName, taskID, assignerName, priority)
+
+		// Add project info if available
+		if projectName != "" {
+			message += fmt.Sprintf("\n• **Project:** %s", projectName)
+		}
+
+		// Add start date if available
+		if startDate != "" {
+			message += fmt.Sprintf("\n• **Start Date:** %s", startDate)
+		}
+
+		// Add end date if available
+		if endDate != "" {
+			message += fmt.Sprintf("\n• **End Date:** %s", endDate)
+		}
+
+		message += "\n\nPlease review and complete the task according to the required timeline."
+	}
+
+	return n.sendDMToUser(userID, message)
+}
+
+func (n *ProjectManagementNotificationSender) SendProjectAssignmentNotification(userID, projectID, projectName, assignerName, priority, startDate, endDate string) error {
+	// Get user info
+	user, err := n.plugin.pluginAPI.User.Get(userID)
+	if err != nil {
+		return fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// Detect user language
+	isVietnamese := strings.HasPrefix(user.Locale, "vi")
+
+	// Create notification message
+	var message string
+	if isVietnamese {
+		message = fmt.Sprintf("**Bạn được tham gia dự án mới!**\n\n"+
+			"• **Tên dự án:** %s\n"+
+			"• **Mã dự án:** %s\n"+
+			"• **Người giao:** %s\n"+
+			"• **Độ ưu tiên:** %s",
+			projectName, projectID, assignerName, priority)
+
+		// Add start date if available
+		if startDate != "" {
+			message += fmt.Sprintf("\n• **Ngày bắt đầu:** %s", startDate)
+		}
+
+		// Add end date if available
+		if endDate != "" {
+			message += fmt.Sprintf("\n• **Ngày kết thúc:** %s", endDate)
+		}
+
+		message += "\n\nVui lòng chuẩn bị và phối hợp thực hiện dự án theo kế hoạch."
+	} else {
+		message = fmt.Sprintf("**You have been assigned to a new project!**\n\n"+
+			"• **Project Name:** %s\n"+
+			"• **Project ID:** %s\n"+
+			"• **Assigned by:** %s\n"+
+			"• **Priority:** %s",
+			projectName, projectID, assignerName, priority)
+
+		// Add start date if available
+		if startDate != "" {
+			message += fmt.Sprintf("\n• **Start Date:** %s", startDate)
+		}
+
+		// Add end date if available
+		if endDate != "" {
+			message += fmt.Sprintf("\n• **End Date:** %s", endDate)
+		}
+
+		message += "\n\nPlease prepare and collaborate to execute the project according to plan."
+	}
+
+	return n.sendDMToUser(userID, message)
+}
+
+func (n *ProjectManagementNotificationSender) sendDMToUser(userID, message string) error {
+	// Get bot user ID
+	defaultBot := n.plugin.getDefaultBot()
+	if defaultBot == nil || defaultBot.mmBot == nil {
+		return fmt.Errorf("bot not available")
+	}
+
+	botUserID := defaultBot.mmBot.UserId
+
+	// Create or get DM channel
+	channel, err := n.plugin.pluginAPI.Channel.GetDirect(botUserID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to get/create DM channel: %w", err)
+	}
+
+	// Create post
+	post := &model.Post{
+		UserId:    botUserID,
+		ChannelId: channel.Id,
+		Message:   message,
+		Type:      model.PostTypeDefault,
+	}
+
+	// Send the post
+	if err := n.plugin.pluginAPI.Post.CreatePost(post); err != nil {
+		return fmt.Errorf("failed to send DM: %w", err)
+	}
+
+	n.plugin.API.LogInfo("Sent assignment notification DM",
+		"user_id", userID,
+		"bot_user_id", botUserID,
+		"channel_id", channel.Id)
+
+	return nil
 }
 
 // I18nAdapter adapts the i18n bundle to the interface needed by modules

@@ -23,6 +23,7 @@ type ProjectManagementModule struct {
 	prompts                PromptsInterface
 	getLLM                 func() llm.LanguageModel
 	enhancedWorkflowEngine *EnhancedWorkflowEngine
+	notificationSender     NotificationSender
 }
 
 // NewProjectManagementModule creates a new project management module with workflow engine
@@ -32,6 +33,7 @@ func NewProjectManagementModule(
 	prompts PromptsInterface,
 	getLLM func() llm.LanguageModel,
 	api PluginAPI,
+	notificationSender NotificationSender, // THÊM PARAMETER NÀY
 ) *ProjectManagementModule {
 	// Validate configuration
 	if err := ValidateProjectManagementConfig(config); err != nil {
@@ -43,11 +45,12 @@ func NewProjectManagementModule(
 
 	// Create module
 	module := &ProjectManagementModule{
-		config:    config,
-		erpClient: erpClient,
-		api:       api,
-		prompts:   prompts,
-		getLLM:    getLLM,
+		config:             config,
+		erpClient:          erpClient,
+		api:                api,
+		prompts:            prompts,
+		getLLM:             getLLM,
+		notificationSender: notificationSender,
 	}
 
 	// Initialize enhanced workflow engine
@@ -908,4 +911,80 @@ func (m *ProjectManagementModule) parseConfirmationResponse(
 	}
 
 	return &confirmationResponse, nil
+}
+
+// sendAssignmentNotifications sends DM notifications to assigned employees
+func (m *ProjectManagementModule) sendAssignmentNotifications(
+	entityType, entityID, entityName, assignerName, priority string,
+	assignedEmployees []AssignedEmployee,
+	startDate, endDate, projectName string, // THÊM CÁC PARAMETERS NÀY
+) {
+	if m.notificationSender == nil {
+		m.api.LogWarn("Notification sender not configured, skipping DM notifications")
+		return
+	}
+
+	for _, employee := range assignedEmployees {
+		// Tìm user ID từ employee email hoặc employee ID
+		userID, err := m.findUserIDByEmployee(employee)
+		if err != nil {
+			m.api.LogWarn("Could not find user ID for employee notification",
+				"employee_name", employee.EmployeeName,
+				"employee_email", employee.Email,
+				"error", err.Error())
+			continue
+		}
+
+		// Gửi notification tùy theo entity type
+		var notificationErr error
+		if entityType == "project" {
+			notificationErr = m.notificationSender.SendProjectAssignmentNotification(
+				userID, entityID, entityName, assignerName, priority, startDate, endDate)
+		} else {
+			notificationErr = m.notificationSender.SendTaskAssignmentNotification(
+				userID, entityID, entityName, assignerName, priority, projectName, startDate, endDate)
+		}
+
+		if notificationErr != nil {
+			m.api.LogError("Failed to send assignment notification",
+				"entity_type", entityType,
+				"entity_name", entityName,
+				"employee_name", employee.EmployeeName,
+				"user_id", userID,
+				"error", notificationErr.Error())
+		} else {
+			m.api.LogInfo("Successfully sent assignment notification",
+				"entity_type", entityType,
+				"entity_name", entityName,
+				"employee_name", employee.EmployeeName,
+				"user_id", userID)
+		}
+	}
+}
+
+// findUserIDByEmployee finds Mattermost user ID from employee information
+func (m *ProjectManagementModule) findUserIDByEmployee(employee AssignedEmployee) (string, error) {
+	// Cách 1: Tìm bằng employee ID (nếu employee ID = Mattermost user ID)
+	if len(employee.EmployeeID) == 26 { // Mattermost user ID length
+		if user, err := m.api.GetUser(employee.EmployeeID); err == nil && user != nil {
+			return employee.EmployeeID, nil
+		}
+	}
+
+	// Cách 2: Tìm bằng email thông qua ERP
+	// Lấy danh sách tất cả employees từ ERP để tìm custom_chat_id
+	allEmployees, err := m.erpClient.GetAllEmployees()
+	if err != nil {
+		return "", fmt.Errorf("failed to get employees from ERP: %w", err)
+	}
+
+	// Tìm employee có ID hoặc email khớp
+	for _, erpEmployee := range allEmployees {
+		if (erpEmployee.Name == employee.EmployeeID || erpEmployee.CompanyEmail == employee.Email) &&
+			erpEmployee.CustomChatID != "" {
+			return erpEmployee.CustomChatID, nil
+		}
+	}
+
+	return "", fmt.Errorf("could not find user ID for employee: %s", employee.EmployeeName)
 }

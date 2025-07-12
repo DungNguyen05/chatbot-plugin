@@ -1823,6 +1823,88 @@ func (we *EnhancedWorkflowEngine) executeExistingEntityAssignment(
 		}
 	}
 
+	// Send DM notifications to successfully assigned employees
+	var successfullyAssignedEmployees []AssignedEmployee
+	for _, assignedEmployee := range assignedEmployees {
+		// Check if this employee had assignment error
+		hasError := false
+		for _, errorEmployeeName := range assignmentErrors {
+			if errorEmployeeName == assignedEmployee.EmployeeName {
+				hasError = true
+				break
+			}
+		}
+		if !hasError {
+			successfullyAssignedEmployees = append(successfullyAssignedEmployees, assignedEmployee)
+		}
+	}
+
+	if len(successfullyAssignedEmployees) > 0 {
+		// Get creator name for notification
+		creatorName := workflow.CreatorEmail
+		if user, err := we.module.api.GetUser(workflow.UserID); err == nil && user != nil {
+			if user.FirstName != "" && user.LastName != "" {
+				creatorName = user.FirstName + " " + user.LastName
+			} else if user.Username != "" {
+				creatorName = user.Username
+			}
+		}
+
+		// Extract additional info for notification
+		var startDate, endDate, relatedProjectName string
+
+		if workflow.EntityType == "task" {
+			// Get task details including project info
+			if existingEntity != nil {
+				if entityBytes, err := json.Marshal(existingEntity); err == nil {
+					var task Task
+					if json.Unmarshal(entityBytes, &task) == nil {
+						startDate = task.ExpStartDate
+						endDate = task.ExpEndDate
+
+						// Get project name if task has project
+						if task.Project != "" {
+							if projects, err := we.module.erpClient.GetAllProjects(); err == nil {
+								for _, project := range projects {
+									if project.Name == task.Project {
+										relatedProjectName = project.ProjectName
+										break
+									}
+								}
+							}
+							if relatedProjectName == "" {
+								relatedProjectName = task.Project
+							}
+						}
+					}
+				}
+			}
+		} else {
+			// For projects
+			if existingEntity != nil {
+				if entityBytes, err := json.Marshal(existingEntity); err == nil {
+					var project Project
+					if json.Unmarshal(entityBytes, &project) == nil {
+						startDate = project.ExpectedStartDate
+						endDate = project.ExpectedEndDate
+					}
+				}
+			}
+		}
+
+		we.module.sendAssignmentNotifications(
+			workflow.EntityType,
+			entityID,
+			entityName,
+			creatorName,
+			priority,
+			successfullyAssignedEmployees,
+			startDate,
+			endDate,
+			relatedProjectName,
+		)
+	}
+
 	isVietnamese := detectUserLanguage(ctx.User)
 	assigneeNames := make([]string, len(assignedEmployees))
 	for i, emp := range assignedEmployees {
@@ -1918,6 +2000,47 @@ func (we *EnhancedWorkflowEngine) executeProjectCreation(
 		}
 	}
 
+	// Send DM notifications to successfully assigned employees
+	var successfullyAssignedEmployees []AssignedEmployee
+	for _, assignedEmployee := range projectRequest.AssignedToEmployees {
+		// Check if this employee had assignment error
+		hasError := false
+		for _, errorEmployeeName := range assignmentErrors {
+			if errorEmployeeName == assignedEmployee.EmployeeName {
+				hasError = true
+				break
+			}
+		}
+		// Only notify employees who were successfully assigned
+		if !hasError {
+			successfullyAssignedEmployees = append(successfullyAssignedEmployees, assignedEmployee)
+		}
+	}
+
+	if len(successfullyAssignedEmployees) > 0 {
+		// Get creator name for notification
+		creatorName := workflow.CreatorEmail
+		if user, err := we.module.api.GetUser(workflow.UserID); err == nil && user != nil {
+			if user.FirstName != "" && user.LastName != "" {
+				creatorName = user.FirstName + " " + user.LastName
+			} else if user.Username != "" {
+				creatorName = user.Username
+			}
+		}
+
+		we.module.sendAssignmentNotifications(
+			"project",
+			projectID,
+			projectRequest.ProjectName,
+			creatorName,
+			projectRequest.Priority,
+			successfullyAssignedEmployees,
+			projectRequest.ExpectedStartDate,
+			projectRequest.ExpectedEndDate,
+			"",
+		)
+	}
+
 	isVietnamese := detectUserLanguage(ctx.User)
 	var successMsg string
 	if len(projectRequest.AssignedToEmployees) > 0 {
@@ -1999,6 +2122,65 @@ func (we *EnhancedWorkflowEngine) executeTaskCreation(
 				"error", err.Error())
 			assignmentErrors = append(assignmentErrors, assignedEmployee.EmployeeName)
 		}
+	}
+
+	// Send DM notifications to successfully assigned employees
+	var successfullyAssignedEmployees []AssignedEmployee
+	for _, assignedEmployee := range taskRequest.AssignedToEmployees {
+		// Check if this employee had assignment error
+		hasError := false
+		for _, errorEmployeeName := range assignmentErrors {
+			if errorEmployeeName == assignedEmployee.EmployeeName {
+				hasError = true
+				break
+			}
+		}
+		// Only notify employees who were successfully assigned
+		if !hasError {
+			successfullyAssignedEmployees = append(successfullyAssignedEmployees, assignedEmployee)
+		}
+	}
+
+	if len(successfullyAssignedEmployees) > 0 {
+		// Get creator name for notification
+		creatorName := workflow.CreatorEmail
+		if user, err := we.module.api.GetUser(workflow.UserID); err == nil && user != nil {
+			if user.FirstName != "" && user.LastName != "" {
+				creatorName = user.FirstName + " " + user.LastName
+			} else if user.Username != "" {
+				creatorName = user.Username
+			}
+		}
+
+		// Get project name if task belongs to a project
+		var projectName string
+		if taskRequest.Project != "" {
+			// Try to get project name from project ID
+			if projects, err := we.module.erpClient.GetAllProjects(); err == nil {
+				for _, project := range projects {
+					if project.Name == taskRequest.Project {
+						projectName = project.ProjectName
+						break
+					}
+				}
+			}
+			// If not found, use the project ID as fallback
+			if projectName == "" {
+				projectName = taskRequest.Project
+			}
+		}
+
+		we.module.sendAssignmentNotifications(
+			"task",
+			taskID,
+			taskRequest.Subject,
+			creatorName,
+			taskRequest.Priority,
+			successfullyAssignedEmployees,
+			taskRequest.ExpStartDate,
+			taskRequest.ExpEndDate,
+			projectName,
+		)
 	}
 
 	isVietnamese := detectUserLanguage(ctx.User)

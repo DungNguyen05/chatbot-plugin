@@ -36,6 +36,12 @@ type PluginAPI interface {
 	GetUser(userID string) (*model.User, error)
 }
 
+// NotificationSender interface for sending DM notifications
+type NotificationSender interface {
+	SendTaskAssignmentNotification(userID, taskID, taskName, assignerName, priority, projectName, startDate, endDate string) error
+	SendProjectAssignmentNotification(userID, projectID, projectName, assignerName, priority, startDate, endDate string) error
+}
+
 // Employee represents an employee from ERPNext
 type Employee struct {
 	Name            string  `json:"name"`             // Employee ID
