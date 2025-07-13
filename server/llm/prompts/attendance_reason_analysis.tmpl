@@ -3,36 +3,37 @@ You are an intelligent assistant that extracts absence reasons from user message
 User message: "{{.Parameters.UserMessage}}"
 Use Vietnamese: {{.Parameters.IsVietnamese}}
 
-**TASK:** Extract the specific reason why the user cannot come to work today.
+**TASK:** Extract the actual reason mentioned by the user for why they cannot come to work today.
 
 **EXTRACTION RULES:**
-1. Look for explicit reasons mentioned in the message
-2. If multiple reasons, choose the primary/main one
-3. If very vague (just "nghỉ", "không đi làm"), classify as "Personal"
-4. Extract the EXACT reason phrase when possible
-5. Translate to appropriate language based on IsVietnamese parameter
+1. Extract the EXACT reason phrase as written by the user
+2. Keep the user's original wording when possible
+3. If multiple reasons mentioned, extract the main one
+4. If no specific reason given (just "nghỉ", "không đi làm", "absent"), use default
+5. Preserve the language the user used in their message
 
 **RESPONSE FORMAT:**
-{{if .Parameters.IsVietnamese}}
-Respond with extracted reason in Vietnamese. Examples:
-- "Bị ốm" (if sick)
-- "Việc gia đình" (if family matters)
-- "Đi công tác" (if business trip)
-- "Nghỉ phép" (if official leave)
-- "Việc cá nhân" (if personal/no specific reason)
-{{else}}
-Respond with extracted reason in English. Examples:
-- "Sick" (if sick)
-- "Family matters" (if family issues)
-- "Business trip" (if traveling for work)
-- "Annual leave" (if official leave)
-- "Personal matters" (if personal/no specific reason)
-{{end}}
+- Extract and return the user's actual reason phrase
+- Keep it in the same language the user wrote it
+- If no specific reason found, use:
+  {{if .Parameters.IsVietnamese}}
+  - "Việc cá nhân"
+  {{else}}
+  - "Personal matters"
+  {{end}}
+
+**EXAMPLES:**
+- User: "Tôi bị ốm nên không đi làm được" → Extract: "bị ốm"
+- User: "I'm sick today" → Extract: "sick today"  
+- User: "Có việc gia đình đột xuất" → Extract: "việc gia đình đột xuất"
+- User: "Doctor appointment" → Extract: "Doctor appointment"
+- User: "Nghỉ" → Extract: "Việc cá nhân" (default)
+- User: "absent" → Extract: "Personal matters" (default)
 
 **IMPORTANT:** 
 - Respond with ONLY the extracted reason phrase
-- Do NOT include explanations or additional text
-- Keep it concise and professional
-- If no specific reason found, use generic "Personal matters" / "Việc cá nhân"
+- Do NOT reformat or categorize the reason
+- Keep the user's original wording
+- No explanations or additional text
 
 Extract the absence reason:

@@ -78,7 +78,7 @@ func (m *AttendanceModule) handleCheckOutRequest(employeeID string, ctx *erp_mod
 	return m.requestConfirmation(ctx, "check_out", "", employeeID)
 }
 
-// handleAbsentRequest processes absent request with confirmation
+// handleAbsentRequest processes absent request with confidence-based confirmation
 func (m *AttendanceModule) handleAbsentRequest(employeeID string, ctx *erp_modules.ModuleContext, intent *erp_modules.Intent) (*erp_modules.ModuleResponse, error) {
 	reason, err := m.analyzeAbsentReason(ctx, intent.RawMessage)
 	if err != nil {
@@ -92,7 +92,21 @@ func (m *AttendanceModule) handleAbsentRequest(employeeID string, ctx *erp_modul
 		}
 	}
 
-	// Always request confirmation for absence reporting as it's important
+	// CRITICAL FIX: Check confidence before requesting confirmation
+	// For API button clicks (confidence = 1.0), execute directly without confirmation
+	if intent.Confidence >= 1.0 {
+		m.api.LogInfo("High confidence absent request, executing directly",
+			"user_id", ctx.User.Id,
+			"confidence", intent.Confidence,
+			"reason", reason)
+		return m.handleAbsent(employeeID, getUserDisplayName(ctx.User), ctx.User.Id, reason)
+	}
+
+	// For chat messages or lower confidence, request confirmation
+	m.api.LogInfo("Low confidence absent request, requesting confirmation",
+		"user_id", ctx.User.Id,
+		"confidence", intent.Confidence,
+		"reason", reason)
 	return m.requestConfirmation(ctx, "absent", reason, employeeID)
 }
 
