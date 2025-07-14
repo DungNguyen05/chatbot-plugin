@@ -74,7 +74,7 @@ const Title = styled.h2`
     font-size: 18px; /* 60% of 30px */
     font-weight: 600;
     margin: 0;
-    color: #1f2937;
+    color: #0f172a;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 `;
 
@@ -112,15 +112,15 @@ const ModalContent = styled.div`
 const TimeDisplay = styled.div`
     text-align: center;
     padding: 14px; /* 60% of 24px */
-    background: #f9fafb;
+    background: #f1f5f9;
     border-radius: 12px;
     margin-bottom: 18px; /* 60% of 30px */
     border: 1px solid #f3f4f6;
 `;
 
 const TimeLabel = styled.div`
-    font-size: 19px; /* 60% of 21px */
-    color: #6b7280;
+    font-size: 16px; /* 60% of 21px */
+    color: #49576b;
     margin-bottom: 7px; /* 60% of 12px */
     font-weight: 500;
 `;
@@ -137,13 +137,13 @@ const CurrentTime = styled.div`
 
 const CurrentDate = styled.div`
     font-size: 15px; /* 60% of 21px */
-    color: #6b7280;
+    color: #49576b;
     font-weight: 500;
 `;
 
 const SectionLabel = styled.label`
     display: block;
-    font-size: 13px; /* 60% of 21px */
+    font-size: 14px; /* 60% of 21px */
     font-weight: 600;
     color: #374151;
     margin-bottom: 11px; /* 60% of 18px */
