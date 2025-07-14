@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import styled, { keyframes } from 'styled-components';
 
 import {doCheckIn, doCheckOut, doAbsent} from '../../client';
@@ -161,16 +161,16 @@ const AttendanceOption = styled.button<{selected: boolean, variant: 'success' | 
     padding: 13px; /* 60% of 21px */
     border: 2px solid ${props => {
         if (props.selected) {
-            return props.variant === 'success' ? '#10b981' : 
-                   props.variant === 'primary' ? '#3b82f6' : '#f59e0b';
+            return props.variant === 'success' ? '#079669' : 
+                   props.variant === 'primary' ? '#1d40b0' : '#d97708';
         }
         return '#e5e7eb';
     }};
     border-radius: 12px;
     background: ${props => {
         if (props.selected) {
-            return props.variant === 'success' ? 'rgba(16, 185, 129, 0.1)' : 
-                   props.variant === 'primary' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(245, 158, 11, 0.1)';
+            return props.variant === 'success' ? 'rgba(16, 185, 129, 0.05)' : 
+                   props.variant === 'primary' ? 'rgba(59, 130, 246, 0.05)' : 'rgba(245, 158, 11, 0.05)';
         }
         return 'white';
     }};
@@ -185,8 +185,8 @@ const AttendanceOption = styled.button<{selected: boolean, variant: 'success' | 
     
     &:hover {
         border-color: ${props => {
-            return props.variant === 'success' ? '#10b981' : 
-                   props.variant === 'primary' ? '#3b82f6' : '#f59e0b';
+            return props.variant === 'success' ? '#079669' : 
+                   props.variant === 'primary' ? '#1d40b0' : '#d97708';
         }};
         background: ${props => {
             if (props.selected) return; // Keep current background if selected
@@ -207,16 +207,16 @@ const OptionIcon = styled.div<{variant: 'success' | 'primary' | 'warning', selec
     border-radius: 8px;
     background: ${props => {
         if (props.selected) {
-            return props.variant === 'success' ? '#10b981' : 
-                   props.variant === 'primary' ? '#3b82f6' : '#f59e0b';
+            return props.variant === 'success' ? '#079669' : 
+                   props.variant === 'primary' ? '#1d40b0' : '#d97708';
         }
-        return props.variant === 'success' ? 'rgba(16, 185, 129, 0.1)' : 
-               props.variant === 'primary' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(245, 158, 11, 0.1)';
+        return props.variant === 'success' ? 'rgba(16, 185, 129, 0.05)' : 
+               props.variant === 'primary' ? 'rgba(59, 130, 246, 0.05)' : 'rgba(245, 158, 11, 0.05)';
     }};
     color: ${props => {
         if (props.selected) return 'white';
-        return props.variant === 'success' ? '#10b981' : 
-               props.variant === 'primary' ? '#3b82f6' : '#f59e0b';
+        return props.variant === 'success' ? '#079669' : 
+               props.variant === 'primary' ? '#1d40b0' : '#d97708';
     }};
     display: flex;
     align-items: center;
@@ -254,7 +254,7 @@ const AbsenceReasonSection = styled.div<{show: boolean}>`
 
 const InputLabel = styled.label`
     display: block;
-    font-size: 13px; /* 60% of 21px */
+    font-size: 14px; /* 60% of 21px */
     font-weight: 600;
     color: #374151;
     margin-bottom: 7px; /* 60% of 12px */
@@ -274,8 +274,8 @@ const TextInput = styled.input`
     
     &:focus {
         outline: none;
-        border-color: #f59e0b;
-        box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+        border-color: rgb(229, 231, 235);
+        box-shadow: 0 0 0 3px rgb(229, 231, 235);
     }
     
     &::placeholder {
@@ -294,7 +294,7 @@ const ErrorMessage = styled.div`
     align-items: center;
     gap: 7px; /* 60% of 12px */
     padding: 11px 14px; /* 60% of 18px 24px */
-    background: rgba(239, 68, 68, 0.1);
+    background: rgba(239, 68, 68, 0.05);
     border: 1px solid rgba(239, 68, 68, 0.2);
     border-radius: 8px;
     margin-bottom: 14px; /* 60% of 24px */
@@ -394,8 +394,8 @@ const StatusMessage = styled.div<{type: 'success' | 'error'}>`
     border-radius: 8px;
     margin-bottom: 14px; /* 60% of 24px */
     background: ${props => props.type === 'success' 
-        ? 'rgba(16, 185, 129, 0.1)' 
-        : 'rgba(239, 68, 68, 0.1)'};
+        ? 'rgba(16, 185, 129, 0.05)' 
+        : 'rgba(239, 68, 68, 0.05)'};
     border: 1px solid ${props => props.type === 'success' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'};
     
     &::before {
@@ -405,7 +405,7 @@ const StatusMessage = styled.div<{type: 'success' | 'error'}>`
         width: 18px; /* 60% of 30px */
         height: 18px; /* 60% of 30px */
         border-radius: 50%;
-        background: ${props => props.type === 'success' ? '#10b981' : '#ef4444'};
+        background: ${props => props.type === 'success' ? '#079669' : '#ef4444'};
         color: white;
         display: flex;
         align-items: center;
@@ -524,12 +524,23 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({
     const [selectedType, setSelectedType] = useState<AttendanceType>(null);
     const [absenceReason, setAbsenceReason] = useState('');
     const [error, setError] = useState('');
+    const [currentTime, setCurrentTime] = useState(new Date());
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setCurrentTime(new Date());
+        }, 1000);
+    
+        // Cleanup timer on component unmount
+        return () => clearInterval(timer);
+    }, []);
+
 
     const dateLocale = locale || (language === 'vi' ? 'vi-VN' : 'en-US');
 
     const getCurrentTime = () => {
-        return new Date().toLocaleTimeString(dateLocale, {
-            hour12: true,
+        return currentTime.toLocaleTimeString(dateLocale, {
+            hour12: false,
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit'
@@ -537,7 +548,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({
     };
 
     const getCurrentDate = () => {
-        return new Date().toLocaleDateString(dateLocale, {
+        return currentTime.toLocaleDateString(dateLocale, {
             weekday: 'long',
             year: 'numeric',
             month: 'long',
