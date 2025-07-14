@@ -4,10 +4,10 @@ import styled, { keyframes } from 'styled-components';
 import {doCheckIn, doCheckOut, doAbsent} from '../../client';
 
 // Keyframes for animations
-const slideInUp = keyframes`
+const slideUp = keyframes`
     from {
         opacity: 0;
-        transform: translateY(20px);
+        transform: translateY(30px);
     }
     to {
         opacity: 1;
@@ -15,357 +15,366 @@ const slideInUp = keyframes`
     }
 `;
 
-const pulseGlow = keyframes`
-    0%, 100% {
-        box-shadow: 0 0 5px rgba(76, 175, 80, 0.3);
+const slideDown = keyframes`
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+        max-height: 0;
     }
-    50% {
-        box-shadow: 0 0 20px rgba(76, 175, 80, 0.6), 0 0 30px rgba(76, 175, 80, 0.4);
-    }
-`;
-
-const shimmer = keyframes`
-    0% {
-        background-position: -200px 0;
-    }
-    100% {
-        background-position: calc(200px + 100%) 0;
+    to {
+        opacity: 1;
+        transform: translateY(0);
+        max-height: 200px;
     }
 `;
 
 const Container = styled.div<{show: boolean}>`
     display: ${props => props.show ? 'flex' : 'none'};
     flex-direction: column;
-    padding: 40px;
-    gap: 28px;
-    max-width: 550px;
+    padding: 0;
+    gap: 0;
+    max-width: 560px; /* Keep original modal width */
+    min-width: 530px;
     width: 100%;
     margin: 0 auto;
-    background: linear-gradient(135deg, 
-        var(--center-channel-bg) 0%, 
-        rgba(var(--center-channel-color-rgb), 0.02) 100%);
+    background: white;
     border-radius: 16px;
-    color: var(--center-channel-color);
+    color: #1f2937;
     position: relative;
-    animation: ${slideInUp} 0.3s ease-out;
+    animation: ${slideUp} 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 
-        0 20px 60px rgba(0, 0, 0, 0.1),
-        0 8px 24px rgba(0, 0, 0, 0.06),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(var(--center-channel-color-rgb), 0.08);
-    backdrop-filter: blur(20px);
+        0 25px 50px -12px rgba(0, 0, 0, 0.25),
+        0 0 0 1px rgba(0, 0, 0, 0.05);
+    border: 1px solid #e5e7eb;
+    overflow: hidden;
+    min-height: 600px; /* Keep original modal height */
+    max-height: none;
+    height: auto; /* Allow natural height calculation */
+    
+    @media (max-width: 768px) {
+        max-width: 95vw; /* Slightly larger on mobile */
+        margin: 20px auto;
+        border-radius: 12px;
+        min-height: 624px; /* Keep original mobile height */
+        max-height: none;
+    }
 `;
 
-const HeaderSection = styled.div`
-    text-align: center;
-    position: relative;
+const ModalHeader = styled.div`
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 22px 22px 18px 22px; /* 60% of original padding */
+    border-bottom: 1px solid #f3f4f6;
+    background: #fafafa;
+    flex-shrink: 0; /* Prevent header from shrinking */
 `;
 
 const Title = styled.h2`
-    font-size: 28px;
-    font-weight: 700;
-    margin-bottom: 12px;
-    background: linear-gradient(135deg, var(--center-channel-color), rgba(var(--center-channel-color-rgb), 0.7));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    font-family: var(--font-family);
-    letter-spacing: -0.02em;
-    line-height: 1.2;
-`;
-
-const Subtitle = styled.p`
-    font-size: 16px;
-    color: rgba(var(--center-channel-color-rgb), 0.65);
-    margin: 0 0 8px 0;
-    font-weight: 400;
-    line-height: 1.4;
-`;
-
-const DateBadge = styled.div`
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    background: rgba(var(--center-channel-color-rgb), 0.06);
-    border-radius: 20px;
-    font-size: 14px;
-    font-weight: 500;
-    color: rgba(var(--center-channel-color-rgb), 0.8);
-    border: 1px solid rgba(var(--center-channel-color-rgb), 0.1);
-    margin-top: 12px;
-`;
-
-const ButtonGrid = styled.div`
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-    margin-bottom: 12px;
-    
-    @media (max-width: 480px) {
-        grid-template-columns: 1fr;
-        gap: 16px;
-    }
-`;
-
-const ActionButton = styled.button`
-    padding: 18px 24px;
-    border: none;
-    border-radius: 12px;
+    font-size: 18px; /* 60% of 30px */
     font-weight: 600;
-    font-size: 15px;
+    margin: 0;
+    color: #1f2937;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+`;
+
+const CloseButton = styled.button`
+    padding: 7px; /* 60% of 12px */
+    background: transparent;
+    border: none;
+    border-radius: 8px;
     cursor: pointer;
+    color: #6b7280;
+    transition: all 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    min-height: 56px;
-    background: rgba(var(--center-channel-color-rgb), 0.04);
-    color: rgba(var(--center-channel-color-rgb), 0.8);
-    position: relative;
-    overflow: hidden;
-    border: 1px solid rgba(var(--center-channel-color-rgb), 0.12);
     
-    &::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(
-            90deg,
-            transparent,
-            rgba(255, 255, 255, 0.1),
-            transparent
-        );
-        transition: left 0.5s;
+    &:hover {
+        background: #f3f4f6;
+        color: #374151;
     }
     
-    &:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
-        transform: none !important;
+    &:active {
+        transform: scale(0.95);
     }
-    
-    &:not(:disabled):hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-        border-color: rgba(var(--center-channel-color-rgb), 0.2);
-        
-        &::before {
-            left: 100%;
-        }
-    }
-    
-    &:not(:disabled):active {
-        transform: translateY(-1px);
-        transition: all 0.1s ease-out;
-    }
-`;
-
-const CheckInButton = styled(ActionButton)`
-    background: linear-gradient(135deg, #4CAF50, #45a049);
-    color: white;
-    border: 1px solid #45a049;
-    
-    &:hover:not(:disabled) {
-        background: linear-gradient(135deg, #45a049, #3d8b40);
-        box-shadow: 0 8px 25px rgba(76, 175, 80, 0.3);
-        animation: ${pulseGlow} 2s infinite;
-    }
-    
-    &:active:not(:disabled) {
-        background: linear-gradient(135deg, #3d8b40, #45a049);
-    }
-`;
-
-const CheckOutButton = styled(ActionButton)`
-    background: linear-gradient(135deg, #2196F3, #1976D2);
-    color: white;
-    border: 1px solid #1976D2;
-    
-    &:hover:not(:disabled) {
-        background: linear-gradient(135deg, #1976D2, #1565C0);
-        box-shadow: 0 8px 25px rgba(33, 150, 243, 0.3);
-    }
-    
-    &:active:not(:disabled) {
-        background: linear-gradient(135deg, #1565C0, #1976D2);
-    }
-`;
-
-const AbsentButton = styled(ActionButton)`
-    background: transparent;
-    color: #f44336;
-    border: 2px solid #f44336;
-    grid-column: 1 / -1;
-    position: relative;
-    
-    &::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: linear-gradient(135deg, #f44336, #d32f2f);
-        opacity: 0;
-        transition: opacity 0.2s ease;
-        border-radius: 10px;
-        z-index: -1;
-    }
-    
-    &:hover:not(:disabled) {
-        color: white;
-        border-color: #d32f2f;
-        box-shadow: 0 8px 25px rgba(244, 67, 54, 0.3);
-        
-        &::after {
-            opacity: 1;
-        }
-    }
-`;
-
-const AbsentModal = styled.div<{show: boolean}>`
-    display: ${props => props.show ? 'flex' : 'none'};
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(12px);
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-    animation: ${slideInUp} 0.2s ease-out;
 `;
 
 const ModalContent = styled.div`
-    background: var(--center-channel-bg);
-    padding: 40px;
-    border-radius: 16px;
-    min-width: 450px;
-    max-width: 90%;
-    box-shadow: 
-        0 25px 60px rgba(0, 0, 0, 0.2),
-        0 8px 24px rgba(0, 0, 0, 0.1);
-    transform: scale(1);
-    animation: ${slideInUp} 0.3s ease-out;
-    border: 1px solid rgba(var(--center-channel-color-rgb), 0.12);
-    position: relative;
+    padding: 18px 22px 22px 22px; /* 60% of original padding */
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    min-height: 0; /* Allow flex shrinking */
 `;
 
-const ModalTitle = styled.h3`
-    margin-bottom: 24px;
-    font-size: 24px;
-    font-weight: 600;
-    color: var(--center-channel-color);
-    font-family: var(--font-family);
-    letter-spacing: -0.02em;
+const TimeDisplay = styled.div`
     text-align: center;
+    padding: 14px; /* 60% of 24px */
+    background: #f9fafb;
+    border-radius: 12px;
+    margin-bottom: 18px; /* 60% of 30px */
+    border: 1px solid #f3f4f6;
 `;
 
-const ReasonInput = styled.textarea`
-    width: 100%;
-    min-height: 120px;
-    padding: 16px 20px;
-    border: 2px solid rgba(var(--center-channel-color-rgb), 0.12);
+const TimeLabel = styled.div`
+    font-size: 19px; /* 60% of 21px */
+    color: #6b7280;
+    margin-bottom: 7px; /* 60% of 12px */
+    font-weight: 500;
+`;
+
+const CurrentTime = styled.div`
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 0.5px; // Added for better spacing
+    font-size: 25px; /* 60% of 33px */
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 4px; /* 60% of 6px */
+    margin-top: -6px;
+`;
+
+const CurrentDate = styled.div`
+    font-size: 15px; /* 60% of 21px */
+    color: #6b7280;
+    font-weight: 500;
+`;
+
+const SectionLabel = styled.label`
+    display: block;
+    font-size: 13px; /* 60% of 21px */
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 11px; /* 60% of 18px */
+`;
+
+const AttendanceGrid = styled.div`
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 9px; /* 60% of 15px */
+    margin-bottom: 14px; /* 60% of 24px */
+    flex: 1;
+`;
+
+const AttendanceOption = styled.button<{selected: boolean, variant: 'success' | 'primary' | 'warning'}>`
+    padding: 13px; /* 60% of 21px */
+    border: 2px solid ${props => {
+        if (props.selected) {
+            return props.variant === 'success' ? '#10b981' : 
+                   props.variant === 'primary' ? '#3b82f6' : '#f59e0b';
+        }
+        return '#e5e7eb';
+    }};
     border-radius: 12px;
-    resize: vertical;
-    font-family: inherit;
-    margin-bottom: 24px;
-    font-size: 15px;
-    line-height: 1.5;
-    background: var(--center-channel-bg);
-    color: var(--center-channel-color);
+    background: ${props => {
+        if (props.selected) {
+            return props.variant === 'success' ? 'rgba(16, 185, 129, 0.1)' : 
+                   props.variant === 'primary' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(245, 158, 11, 0.1)';
+        }
+        return 'white';
+    }};
+    cursor: pointer;
     transition: all 0.2s ease;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 11px; /* 60% of 18px */
+    font-family: inherit;
+    width: 100%;
+    
+    &:hover {
+        border-color: ${props => {
+            return props.variant === 'success' ? '#10b981' : 
+                   props.variant === 'primary' ? '#3b82f6' : '#f59e0b';
+        }};
+        background: ${props => {
+            if (props.selected) return; // Keep current background if selected
+            return props.variant === 'success' ? 'rgba(16, 185, 129, 0.05)' : 
+                   props.variant === 'primary' ? 'rgba(59, 130, 246, 0.05)' : 'rgba(245, 158, 11, 0.05)';
+        }};
+    }
+    
+    &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+`;
+
+const OptionIcon = styled.div<{variant: 'success' | 'primary' | 'warning', selected: boolean}>`
+    width: 32px; /* 60% of 54px */
+    height: 32px; /* 60% of 54px */
+    border-radius: 8px;
+    background: ${props => {
+        if (props.selected) {
+            return props.variant === 'success' ? '#10b981' : 
+                   props.variant === 'primary' ? '#3b82f6' : '#f59e0b';
+        }
+        return props.variant === 'success' ? 'rgba(16, 185, 129, 0.1)' : 
+               props.variant === 'primary' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(245, 158, 11, 0.1)';
+    }};
+    color: ${props => {
+        if (props.selected) return 'white';
+        return props.variant === 'success' ? '#10b981' : 
+               props.variant === 'primary' ? '#3b82f6' : '#f59e0b';
+    }};
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    
+    svg {
+        width: 16px; /* 60% of 27px */
+        height: 16px; /* 60% of 27px */
+    }
+`;
+
+const OptionContent = styled.div`
+    flex: 1;
+`;
+
+const OptionTitle = styled.div`
+    font-size: 14px; /* 60% of 23px */
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 2px; /* 60% of 3px */
+`;
+
+const OptionDescription = styled.div`
+    font-size: 13px; /* 60% of 21px */
+    color: #6b7280;
+    opacity: 0.8;
+`;
+
+const AbsenceReasonSection = styled.div<{show: boolean}>`
+    display: ${props => props.show ? 'block' : 'none'};
+    animation: ${slideDown} 0.25s ease-out;
+    margin-bottom: 14px; /* 60% of 24px */
+`;
+
+const InputLabel = styled.label`
+    display: block;
+    font-size: 13px; /* 60% of 21px */
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 7px; /* 60% of 12px */
+`;
+
+const TextInput = styled.input`
+    width: 100%;
+    padding: 11px 14px; /* 60% of 18px 24px */
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 13px; /* 60% of 21px */
+    font-family: inherit;
+    color: #1f2937;
+    background: white;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
     
     &:focus {
         outline: none;
-        border-color: #f44336;
-        box-shadow: 0 0 0 3px rgba(244, 67, 54, 0.1);
-        background: rgba(var(--center-channel-color-rgb), 0.02);
+        border-color: #f59e0b;
+        box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
     }
     
     &::placeholder {
-        color: rgba(var(--center-channel-color-rgb), 0.5);
+        color: #9ca3af;
+    }
+`;
+
+const InputDescription = styled.div`
+    font-size: 11px; /* 60% of 18px */
+    color: #6b7280;
+    margin-top: 5px; /* 60% of 9px */
+`;
+
+const ErrorMessage = styled.div`
+    display: flex;
+    align-items: center;
+    gap: 7px; /* 60% of 12px */
+    padding: 11px 14px; /* 60% of 18px 24px */
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 8px;
+    margin-bottom: 14px; /* 60% of 24px */
+    
+    svg {
+        width: 14px; /* 60% of 24px */
+        height: 14px; /* 60% of 24px */
+        color: #ef4444;
+        flex-shrink: 0;
+    }
+    
+    span {
+        font-size: 13px; /* 60% of 21px */
+        color: #dc2626;
     }
 `;
 
 const ModalActions = styled.div`
     display: flex;
-    gap: 16px;
+    align-items: center;
     justify-content: flex-end;
-`;
-
-const SecondaryButton = styled.button`
-    padding: 12px 24px;
-    border: 2px solid rgba(var(--center-channel-color-rgb), 0.2);
-    border-radius: 8px;
-    background: var(--center-channel-bg);
-    color: var(--center-channel-color);
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    font-size: 14px;
+    gap: 11px; /* 60% of 18px */
+    padding-top: 14px; /* 60% of 24px */
+    border-top: 1px solid #f3f4f6;
+    margin-top: auto;
+    flex-shrink: 0; /* Prevent actions from shrinking */
     
-    &:hover {
-        border-color: rgba(var(--center-channel-color-rgb), 0.3);
-        background: rgba(var(--center-channel-color-rgb), 0.04);
-        transform: translateY(-1px);
+    @media (max-width: 480px) {
+        flex-direction: column;
+        gap: 7px; /* 60% of 12px */
+        
+        button {
+            width: 100%;
+        }
     }
 `;
 
-const PrimaryButton = styled.button`
-    padding: 12px 24px;
-    border: none;
+const Button = styled.button<{variant: 'outline' | 'primary', loading?: boolean}>`
+    padding: 11px 18px; /* 60% of 18px 30px */
+    border: ${props => props.variant === 'outline' ? '2px solid #e5e7eb' : 'none'};
     border-radius: 8px;
-    background: linear-gradient(135deg, #f44336, #d32f2f);
-    color: white;
+    background: ${props => props.variant === 'outline' ? 'white' : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)'};
+    color: ${props => props.variant === 'outline' ? '#6b7280' : 'white'};
+    font-size: 13px; /* 60% of 21px */
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s ease;
-    font-size: 14px;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px; /* 60% of 12px */
+    min-width: 108px; /* 60% of 180px */
     
     &:hover:not(:disabled) {
-        background: linear-gradient(135deg, #d32f2f, #c62828);
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
+        ${props => props.variant === 'outline' ? `
+            border-color: #d1d5db;
+            background: #f9fafb;
+            color: #374151;
+        ` : `
+            background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 16px rgba(99, 102, 241, 0.25);
+        `}
+    }
+    
+    &:active:not(:disabled) {
+        transform: ${props => props.variant === 'outline' ? 'scale(0.98)' : 'translateY(0)'};
     }
     
     &:disabled {
-        opacity: 0.4;
+        opacity: 0.5;
         cursor: not-allowed;
         transform: none !important;
     }
 `;
 
-const StatusMessage = styled.div<{type: 'success' | 'error'}>`
-    padding: 16px 20px;
-    border-radius: 12px;
-    margin-bottom: 24px;
-    background: ${props => props.type === 'success' 
-        ? 'linear-gradient(135deg, rgba(76, 175, 80, 0.1), rgba(76, 175, 80, 0.05))' 
-        : 'linear-gradient(135deg, rgba(244, 67, 54, 0.1), rgba(244, 67, 54, 0.05))'};
-    color: ${props => props.type === 'success' ? '#2e7d32' : '#c62828'};
-    border: 1px solid ${props => props.type === 'success' ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)'};
-    font-size: 14px;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    
-    &::before {
-        content: ${props => props.type === 'success' ? '"✓"' : '"⚠"'};
-        font-size: 16px;
-        font-weight: bold;
-    }
-`;
-
 const LoadingSpinner = styled.div`
-    display: inline-block;
-    width: 18px;
-    height: 18px;
+    width: 14px; /* 60% of 24px */
+    height: 14px; /* 60% of 24px */
     border: 2px solid transparent;
     border-top: 2px solid currentColor;
     border-radius: 50%;
@@ -377,93 +386,102 @@ const LoadingSpinner = styled.div`
     }
 `;
 
-const CloseButton = styled.button`
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    background: rgba(var(--center-channel-color-rgb), 0.05);
-    border: 1px solid rgba(var(--center-channel-color-rgb), 0.1);
-    font-size: 20px;
-    cursor: pointer;
-    color: rgba(var(--center-channel-color-rgb), 0.6);
-    padding: 8px;
-    width: 36px;
-    height: 36px;
+const StatusMessage = styled.div<{type: 'success' | 'error'}>`
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 11px; /* 60% of 18px */
+    padding: 13px; /* 60% of 21px */
     border-radius: 8px;
-    transition: all 0.2s ease;
-    z-index: 10;
+    margin-bottom: 14px; /* 60% of 24px */
+    background: ${props => props.type === 'success' 
+        ? 'rgba(16, 185, 129, 0.1)' 
+        : 'rgba(239, 68, 68, 0.1)'};
+    border: 1px solid ${props => props.type === 'success' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'};
     
-    &:hover {
-        background: rgba(var(--center-channel-color-rgb), 0.1);
-        color: rgba(var(--center-channel-color-rgb), 0.8);
-        transform: scale(1.05);
+    &::before {
+        content: ${props => props.type === 'success' ? '"✓"' : '"!"'};
+        font-size: 14px; /* 60% of 24px */
+        font-weight: bold;
+        width: 18px; /* 60% of 30px */
+        height: 18px; /* 60% of 30px */
+        border-radius: 50%;
+        background: ${props => props.type === 'success' ? '#10b981' : '#ef4444'};
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
     }
     
-    &:active {
-        transform: scale(0.95);
+    span {
+        font-size: 13px; /* 60% of 21px */
+        font-weight: 500;
+        color: ${props => props.type === 'success' ? '#047857' : '#dc2626'};
     }
 `;
 
 // Built-in translations
 const translations: Record<'en' | 'vi', Record<string, string>> = {
     en: {
-        'rollcall.title': 'Roll Call',
-        'rollcall.subtitle': 'Track your attendance and manage your work schedule',
+        'rollcall.title': 'Mark Attendance',
+        'rollcall.subtitle': 'Select Attendance Status',
+        'rollcall.time.current': 'Current Time',
         'rollcall.checkin.button': 'Check In',
         'rollcall.checkout.button': 'Check Out',
         'rollcall.absent.button': 'Mark Absent',
-        'rollcall.checkin.title': 'Check In to Work',
-        'rollcall.checkout.title': 'Check Out from Work',
+        'rollcall.checkin.title': 'Check In',
+        'rollcall.checkout.title': 'Check Out',
         'rollcall.absent.title': 'Mark Absent',
-        'rollcall.checkin.tooltip': 'Mark your arrival for today',
-        'rollcall.checkout.tooltip': 'Mark your departure for today',
-        'rollcall.absent.tooltip': 'Report that you\'ll be absent today',
+        'rollcall.checkin.description': 'Mark your arrival',
+        'rollcall.checkout.description': 'Mark your departure',
+        'rollcall.absent.description': 'Report absence',
         'rollcall.close': 'Close',
-        'rollcall.close.tooltip': 'Close (Esc)',
-        'rollcall.cancel': 'Cancel',
-        'rollcall.confirm': 'Confirm',
-        'rollcall.absent.reason.placeholder': 'Enter reason for absence...',
-        'rollcall.absent.reason.label': 'Reason for Absence',
-        'rollcall.absent.reason.required': 'Please provide a reason for your absence.',
+        'rollcall.close.tooltip': 'Close modal',
         'rollcall.checkin.success': 'Welcome! You have successfully checked in.',
         'rollcall.checkout.success': 'Have a great day! You have successfully checked out.',
         'rollcall.absent.success': 'Your absence has been recorded. Take care!',
+        'rollcall.absent.reason.label': 'Reason for Absence (Optional)',
+        'rollcall.absent.reason.placeholder': 'Enter your reason for being absent (optional)...',
+        'rollcall.absent.reason.description': 'characters',
+        'rollcall.submit': 'Submit',
+        'rollcall.cancel': 'Cancel',
         'rollcall.error': 'An error occurred. Please try again.',
-        'rollcall.timeout': 'Request timed out. Please try again.'
+        'rollcall.timeout': 'Request timed out. Please try again.',
+        'rollcall.error.select': 'Please select an attendance option',
     },
     vi: {
         'rollcall.title': 'Điểm Danh',
-        'rollcall.subtitle': 'Theo dõi và quản lý lịch làm việc',
+        'rollcall.subtitle': 'Chọn Trạng Thái',
+        'rollcall.time.current': 'Thời gian hiện tại',
         'rollcall.checkin.button': 'Check In',
         'rollcall.checkout.button': 'Check Out',
         'rollcall.absent.button': 'Báo Vắng',
         'rollcall.checkin.title': 'Check In',
         'rollcall.checkout.title': 'Check Out',
         'rollcall.absent.title': 'Báo Vắng',
-        'rollcall.checkin.tooltip': 'Đánh dấu check in hôm nay',
-        'rollcall.checkout.tooltip': 'Đánh dấu check out hôm nay',
-        'rollcall.absent.tooltip': 'Báo cáo vắng mặt hôm nay',
+        'rollcall.checkin.description': 'Đánh dấu check in',
+        'rollcall.checkout.description': 'Đánh dấu check out',
+        'rollcall.absent.description': 'Báo cáo vắng mặt',
         'rollcall.close': 'Đóng',
-        'rollcall.close.tooltip': 'Đóng (Esc)',
-        'rollcall.cancel': 'Hủy',
-        'rollcall.confirm': 'Xác Nhận',
-        'rollcall.absent.reason.placeholder': 'Nhập lý do vắng mặt...',
-        'rollcall.absent.reason.label': 'Lý Do Vắng Mặt',
-        'rollcall.absent.reason.required': 'Vui lòng cung cấp lý do vắng mặt.',
+        'rollcall.close.tooltip': 'Đóng hộp thoại',
         'rollcall.checkin.success': 'Chào mừng! Bạn đã check in thành công.',
         'rollcall.checkout.success': 'Bạn đã check out thành công. Chúc bạn một ngày tốt lành!',
         'rollcall.absent.success': 'Thông tin vắng mặt đã được ghi nhận.',
+        'rollcall.absent.reason.label': 'Lý do vắng mặt',
+        'rollcall.absent.reason.placeholder': 'Nhập lý do vắng mặt...',
+        'rollcall.absent.reason.description': 'ký tự',
+        'rollcall.submit': 'Xác Nhận',
+        'rollcall.cancel': 'Hủy',
         'rollcall.error': 'Đã xảy ra lỗi. Vui lòng thử lại.',
-        'rollcall.timeout': 'Yêu cầu đã hết thời gian chờ. Vui lòng thử lại.'
+        'rollcall.timeout': 'Yêu cầu đã hết thời gian chờ. Vui lòng thử lại.',
+        'rollcall.error.select': 'Vui lòng chọn một tùy chọn chấm công',
+        'rollcall.error.reason.required': 'Vui lòng cung cấp lý do vắng mặt',
+        'rollcall.error.reason.length': 'Lý do vắng mặt phải có ít nhất 10 ký tự'
     }
 };
 
 // Text helper function with built-in translations
 const getText = (key: string, language: 'en' | 'vi' = 'en', t?: (key: string) => string): string => {
-    // If external translation function is provided, use it first
     if (t) {
         try {
             return t(key);
@@ -472,27 +490,26 @@ const getText = (key: string, language: 'en' | 'vi' = 'en', t?: (key: string) =>
         }
     }
     
-    // Use built-in translations with proper type checking
     const langTranslations = translations[language];
     if (langTranslations && key in langTranslations) {
         return langTranslations[key];
     }
     
-    // Fallback to English
     const enTranslations = translations.en;
     if (enTranslations && key in enTranslations) {
         return enTranslations[key];
     }
     
-    // Final fallback to the key itself
     return key;
 };
 
+type AttendanceType = 'checkin' | 'checkout' | 'absent' | null;
+
 interface RollCallInterfaceProps {
     onClose?: () => void;
-    t?: (key: string) => string; // Your external i18n translation function (optional)
-    language?: 'en' | 'vi'; // Built-in language support
-    locale?: string; // For date formatting
+    t?: (key: string) => string;
+    language?: 'en' | 'vi';
+    locale?: string;
 }
 
 const RollCallInterface: React.FC<RollCallInterfaceProps> = ({
@@ -501,14 +518,23 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({
     language = 'vi',
     locale
 }) => {
-    const [showAbsentModal, setShowAbsentModal] = useState(false);
-    const [absentReason, setAbsentReason] = useState('');
     const [loading, setLoading] = useState(false);
     const [statusMessage, setStatusMessage] = useState<{type: 'success' | 'error', message: string} | null>(null);
     const [requestTimeout, setRequestTimeout] = useState<NodeJS.Timeout | null>(null);
+    const [selectedType, setSelectedType] = useState<AttendanceType>(null);
+    const [absenceReason, setAbsenceReason] = useState('');
+    const [error, setError] = useState('');
 
-    // Use the language for locale if not explicitly provided
     const dateLocale = locale || (language === 'vi' ? 'vi-VN' : 'en-US');
+
+    const getCurrentTime = () => {
+        return new Date().toLocaleTimeString(dateLocale, {
+            hour12: true,
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+    };
 
     const getCurrentDate = () => {
         return new Date().toLocaleDateString(dateLocale, {
@@ -529,6 +555,7 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({
     const handleApiCall = async (apiCall: () => Promise<any>, successMessageKey: string) => {
         setLoading(true);
         setStatusMessage(null);
+        setError('');
         
         const timeout = setTimeout(() => {
             setStatusMessage({
@@ -543,16 +570,81 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({
         try {
             const response = await apiCall();
             clearTimeout(timeout);
-            setStatusMessage({
-                type: 'success',
-                message: response?.message || getText(successMessageKey, language, t)
-            });
-            setTimeout(() => {
-                onClose?.();
-            }, 1000);
+            
+            // Check if the response indicates success
+            if (response?.success === false) {
+                // Handle explicit failure from backend
+                const errorMessage = response?.message || response?.error || getText('rollcall.error', language, t);
+                setStatusMessage({
+                    type: 'error',
+                    message: errorMessage
+                });
+            } else {
+                // Handle success
+                setStatusMessage({
+                    type: 'success',
+                    message: response?.message || getText(successMessageKey, language, t)
+                });
+                setTimeout(() => {
+                    onClose?.();
+                }, 1500);
+            }
         } catch (error: any) {
             clearTimeout(timeout);
-            const errorMessage = error?.message || getText('rollcall.error', language, t);
+            
+            // Handle different types of errors
+            let errorMessage = getText('rollcall.error', language, t);
+            
+            if (error?.response) {
+                // HTTP error response
+                const responseData = error.response.data;
+                if (responseData?.message) {
+                    errorMessage = responseData.message;
+                } else if (responseData?.error) {
+                    errorMessage = responseData.error;
+                } else {
+                    // Handle specific HTTP status codes
+                    switch (error.response.status) {
+                        case 409:
+                            errorMessage = language === 'vi' 
+                                ? 'Bạn đã thực hiện thao tác này rồi trong ngày hôm nay.'
+                                : 'You have already performed this action today.';
+                            break;
+                        case 401:
+                            errorMessage = language === 'vi'
+                                ? 'Bạn không có quyền thực hiện thao tác này.'
+                                : 'You are not authorized to perform this action.';
+                            break;
+                        case 404:
+                            errorMessage = language === 'vi'
+                                ? 'Không tìm thấy thông tin nhân viên. Vui lòng liên hệ quản trị viên.'
+                                : 'Employee information not found. Please contact administrator.';
+                            break;
+                        case 400:
+                            errorMessage = language === 'vi'
+                                ? 'Yêu cầu không hợp lệ. Vui lòng thử lại.'
+                                : 'Invalid request. Please try again.';
+                            break;
+                        case 500:
+                            errorMessage = language === 'vi'
+                                ? 'Lỗi hệ thống. Vui lòng thử lại sau.'
+                                : 'System error. Please try again later.';
+                            break;
+                    }
+                }
+            } else if (error?.message) {
+                // Network or other errors
+                if (error.message.includes('timeout')) {
+                    errorMessage = getText('rollcall.timeout', language, t);
+                } else if (error.message.includes('network') || error.message.includes('fetch')) {
+                    errorMessage = language === 'vi'
+                        ? 'Lỗi kết nối mạng. Vui lòng kiểm tra kết nối và thử lại.'
+                        : 'Network connection error. Please check your connection and try again.';
+                } else {
+                    errorMessage = error.message;
+                }
+            }
+            
             setStatusMessage({
                 type: 'error',
                 message: errorMessage
@@ -563,179 +655,210 @@ const RollCallInterface: React.FC<RollCallInterfaceProps> = ({
         }
     };
 
-    const handleCheckIn = () => handleApiCall(
-        doCheckIn, 
-        'rollcall.checkin.success'
-    );
-    
-    const handleCheckOut = () => handleApiCall(
-        doCheckOut,
-        'rollcall.checkout.success'
-    );
-
-    const handleAbsentClick = () => {
-        setShowAbsentModal(true);
-    };
-
-    const handleAbsentCancel = () => {
-        setShowAbsentModal(false);
-        setAbsentReason('');
+    const handleSelection = (type: AttendanceType) => {
+        setSelectedType(type);
         setStatusMessage(null);
-        clearRequestTimeout();
+        setError('');
+        if (type !== 'absent') {
+            setAbsenceReason('');
+        }
     };
 
-    const handleAbsentSubmit = async () => {
-        if (!absentReason.trim()) {
-            setStatusMessage({
-                type: 'error',
-                message: getText('rollcall.absent.reason.required', language, t)
-            });
+    const handleCancel = () => {
+        setSelectedType(null);
+        setAbsenceReason('');
+        setError('');
+        onClose?.();
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        
+        if (!selectedType) {
+            setError(getText('rollcall.error.select', language, t));
             return;
         }
 
-        await handleApiCall(
-            () => doAbsent(absentReason.trim()),
-            'rollcall.absent.success'
-        );
-        
-        setShowAbsentModal(false);
-        setAbsentReason('');
+        if (selectedType === 'absent' && !absenceReason.trim()) {
+            setError(getText('rollcall.error.reason.required', language, t));
+            return;
+        }
+    
+        switch (selectedType) {
+            case 'checkin':
+                handleApiCall(doCheckIn, 'rollcall.checkin.success');
+                break;
+            case 'checkout':
+                handleApiCall(doCheckOut, 'rollcall.checkout.success');
+                break;
+            case 'absent':
+                // Send empty string by default, or the trimmed reason if provided
+                handleApiCall(
+                    () => doAbsent(absenceReason.trim()),
+                    'rollcall.absent.success'
+                );
+                break;
+        }
     };
 
     const handleKeyDown = (event: React.KeyboardEvent) => {
         if (event.key === 'Escape') {
-            if (showAbsentModal) {
-                handleAbsentCancel();
+            if (selectedType) {
+                handleCancel();
             } else {
                 onClose?.();
             }
         }
     };
 
-    const handleTextareaKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault();
-            if (absentReason.trim() && !loading) {
-                handleAbsentSubmit();
-            }
-        }
-    };
-
     return (
-        <>
-            <Container 
-                show={!showAbsentModal}
-                onKeyDown={handleKeyDown}
-                tabIndex={-1}
-                role="dialog"
-                aria-labelledby="rollcall-title"
-                aria-describedby="rollcall-description"
-            > 
+        <Container 
+            show={true}
+            onKeyDown={handleKeyDown}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="attendance-modal-title"
+        > 
+            <ModalHeader>
+                <Title id="attendance-modal-title">
+                    {getText('rollcall.title', language, t)}
+                </Title>
                 <CloseButton 
                     onClick={onClose}
                     aria-label={getText('rollcall.close', language, t)}
                     title={getText('rollcall.close.tooltip', language, t)}
                 >
-                    ✕
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
                 </CloseButton>
+            </ModalHeader>
 
-                <HeaderSection>
-                    <Title id="rollcall-title">
-                        {getText('rollcall.title', language, t)}
-                    </Title>
-                    <Subtitle id="rollcall-description">
-                        {getText('rollcall.subtitle', language, t)}
-                    </Subtitle>
-                    <DateBadge>
-                    <svg width="28px" height="28px" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg"><path d="M897.9 369.2H205c-33.8 0-61.4-27.6-61.4-61.4s27.6-61.4 61.4-61.4h692.9c33.8 0 61.4 27.6 61.4 61.4s-27.6 61.4-61.4 61.4z" fill="#FFB89A" /><path d="M807 171H703.3c-16.6 0-30 13.4-30 30s13.4 30 30 30H807c31.6 0 57.4 24 57.4 53.4v42.3H125.2v-42.3c0-29.5 25.7-53.4 57.4-53.4H293c16.6 0 30-13.4 30-30s-13.4-30-30-30H182.5c-64.7 0-117.4 50.9-117.4 113.4v527.7c0 62.5 52.7 113.4 117.4 113.4H807c64.7 0 117.4-50.9 117.4-113.4V284.5c0-62.6-52.7-113.5-117.4-113.5z m0 694.6H182.5c-31.6 0-57.4-24-57.4-53.4V386.8h739.2v425.4c0.1 29.5-25.7 53.4-57.3 53.4z" fill="#45484C" /><path d="M447.6 217.1c-12.4-6.1-27-2.8-35.7 7.1-2.2-6.7-4-16.2-4-28.1 0-13 2.2-23 4.6-29.8 9.5 8.1 23.5 9.6 34.9 2.8 14.2-8.5 18.8-27 10.3-41.2-15.5-25.9-35.9-29.7-46.6-29.7-36.6 0-63.1 41.2-63.1 97.8s26.4 98 63 98c20.6 0 39-13.4 50.4-36.7 7.3-14.9 1.1-32.9-13.8-40.2zM635.9 218.5c-12.4-6.1-27-2.8-35.7 7.1-2.2-6.7-4-16.2-4-28.1 0-13 2.2-23 4.6-29.8 9.5 8.1 23.5 9.6 34.9 2.8 14.2-8.5 18.8-27 10.3-41.2-15.5-25.9-35.9-29.7-46.6-29.7-36.6 0-63.1 41.2-63.1 97.8s26.5 97.8 63.1 97.8c20.6 0 39-13.4 50.4-36.7 7.1-14.7 0.9-32.7-13.9-40z" fill="#45484C" /><path d="M700.2 514.5H200.5c-16.6 0-30 13.4-30 30s13.4 30 30 30h499.7c16.6 0 30-13.4 30-30s-13.5-30-30-30zM668.4 689.8h-74c-16.6 0-30 13.4-30 30s13.4 30 30 30h74c16.6 0 30-13.4 30-30s-13.4-30-30-30zM479.3 689.8H200.5c-16.6 0-30 13.4-30 30s13.4 30 30 30h278.8c16.6 0 30-13.4 30-30s-13.4-30-30-30z" fill="#33CC99" /></svg>{getCurrentDate()}
-                    </DateBadge>
-                </HeaderSection>
-                
-                {statusMessage && (
-                    <StatusMessage type={statusMessage.type}>
-                        {statusMessage.message}
-                    </StatusMessage>
-                )}
-
-                <ButtonGrid>
-                    <CheckInButton 
-                        onClick={handleCheckIn}
-                        disabled={loading}
-                        aria-label={getText('rollcall.checkin.title', language, t)}
-                        title={getText('rollcall.checkin.tooltip', language, t)}
-                    >
-                        {loading ? <LoadingSpinner /> : null}
-                        {getText('rollcall.checkin.button', language, t)}
-                    </CheckInButton>
-                    
-                    <CheckOutButton 
-                        onClick={handleCheckOut}
-                        disabled={loading}
-                        aria-label={getText('rollcall.checkout.title', language, t)}
-                        title={getText('rollcall.checkout.tooltip', language, t)}
-                    >
-                        {loading ? <LoadingSpinner /> : null}
-                        {getText('rollcall.checkout.button', language, t)}
-                    </CheckOutButton>
-                    
-                    <AbsentButton 
-                        onClick={handleAbsentClick}
-                        disabled={loading}
-                        aria-label={getText('rollcall.absent.title', language, t)}
-                        title={getText('rollcall.absent.tooltip', language, t)}
-                    >
-                        {getText('rollcall.absent.button', language, t)}
-                    </AbsentButton>
-                </ButtonGrid>
-            </Container>
-
-            <AbsentModal show={showAbsentModal}>
-                <ModalContent
-                    onKeyDown={handleKeyDown}
-                    tabIndex={-1}
-                    role="dialog"
-                    aria-labelledby="absent-modal-title"
-                >
-                    <ModalTitle id="absent-modal-title">
-                        📝 {getText('rollcall.absent.title', language, t)}
-                    </ModalTitle>
+            <ModalContent>
+                <form onSubmit={handleSubmit}>
+                    <TimeDisplay>
+                        <TimeLabel>{getText('rollcall.time.current', language, t)}</TimeLabel>
+                        <CurrentTime>{getCurrentTime()}</CurrentTime>
+                        <CurrentDate>{getCurrentDate()}</CurrentDate>
+                    </TimeDisplay>
                     
                     {statusMessage && (
                         <StatusMessage type={statusMessage.type}>
-                            {statusMessage.message}
+                            <span>{statusMessage.message}</span>
                         </StatusMessage>
                     )}
+
+                    <SectionLabel>
+                        {getText('rollcall.subtitle', language, t)}
+                    </SectionLabel>
                     
-                    <ReasonInput
-                        placeholder={getText('rollcall.absent.reason.placeholder', language, t)}
-                        value={absentReason}
-                        onChange={(e) => setAbsentReason(e.target.value)}
-                        onKeyDown={handleTextareaKeyDown}
-                        maxLength={500}
-                        aria-label={getText('rollcall.absent.reason.label', language, t)}
-                        autoFocus
-                    />
-                    
+                    <AttendanceGrid>
+                        <AttendanceOption
+                            type="button"
+                            selected={selectedType === 'checkin'}
+                            variant="success"
+                            onClick={() => handleSelection('checkin')}
+                            disabled={loading}
+                        >
+                            <OptionIcon variant="success" selected={selectedType === 'checkin'}>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M15 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H15M10 17L15 12M15 12L10 7M15 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                            </OptionIcon>
+                            <OptionContent>
+                                <OptionTitle>{getText('rollcall.checkin.title', language, t)}</OptionTitle>
+                                <OptionDescription>{getText('rollcall.checkin.description', language, t)}</OptionDescription>
+                            </OptionContent>
+                        </AttendanceOption>
+
+                        <AttendanceOption
+                            type="button"
+                            selected={selectedType === 'checkout'}
+                            variant="primary"
+                            onClick={() => handleSelection('checkout')}
+                            disabled={loading}
+                        >
+                            <OptionIcon variant="primary" selected={selectedType === 'checkout'}>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M9 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H9M16 17L21 12M21 12L16 7M21 12H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                            </OptionIcon>
+                            <OptionContent>
+                                <OptionTitle>{getText('rollcall.checkout.title', language, t)}</OptionTitle>
+                                <OptionDescription>{getText('rollcall.checkout.description', language, t)}</OptionDescription>
+                            </OptionContent>
+                        </AttendanceOption>
+
+                        <AttendanceOption
+                            type="button"
+                            selected={selectedType === 'absent'}
+                            variant="warning"
+                            onClick={() => handleSelection('absent')}
+                            disabled={loading}
+                        >
+                            <OptionIcon variant="warning" selected={selectedType === 'absent'}>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M16 21V19C16 17.9391 15.5786 16.9217 14.8284 16.1716C14.0783 15.4214 13.0609 15 12 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21M20 8V14M20 18H20.01M12.5 7C12.5 9.20914 10.7091 11 8.5 11C6.29086 11 4.5 9.20914 4.5 7C4.5 4.79086 6.29086 3 8.5 3C10.7091 3 12.5 4.79086 12.5 7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                            </OptionIcon>
+                            <OptionContent>
+                                <OptionTitle>{getText('rollcall.absent.title', language, t)}</OptionTitle>
+                                <OptionDescription>{getText('rollcall.absent.description', language, t)}</OptionDescription>
+                            </OptionContent>
+                        </AttendanceOption>
+                    </AttendanceGrid>
+
+                    <AbsenceReasonSection show={selectedType === 'absent'}>
+                        <InputLabel htmlFor="absence-reason">
+                            {getText('rollcall.absent.reason.label', language, t)}
+                        </InputLabel>
+                        <TextInput
+                            id="absence-reason"
+                            type="text"
+                            value={absenceReason}
+                            onChange={(e) => setAbsenceReason(e.target.value)}
+                            placeholder={getText('rollcall.absent.reason.placeholder', language, t)}
+                            maxLength={200}
+                        />
+                        <InputDescription>
+                            {absenceReason.length}/200 {getText('rollcall.absent.reason.description', language, t)}
+                        </InputDescription>
+                    </AbsenceReasonSection>
+
+                    {error && (
+                        <ErrorMessage>
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                                <line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" strokeWidth="2"/>
+                                <line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" strokeWidth="2"/>
+                            </svg>
+                            <span>{error}</span>
+                        </ErrorMessage>
+                    )}
+
                     <ModalActions>
-                        <SecondaryButton 
-                            onClick={handleAbsentCancel}
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={handleCancel}
                             disabled={loading}
                         >
                             {getText('rollcall.cancel', language, t)}
-                        </SecondaryButton>
-                        
-                        <PrimaryButton 
-                            onClick={handleAbsentSubmit}
-                            disabled={loading || !absentReason.trim()}
-                            aria-label={getText('rollcall.confirm', language, t)}
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={loading}
+                            disabled={!selectedType || loading}
                         >
-                            {loading ? <LoadingSpinner /> : null}
-                            {getText('rollcall.confirm', language, t)}
-                        </PrimaryButton>
+                            {loading && <LoadingSpinner />}
+                            {loading ? 'Submitting...' : getText('rollcall.submit', language, t)}
+                        </Button>
                     </ModalActions>
-                </ModalContent>
-            </AbsentModal>
-        </>
+                </form>
+            </ModalContent>
+        </Container>
     );
 };
 

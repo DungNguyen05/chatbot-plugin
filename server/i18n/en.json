@@ -93,6 +93,6 @@
   },
   {
     "id": "rollcall.notification.absent",
-    "translation": "**%s** has reported absence for today: \"%s\""
+    "translation": "**%s** has reported absence for today with reason: \"%s\""
   }
 ]

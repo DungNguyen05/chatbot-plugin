@@ -57,6 +57,6 @@
     },
     {
       "id": "rollcall.notification.absent",
-      "translation": "**%s** đã báo vắng mặt hôm nay: \"%s\""
+      "translation": "**%s** đã báo vắng mặt hôm nay với lý do: \"%s\""
     }
   ]

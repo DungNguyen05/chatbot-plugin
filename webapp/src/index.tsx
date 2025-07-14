@@ -75,7 +75,7 @@ const ModalOverlay = styled.div`
 
 const ModalContainer = styled.div`
     background: var(--center-channel-bg);
-    border-radius: 8px;
+    border-radius: 16px;
     max-width: 90%;
     max-height: 90%;
     overflow: auto;

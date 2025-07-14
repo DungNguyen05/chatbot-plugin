@@ -94,7 +94,7 @@ func (n *NotificationManager) createNotificationMessage(eventType RollCallEventT
 	case RollCallEventCheckOut:
 		return n.i18n.Localize("rollcall.notification.checkout", "**%s** has checked out at %s", locale, employeeName, eventTime)
 	case RollCallEventAbsent:
-		return n.i18n.Localize("rollcall.notification.absent", "**%s** has reported absence for today: \"%s\"", locale, employeeName, reason)
+		return n.i18n.Localize("rollcall.notification.absent", "**%s** has reported absence for today with reason: \"%s\"", locale, employeeName, reason)
 	default:
 		return fmt.Sprintf("**%s** - %s", employeeName, eventTime)
 	}

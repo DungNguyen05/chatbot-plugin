@@ -24,6 +24,7 @@ type CheckInResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
 	Time    string `json:"time"`
+	Error   string `json:"error,omitempty"` // Add error field
 }
 
 // handleAPICheckIn handles the API endpoint for check-in
@@ -33,9 +34,10 @@ func (p *Plugin) handleAPICheckIn(c *gin.Context) {
 	// Get user info
 	user, err := p.pluginAPI.User.Get(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Error getting user information. Please try again.",
+		c.JSON(http.StatusInternalServerError, CheckInResponse{
+			Success: false,
+			Message: "Error getting user information. Please try again.",
+			Error:   err.Error(),
 		})
 		return
 	}
@@ -43,10 +45,26 @@ func (p *Plugin) handleAPICheckIn(c *gin.Context) {
 	// Process through ERP module with high confidence (bypass confirmation)
 	response := p.processAttendanceRequestDirect(user, "check_in", "")
 
-	c.JSON(http.StatusOK, CheckInResponse{
+	// Map response to appropriate HTTP status
+	statusCode := http.StatusOK
+	if !response.Success {
+		// Determine appropriate status code based on error type
+		if strings.Contains(strings.ToLower(response.Error), "already") ||
+			strings.Contains(strings.ToLower(response.Message), "already") {
+			statusCode = http.StatusConflict // 409 for duplicate operations
+		} else if strings.Contains(strings.ToLower(response.Error), "not found") ||
+			strings.Contains(strings.ToLower(response.Message), "not found") {
+			statusCode = http.StatusNotFound // 404 for not found
+		} else {
+			statusCode = http.StatusBadRequest // 400 for other client errors
+		}
+	}
+
+	c.JSON(statusCode, CheckInResponse{
 		Success: response.Success,
 		Message: response.Message,
 		Time:    getTimeFromData(response.Data),
+		Error:   response.Error,
 	})
 }
 
@@ -57,9 +75,10 @@ func (p *Plugin) handleAPICheckOut(c *gin.Context) {
 	// Get user info
 	user, err := p.pluginAPI.User.Get(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Error getting user information. Please try again.",
+		c.JSON(http.StatusInternalServerError, CheckInResponse{
+			Success: false,
+			Message: "Error getting user information. Please try again.",
+			Error:   err.Error(),
 		})
 		return
 	}
@@ -67,10 +86,26 @@ func (p *Plugin) handleAPICheckOut(c *gin.Context) {
 	// Process through ERP module with high confidence (bypass confirmation)
 	response := p.processAttendanceRequestDirect(user, "check_out", "")
 
-	c.JSON(http.StatusOK, CheckInResponse{
+	// Map response to appropriate HTTP status
+	statusCode := http.StatusOK
+	if !response.Success {
+		// Determine appropriate status code based on error type
+		if strings.Contains(strings.ToLower(response.Error), "already") ||
+			strings.Contains(strings.ToLower(response.Message), "already") {
+			statusCode = http.StatusConflict // 409 for duplicate operations
+		} else if strings.Contains(strings.ToLower(response.Error), "not found") ||
+			strings.Contains(strings.ToLower(response.Message), "not found") {
+			statusCode = http.StatusNotFound // 404 for not found
+		} else {
+			statusCode = http.StatusBadRequest // 400 for other client errors
+		}
+	}
+
+	c.JSON(statusCode, CheckInResponse{
 		Success: response.Success,
 		Message: response.Message,
 		Time:    getTimeFromData(response.Data),
+		Error:   response.Error,
 	})
 }
 
@@ -80,9 +115,10 @@ func (p *Plugin) handleAPIAbsent(c *gin.Context) {
 
 	var req AbsentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "Please provide a reason for your absence.",
+		c.JSON(http.StatusBadRequest, CheckInResponse{
+			Success: false,
+			Message: "Please provide a reason for your absence.",
+			Error:   "Invalid request format",
 		})
 		return
 	}
@@ -90,18 +126,20 @@ func (p *Plugin) handleAPIAbsent(c *gin.Context) {
 	// Get user info
 	user, err := p.pluginAPI.User.Get(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Error getting user information. Please try again.",
+		c.JSON(http.StatusInternalServerError, CheckInResponse{
+			Success: false,
+			Message: "Error getting user information. Please try again.",
+			Error:   err.Error(),
 		})
 		return
 	}
 
 	reason := strings.TrimSpace(req.Reason)
 	if reason == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "Please provide a reason for your absence.",
+		c.JSON(http.StatusBadRequest, CheckInResponse{
+			Success: false,
+			Message: "Please provide a reason for your absence.",
+			Error:   "Empty reason not allowed",
 		})
 		return
 	}
@@ -109,10 +147,31 @@ func (p *Plugin) handleAPIAbsent(c *gin.Context) {
 	// Process through ERP module directly (bypass confirmation)
 	response := p.processAttendanceRequestDirect(user, "absent", reason)
 
-	c.JSON(http.StatusOK, CheckInResponse{
+	// Map response to appropriate HTTP status
+	statusCode := http.StatusOK
+	if !response.Success {
+		// Determine appropriate status code based on error type
+		if strings.Contains(strings.ToLower(response.Error), "already") ||
+			strings.Contains(strings.ToLower(response.Message), "already") ||
+			strings.Contains(strings.ToLower(response.Error), "duplicate") ||
+			strings.Contains(strings.ToLower(response.Message), "duplicate") {
+			statusCode = http.StatusConflict // 409 for duplicate absence requests
+		} else if strings.Contains(strings.ToLower(response.Error), "not found") ||
+			strings.Contains(strings.ToLower(response.Message), "not found") {
+			statusCode = http.StatusNotFound // 404 for not found
+		} else if strings.Contains(strings.ToLower(response.Error), "unauthorized") ||
+			strings.Contains(strings.ToLower(response.Message), "unauthorized") {
+			statusCode = http.StatusUnauthorized // 401 for auth issues
+		} else {
+			statusCode = http.StatusBadRequest // 400 for other client errors
+		}
+	}
+
+	c.JSON(statusCode, CheckInResponse{
 		Success: response.Success,
 		Message: response.Message,
 		Time:    getTimeFromData(response.Data),
+		Error:   response.Error,
 	})
 }
 
@@ -123,6 +182,7 @@ func (p *Plugin) processAttendanceRequestDirect(user *model.User, action, reason
 		return &erp_modules.ModuleResponse{
 			Success: false,
 			Message: "ERP module registry not initialized",
+			Error:   "Module registry not available",
 		}
 	}
 
@@ -132,6 +192,7 @@ func (p *Plugin) processAttendanceRequestDirect(user *model.User, action, reason
 		return &erp_modules.ModuleResponse{
 			Success: false,
 			Message: "Attendance module not found",
+			Error:   "Attendance module not registered",
 		}
 	}
 
@@ -140,6 +201,7 @@ func (p *Plugin) processAttendanceRequestDirect(user *model.User, action, reason
 		return &erp_modules.ModuleResponse{
 			Success: false,
 			Message: "Invalid attendance module type",
+			Error:   "Module type assertion failed",
 		}
 	}
 
@@ -170,6 +232,7 @@ func (p *Plugin) processAttendanceRequestDirect(user *model.User, action, reason
 		return &erp_modules.ModuleResponse{
 			Success: false,
 			Message: "Unknown action: " + action,
+			Error:   "Invalid action parameter",
 		}
 	}
 }
@@ -237,6 +300,12 @@ func (p *Plugin) executeWithMaxConfidence(attendanceModule *attendance.Attendanc
 
 	response, err := attendanceModule.Execute(ctx, intent)
 	if err != nil {
+		// Log the actual error for debugging
+		p.API.LogError("Attendance module execution failed",
+			"action", intent.Action,
+			"error", err.Error(),
+			"user_id", ctx.User.Id)
+
 		return &erp_modules.ModuleResponse{
 			Success: false,
 			Message: "Failed to process attendance request",
@@ -248,14 +317,24 @@ func (p *Plugin) executeWithMaxConfidence(attendanceModule *attendance.Attendanc
 		return &erp_modules.ModuleResponse{
 			Success: false,
 			Message: "No response from attendance module",
+			Error:   "Nil response from module",
 		}
 	}
 
 	// If still asking for confirmation, log this issue but return the response
 	if response.ActionTaken == "request_confirmation" {
-		p.API.LogWarn("Module still requesting confirmation despite max confidence", "action", intent.Action)
-		return response
+		p.API.LogWarn("Module still requesting confirmation despite max confidence",
+			"action", intent.Action,
+			"response_message", response.Message)
 	}
+
+	// Log the response for debugging
+	p.API.LogInfo("Attendance module response",
+		"action", intent.Action,
+		"success", response.Success,
+		"message", response.Message,
+		"error", response.Error,
+		"action_taken", response.ActionTaken)
 
 	return response
 }
@@ -272,6 +351,7 @@ func (p *Plugin) processAttendanceRequest(user *model.User, action, reason strin
 		return &erp_modules.ModuleResponse{
 			Success: false,
 			Message: "ERP modules not initialized",
+			Error:   "Module manager not available",
 		}
 	}
 
@@ -279,6 +359,7 @@ func (p *Plugin) processAttendanceRequest(user *model.User, action, reason strin
 		return &erp_modules.ModuleResponse{
 			Success: false,
 			Message: "ERP module registry not initialized",
+			Error:   "Module registry not available",
 		}
 	}
 
@@ -307,6 +388,7 @@ func (p *Plugin) processAttendanceRequest(user *model.User, action, reason strin
 		return &erp_modules.ModuleResponse{
 			Success: false,
 			Message: "Attendance module not found",
+			Error:   "Attendance module not registered",
 		}
 	}
 
@@ -315,6 +397,7 @@ func (p *Plugin) processAttendanceRequest(user *model.User, action, reason strin
 		return &erp_modules.ModuleResponse{
 			Success: false,
 			Message: "Invalid attendance module type",
+			Error:   "Module type assertion failed",
 		}
 	}
 
@@ -350,6 +433,7 @@ func (p *Plugin) processAttendanceRequest(user *model.User, action, reason strin
 		return &erp_modules.ModuleResponse{
 			Success: false,
 			Message: "No response from attendance module",
+			Error:   "Nil response from module",
 		}
 	}
 

@@ -6,11 +6,12 @@ Use Vietnamese: {{.Parameters.IsVietnamese}}
 **TASK:** Extract the actual reason mentioned by the user for why they cannot come to work today.
 
 **EXTRACTION RULES:**
-1. Extract the EXACT reason phrase as written by the user
+1. Extract ONLY the core reason (not full sentence)
 2. Keep the user's original wording when possible
-3. If multiple reasons mentioned, extract the main one
-4. If no specific reason given (just "nghỉ", "không đi làm", "absent"), use default
-5. Preserve the language the user used in their message
+3. Remove time words (hôm nay, today, etc.)
+4. Remove personal pronouns (tôi, I, etc.) 
+5. Remove politeness phrases (xin phép, please, etc.)
+6. Keep only the essential reasons
 
 **RESPONSE FORMAT:**
 - Extract and return the user's actual reason phrase
@@ -24,8 +25,7 @@ Use Vietnamese: {{.Parameters.IsVietnamese}}
 
 **EXAMPLES:**
 - User: "Tôi bị ốm nên không đi làm được" → Extract: "bị ốm"
-- User: "I'm sick today" → Extract: "sick today"  
-- User: "Có việc gia đình đột xuất" → Extract: "việc gia đình đột xuất"
+- User: "Tôi có việc gia đình đột xuất" → Extract: "có việc gia đình đột xuất"
 - User: "Doctor appointment" → Extract: "Doctor appointment"
 - User: "Nghỉ" → Extract: "Việc cá nhân" (default)
 - User: "absent" → Extract: "Personal matters" (default)
